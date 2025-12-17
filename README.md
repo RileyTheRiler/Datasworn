@@ -36,8 +36,8 @@ The system learns from your preferences over time:
 ## Installation
 
 ```bash
-git clone https://github.com/your-username/starforged-ai-gm.git
-cd starforged-ai-gm
+git clone https://github.com/RileyTheRiler/Datasworn.git
+cd Datasworn
 pip install -r requirements.txt
 ```
 
