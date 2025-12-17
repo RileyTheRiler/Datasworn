@@ -1,0 +1,42 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Environment variables
+.env
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+feedback_learning.db
+
+# Saves and state
+saves/
+*.json.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Agent/system files (keep .agent/workflows)
+.gemini/
+
+# Research/temporary files
+*.txt
+!requirements.txt

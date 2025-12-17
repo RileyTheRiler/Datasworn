@@ -1,0 +1,478 @@
+"""
+Narrator System for Starforged AI Game Master.
+Generates narrative prose using Ollama for local LLM inference.
+"""
+
+from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import Generator
+import ollama
+
+
+# ============================================================================
+# System Prompt
+# ============================================================================
+
+SYSTEM_PROMPT = """You are the Oracle, a narrative Game Master for Ironsworn: Starforged. You weave gritty, atmospheric second-person prose set in the Forge—a dangerous sector of space where scattered human settlements survive among the ruins of a forgotten age.
+
+<tone>
+- Gritty and grounded, not heroic fantasy in space
+- Technology is unreliable, scavenged, often dangerous
+- Hope exists but is hard-won; cynicism is earned
+- Violence has consequences; combat is brutal and brief
+- The universe is vast and indifferent
+</tone>
+
+<narrative_rules>
+- Write in second person: "You step through the airlock..."
+- Never speak for the player or decide their actions
+- End responses with tension, choice, or consequence
+- Honor Iron Vows—they are sacred narrative anchors
+- Use sensory details: the hum of failing systems, the taste of recycled air
+- NPCs have their own agendas; they are not quest-givers
+</narrative_rules>
+
+<style>
+- Prose: Sparse, evocative, present tense for action
+- Sentences: Vary length—short for tension, longer for atmosphere
+- Dialogue: Clipped, naturalistic, reveals character through subtext
+- Description: Concrete and specific, never purple
+</style>
+
+<forbidden>
+Never use: "orbs" for eyes, "suddenly," "seemed to," "couldn't help but," "for some reason," exclamation points in narration
+</forbidden>
+
+Write 1-4 paragraphs. No bullet points. No headers. Pure prose."""
+
+
+# ============================================================================
+# Few-shot Examples (Tone-Tagged for Director Integration)
+# ============================================================================
+
+EXAMPLE_NARRATIVES = [
+    # Standard pacing examples
+    {
+        "context": "Player attempts to repair a malfunctioning nav system",
+        "roll": "Weak Hit on Face Danger",
+        "pacing": "standard",
+        "tone": "tense",
+        "narrative": """The nav panel flickers under your hands, circuits sparking in the dim emergency lighting. You trace the fault to a corroded relay—damage from decades of cosmic radiation eating through the ship's aging infrastructure. Your fingers work by muscle memory, splicing connections that were never meant to be spliced.
+
+It takes three attempts. The first two nearly fry the entire console. But on the third, the holographic star chart sputters back to life, distorted and incomplete. Half the sector is still dark, navigation data corrupted beyond recovery. You'll be flying blind through whatever lies past the Drift. The ship groans around you, as if to remind you it has limits."""
+    },
+    {
+        "context": "Player meets a mysterious stranger at a station bar",
+        "roll": "Strong Hit on Make a Connection",
+        "pacing": "standard",
+        "tone": "mysterious",
+        "narrative": """She sits at the far end of the bar where the light doesn't quite reach, nursing something that might once have been whiskey before the distillery fell to raiders. You recognize the way she watches the room—the careful economy of attention that marks someone who's learned to survive by noticing things. When you approach, she doesn't flinch, just shifts her coat to show you the unmarked grip of a pistol.
+
+"You're from the Resolute," she says. Not a question. "I've been waiting for someone stupid enough to run the Terminus passage." A data chip slides across the bar's pitted surface. "Credits on delivery. Double if you don't ask what's in the cargo."
+
+Her name is Kira. Former navigator, current smuggler, and—if you play this right—your ticket through the most dangerous shipping lane in the Forge."""
+    },
+    # Fast pacing examples
+    {
+        "context": "Combat encounter with pirates",
+        "roll": "Miss on Enter the Fray",
+        "pacing": "fast",
+        "tone": "tense",
+        "narrative": """The first shot takes out your cover before you even clear leather. Sparks shower from the ruptured power conduit, plunging the corridor into flickering half-light. Your back hits the wall as another round punches through the bulkhead inches from your head.
+
+Your weapon is in your hand but your position is compromised. The pirates know these passages. You don't."""
+    },
+    {
+        "context": "Chase through derelict station",
+        "roll": "Weak Hit on Face Danger",
+        "pacing": "fast",
+        "tone": "ominous",
+        "narrative": """Corridors blur. Left. Right. The footsteps behind you grow louder.
+
+Your lungs burn. The recycled air tastes like rust and fear. Ahead, a junction—two paths, both dark. Behind you, something metal scrapes against the deck. Slowly. Deliberately."""
+    },
+    # Slow pacing examples
+    {
+        "context": "Quiet moment after a difficult battle",
+        "roll": "No roll - narrative scene",
+        "pacing": "slow",
+        "tone": "melancholic",
+        "narrative": """Navigator Voss finds you on the observation deck, where the Forge wheels slowly past the viewport. She doesn't speak for a long time. Neither do you.
+
+When she finally breaks the silence, her voice is softer than you've heard it. "I used to know the name of every star visible from Kepler Station. My grandmother taught me. Said knowing their names was how we kept them ours."
+
+She traces a finger across the glass, connecting points of light. "I don't remember any of them now. Isn't that strange? All those names, and I just—"
+
+Her hand drops. Outside, a distant sun goes nova in silence, light that won't reach anyone for a thousand years."""
+    },
+    {
+        "context": "Player discovers unexpected help",
+        "roll": "Strong Hit with Match on Secure an Advantage",
+        "pacing": "slow",
+        "tone": "hopeful",
+        "narrative": """The message arrives at 0300 ship time, when you've given up on sleep and settled for staring at the cargo manifest. Encrypted. Routed through six dead relays. The kind of message that shouldn't exist anymore.
+
+But the decryption key is one you recognize—one you gave away years ago, to someone you thought was dead.
+
+The text is brief: "Waypoint Sigma. Three days. Bring the Wayfinder."
+
+No signature. None needed. After everything that happened at Kepler, after all the silence, Mira is reaching back. The Forge, for once, is offering a second chance."""
+    },
+    # Triumphant tone
+    {
+        "context": "Completing a dangerous vow",
+        "roll": "Strong Hit on Fulfill Your Vow",
+        "pacing": "standard",
+        "tone": "triumphant",
+        "narrative": """The colony beacon pulses green for the first time in forty years. Around you, settlers emerge from bunkers they'd never expected to leave, blinking in the light of a sun they'd learned to fear.
+
+A child—can't be more than six, born into bunker darkness—tugs at her mother's sleeve and points at the sky. "What is that?"
+
+"That," her mother says, voice cracking, "is the rest of the galaxy."
+
+Your vow is fulfilled. The cost was high—you feel it in every scar, every empty chair on the Wayfinder. But watching that child look up, you understand why you swore the oath in the first place."""
+    },
+]
+
+
+# ============================================================================
+# Narrative Validation Utilities
+# ============================================================================
+
+FORBIDDEN_WORDS = [
+    "orbs",           # for eyes
+    "suddenly",       # weak tension
+    "seemed to",      # weak verb
+    "couldn't help but",
+    "for some reason",
+    "began to",       # just do the action
+    "started to",     # just do the action
+    "very",           # weak modifier
+    "really",         # weak modifier
+]
+
+FORBIDDEN_PATTERNS = [
+    r"!\s",           # exclamation points in narration
+    r"\bI\b",         # first person (should be second person)
+]
+
+
+def validate_narrative(text: str) -> tuple[bool, list[str]]:
+    """
+    Check generated narrative for forbidden elements.
+    
+    Returns:
+        Tuple of (is_valid, list of issues found)
+    """
+    import re
+    issues = []
+    text_lower = text.lower()
+    
+    for word in FORBIDDEN_WORDS:
+        if word in text_lower:
+            issues.append(f"Contains forbidden word: '{word}'")
+    
+    for pattern in FORBIDDEN_PATTERNS:
+        if re.search(pattern, text):
+            issues.append(f"Contains forbidden pattern: {pattern}")
+    
+    return len(issues) == 0, issues
+
+
+def analyze_sentence_rhythm(text: str) -> dict:
+    """
+    Analyze sentence length variety for rhythm assessment.
+    
+    Good prose has varied sentence lengths:
+    - Short sentences (< 10 words) for tension
+    - Medium sentences (10-25 words) for flow
+    - Long sentences (> 25 words) for atmosphere
+    """
+    import re
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    
+    if not sentences:
+        return {"score": 0, "feedback": "No sentences found"}
+    
+    lengths = [len(s.split()) for s in sentences]
+    
+    short = sum(1 for l in lengths if l < 10)
+    medium = sum(1 for l in lengths if 10 <= l <= 25)
+    long = sum(1 for l in lengths if l > 25)
+    
+    total = len(lengths)
+    variety_score = min(short, medium, long) / (total / 3) if total >= 3 else 0.5
+    
+    return {
+        "total_sentences": total,
+        "short": short,
+        "medium": medium,
+        "long": long,
+        "variety_score": round(variety_score, 2),
+        "avg_length": round(sum(lengths) / len(lengths), 1),
+    }
+
+
+def get_examples_for_tone(tone: str, pacing: str, count: int = 2) -> list[dict]:
+    """
+    Get few-shot examples matching the current tone and pacing.
+    Falls back to any matching tone if exact pacing match unavailable.
+    """
+    exact_matches = [
+        ex for ex in EXAMPLE_NARRATIVES 
+        if ex.get("tone") == tone and ex.get("pacing") == pacing
+    ]
+    
+    if len(exact_matches) >= count:
+        return exact_matches[:count]
+    
+    # Fallback to tone matches
+    tone_matches = [ex for ex in EXAMPLE_NARRATIVES if ex.get("tone") == tone]
+    if tone_matches:
+        return tone_matches[:count]
+    
+    # Final fallback to pacing matches
+    pacing_matches = [ex for ex in EXAMPLE_NARRATIVES if ex.get("pacing") == pacing]
+    if pacing_matches:
+        return pacing_matches[:count]
+    
+    # Default to first examples
+    return EXAMPLE_NARRATIVES[:count]
+
+
+# ============================================================================
+# Narrator Configuration
+# ============================================================================
+
+@dataclass
+class NarratorConfig:
+    """Configuration for narrative generation."""
+    model: str = "llama3.1"
+    temperature: float = 0.85
+    top_p: float = 0.90
+    top_k: int = 50
+    repeat_penalty: float = 1.15  # Slightly increased for variety
+    max_tokens: int = 600  # Increased for richer narratives
+
+
+# ============================================================================
+# Ollama Client
+# ============================================================================
+
+@dataclass
+class OllamaClient:
+    """Wrapper for Ollama API."""
+    model: str = "llama3.1"
+    _client: ollama.Client = field(default_factory=ollama.Client, repr=False)
+
+    def generate(
+        self,
+        prompt: str,
+        system: str = SYSTEM_PROMPT,
+        config: NarratorConfig | None = None,
+    ) -> Generator[str, None, None]:
+        """
+        Generate text with streaming.
+
+        Args:
+            prompt: The user prompt.
+            system: System prompt for context.
+            config: Generation configuration.
+
+        Yields:
+            Text chunks as they're generated.
+        """
+        config = config or NarratorConfig()
+
+        try:
+            stream = self._client.chat(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                stream=True,
+                options={
+                    "temperature": config.temperature,
+                    "top_p": config.top_p,
+                    "top_k": config.top_k,
+                    "repeat_penalty": config.repeat_penalty,
+                    "num_predict": config.max_tokens,
+                },
+            )
+
+            for chunk in stream:
+                if chunk.get("message", {}).get("content"):
+                    yield chunk["message"]["content"]
+
+        except ollama.ResponseError as e:
+            yield f"[Error communicating with Ollama: {e}]"
+        except Exception as e:
+            yield f"[Ollama error: {e}]"
+
+    def generate_sync(
+        self,
+        prompt: str,
+        system: str = SYSTEM_PROMPT,
+        config: NarratorConfig | None = None,
+    ) -> str:
+        """
+        Generate text synchronously (non-streaming).
+
+        Returns:
+            Complete generated text.
+        """
+        return "".join(self.generate(prompt, system, config))
+
+    def get_model_info(self) -> dict:
+        """Get information about the current model."""
+        try:
+            return self._client.show(self.model)
+        except Exception as e:
+            return {"error": str(e)}
+
+    def is_available(self) -> bool:
+        """Check if Ollama is available and model is loaded."""
+        try:
+            models = self._client.list()
+            model_names = [m.get("name", "").split(":")[0] for m in models.get("models", [])]
+            return self.model.split(":")[0] in model_names
+        except Exception:
+            return False
+
+
+# ============================================================================
+# Narrative Generation
+# ============================================================================
+
+def build_narrative_prompt(
+    player_input: str,
+    roll_result: str = "",
+    outcome: str = "",
+    character_name: str = "Traveler",
+    location: str = "the void",
+    context: str = "",
+) -> str:
+    """
+    Build the full prompt for narrative generation.
+
+    Args:
+        player_input: What the player said/did.
+        roll_result: Formatted roll result (if any).
+        outcome: "strong_hit", "weak_hit", "miss", or "" for no roll.
+        character_name: The PC's name.
+        location: Current location.
+        context: Additional context (previous narrative, etc.).
+
+    Returns:
+        Complete prompt string.
+    """
+    parts = []
+
+    if context:
+        parts.append(f"[Previous scene]\n{context}\n")
+
+    parts.append(f"[Current location: {location}]")
+    parts.append(f"[Character: {character_name}]")
+    parts.append(f"\n[Player action]\n{player_input}")
+
+    if roll_result:
+        parts.append(f"\n[Dice result]\n{roll_result}")
+
+        # Add outcome-specific guidance
+        if outcome == "strong_hit":
+            parts.append("\n[Guidance: The character succeeds decisively. Show clear progress and advantage.]")
+        elif outcome == "weak_hit":
+            parts.append("\n[Guidance: The character succeeds but at a cost or with a complication. Include a tradeoff.]")
+        elif outcome == "miss":
+            parts.append("\n[Guidance: Things go wrong. Introduce a setback, danger, or escalation.]")
+
+    parts.append("\n[Write the narrative response now]")
+
+    return "\n".join(parts)
+
+
+def generate_narrative(
+    player_input: str,
+    roll_result: str = "",
+    outcome: str = "",
+    character_name: str = "Traveler",
+    location: str = "the void",
+    context: str = "",
+    config: NarratorConfig | None = None,
+) -> str:
+    """
+    Generate narrative prose for the current game situation.
+
+    This is the main entry point for narrative generation.
+
+    Args:
+        player_input: What the player said/did.
+        roll_result: Formatted roll result (if any).
+        outcome: "strong_hit", "weak_hit", "miss", or "" for no roll.
+        character_name: The PC's name.
+        location: Current location.
+        context: Additional context (previous narrative, etc.).
+        config: Optional narrator configuration.
+
+    Returns:
+        Generated narrative text.
+    """
+    config = config or NarratorConfig()
+
+    prompt = build_narrative_prompt(
+        player_input=player_input,
+        roll_result=roll_result,
+        outcome=outcome,
+        character_name=character_name,
+        location=location,
+        context=context,
+    )
+
+    client = OllamaClient(model=config.model)
+
+    # Check if Ollama is available
+    if not client.is_available():
+        return (
+            f"[Ollama model '{config.model}' is not available. "
+            f"Please ensure Ollama is running and the model is pulled: "
+            f"`ollama pull {config.model}`]\n\n"
+            f"*Placeholder narrative for: {player_input}*"
+        )
+
+    return client.generate_sync(prompt, config=config)
+
+
+def generate_narrative_stream(
+    player_input: str,
+    roll_result: str = "",
+    outcome: str = "",
+    character_name: str = "Traveler",
+    location: str = "the void",
+    context: str = "",
+    config: NarratorConfig | None = None,
+) -> Generator[str, None, None]:
+    """
+    Generate narrative prose with streaming.
+
+    Yields text chunks as they're generated for real-time display.
+    """
+    config = config or NarratorConfig()
+
+    prompt = build_narrative_prompt(
+        player_input=player_input,
+        roll_result=roll_result,
+        outcome=outcome,
+        character_name=character_name,
+        location=location,
+        context=context,
+    )
+
+    client = OllamaClient(model=config.model)
+
+    if not client.is_available():
+        yield f"[Ollama model '{config.model}' is not available.]"
+        return
+
+    yield from client.generate(prompt, config=config)
