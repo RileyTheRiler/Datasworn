@@ -1,0 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-disco-bg text-disco-paper font-sans overflow-hidden;
+    /* Basic noise overlay texture if we have one, otherwise fallback */
+    background-image: repeating-linear-gradient(0deg, transparent, transparent 1px, #00000011 1px, #00000011 2px);
+    background-size: 100% 4px;
+  }
+
+  /* Scrollbar customization */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-disco-bg;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-disco-muted rounded-full;
+  }
+}
+
+@layer components {
+  .btn-disco {
+    @apply px-4 py-2 bg-transparent border-2 border-disco-paper text-disco-paper font-serif font-bold tracking-wider hover:bg-disco-paper hover:text-disco-bg transition-colors duration-200 shadow-hard uppercase;
+  }
+
+  .panel-glass {
+    @apply bg-disco-panel border border-disco-muted/20 backdrop-blur-sm shadow-xl;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 8px currentColor;
+  }
+
+  .text-outline {
+    text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+  }
+}

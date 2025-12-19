@@ -14,6 +14,9 @@ from src.game_state import (
     RollState,
     SessionState,
     DirectorStateModel,
+    QuestLoreState,
+    CompanionManagerState,
+    ThemeTrackerState,
 )
 from src.rules_engine import action_roll, RollResult
 from src.datasworn import load_starforged_data
@@ -221,6 +224,8 @@ def director_node(state: GameState) -> dict[str, Any]:
     director_state_model = state.get("director", DirectorStateModel())
     vow_state = state.get("vows", VowManagerState())
     consequence_state = state.get("consequences", ConsequenceEngineState())
+    quest_lore_state = state.get("quest_lore", QuestLoreState())
+    companion_state = state.get("companions", CompanionManagerState())
     
     # Reconstruct DirectorState from stored model
     director_state = DirectorState(
@@ -331,8 +336,12 @@ def director_node(state: GameState) -> dict[str, Any]:
             plan.notes_for_narrator += f" {vow_guidance['notes']}"
     
     # Update stored director state
+    current_act_val = director.state.current_act
+    if hasattr(current_act_val, 'value'):
+        current_act_val = current_act_val.value
+        
     updated_director = DirectorStateModel(
-        current_act=director.state.current_act.value,
+        current_act=current_act_val,
         recent_pacing=director.state.recent_pacing,
         active_beats=director.state.active_beats,
         tension_level=director.state.tension_level,
@@ -392,12 +401,51 @@ def director_node(state: GameState) -> dict[str, Any]:
     except Exception:
         pass
     
+    # Quest & Lore Integration
+    quest_lore_engine = None
+    try:
+        from src.quest_lore import QuestLoreEngine
+        quest_lore_engine = QuestLoreEngine.from_dict(quest_lore_state.model_dump())
+        # Automatically advance scene count for time tracking
+        quest_lore_engine.quests.current_scene = consequence_state.scene_count
+        
+        # Check for urgent quests
+        urgent = quest_lore_engine.quests.get_urgent_quests(current_day=1) # Simplified day tracking
+        if urgent:
+            plan.notes_for_narrator += " ** REMINDER: TIME SENSITIVE OBJECTIVE **"
+    except Exception:
+        pass
+
+    # Combat Prediction Integration
+    combat_warning = ""
+    if getattr(world, 'combat_active', False):
+        try:
+            from src.combat_prediction import quick_combat_check
+            # Simple heuristic since we don't have full combat state yet
+            warning = quick_combat_check(
+                player_strength=1.0, player_count=1,
+                enemy_strength=1.0, enemy_count=3, # Placeholder
+                is_ranged=True
+            )
+            combat_warning = warning.get("narrative", "")
+            if warning.get("warning") in ["SUICIDE", "EXTREME"]:
+                plan.notes_for_narrator += f" ** WARNING: {combat_warning} **"
+        except Exception:
+            pass
+
+    # Companion AI Integration
+    if companion_state.active_companion and companion_state.companions:
+        # Check for intervention logic could go here
+        pass
+
     return {
         "director": updated_director,
         "consequences": updated_consequences,
         "quiet_moment": quiet_moment_context if quiet_moment_context else None,
         "dilemma": dilemma_context if dilemma_context else None,
+        "quest_lore": QuestLoreState(**quest_lore_engine.to_dict()) if quest_lore_engine else quest_lore_state,
         "route": "narrator",
+        "combat_warning": combat_warning,
     }
 
 
@@ -495,6 +543,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
     director_state = state.get("director", DirectorStateModel())
     memory_state = state.get("memory", MemoryStateModel())
     voice_state = state.get("voices", VoiceManagerState())
+    quest_lore_state = state.get("quest_lore", QuestLoreState())
+    companion_state = state.get("companions", CompanionManagerState())
 
     # Get last player input
     player_input = ""
@@ -802,13 +852,16 @@ def narrator_node(state: GameState) -> dict[str, Any]:
             enhanced_system += sim_guidance
     except Exception:
         pass
+
+
     
     # Quest and Lore - objectives, worldbuilding, NPC schedules, rumors
-    quest_lore_state = state.get("quest_lore", {})
     try:
         from src.quest_lore import QuestLoreEngine
         
-        ql_engine = QuestLoreEngine.from_dict(quest_lore_state) if quest_lore_state else QuestLoreEngine()
+        # Use model_dump() if it's a Pydantic model (which it should be now)
+        ql_data = quest_lore_state.model_dump() if hasattr(quest_lore_state, 'model_dump') else quest_lore_state
+        ql_engine = QuestLoreEngine.from_dict(ql_data) if ql_data else QuestLoreEngine()
         
         # Get active NPCs
         active_npcs = memory_state.active_npcs if memory_state and hasattr(memory_state, 'active_npcs') else []
@@ -1100,14 +1153,17 @@ def narrator_node(state: GameState) -> dict[str, Any]:
     
     # Companion AI - buddy intervention context
     companion_context = ""
-    companion_state = state.get("companion")
-    if companion_state:
+    if companion_state.active_companion and companion_state.companions:
         try:
             from src.companion import CompanionAI, CompanionContext, create_companion
             
+            comp_data = companion_state.companions.get(companion_state.active_companion)
+            if not comp_data:
+                raise ValueError("Active companion data not found")
+
             companion = create_companion(
-                companion_state.get("archetype", "soldier"),
-                companion_state.get("name", "Companion")
+                comp_data.get("archetype", "soldier"),
+                comp_data.get("name", "Companion")
             )
             
             ctx = CompanionContext(
@@ -1222,9 +1278,59 @@ def narrator_node(state: GameState) -> dict[str, Any]:
     if few_shot_context:
         enhanced_system += f"\n\n<style_examples>\n{few_shot_context}\n</style_examples>"
     
-    # Generate narrative
+    # ==========================================================================
+    # ENHANCEMENT ENGINE INTEGRATION
+    # All 13 enhancement systems unified here
+    # ==========================================================================
+    enhancement_context = ""
+    enhancement_state = state.get("enhancements", {})
+    try:
+        from src.enhancement_engine import EnhancementEngine
+        
+        enhancement_engine = EnhancementEngine.from_dict(enhancement_state) if enhancement_state else EnhancementEngine()
+        
+        # Set current scene
+        turn_count = state.get("session", SessionState()).turn_count if hasattr(state.get("session", SessionState()), 'turn_count') else 0
+        enhancement_engine.set_scene(turn_count)
+        
+        # Get active NPCs
+        active_npcs = memory_state.active_npcs if memory_state and hasattr(memory_state, 'active_npcs') else []
+        
+        # Build vow states for vow complication engine
+        vow_states = []
+        if character and hasattr(character, 'vows'):
+            for vow in character.vows:
+                vow_states.append(vow.model_dump() if hasattr(vow, 'model_dump') else vow.__dict__)
+        
+        # Build asset states for asset narrative engine
+        asset_states = []
+        if character and hasattr(character, 'assets'):
+            for asset in character.assets:
+                asset_states.append(asset.model_dump() if hasattr(asset, 'model_dump') else asset.__dict__)
+        
+        # Process turn through all enhancement systems
+        ctx = enhancement_engine.process_turn(
+            player_input=player_input,
+            location=world.current_location if world else "",
+            active_npcs=active_npcs,
+            player_name=character.name if character else "the protagonist",
+            vow_states=vow_states,
+            asset_states=asset_states,
+            is_session_start=(turn_count == 0),
+        )
+        
+        # Get narrator injection from all systems
+        enhancement_context = ctx.get_narrator_injection()
+    except Exception:
+        pass  # Graceful fallback
+    
+    if enhancement_context:
+        enhanced_system += f"\n\n{enhancement_context}"
+
+    # Generate narrative with configurable backend
+    from src.narrator import get_llm_client
     config = NarratorConfig()
-    client = OllamaClient(model=config.model)
+    client = get_llm_client(config)
     
     if client.is_available():
         narrative = client.generate_sync(prompt, system=enhanced_system, config=config)
@@ -1235,7 +1341,7 @@ def narrator_node(state: GameState) -> dict[str, Any]:
             import logging
             logging.getLogger("narrator").warning(f"Narrative validation issues: {issues}")
     else:
-        narrative = f"[Ollama not available]\n\n*Placeholder for: {player_input}*"
+        narrative = f"[LLM not available]\\n\\n*Placeholder for: {player_input}*"
 
     # Update memory with new exchange
     updated_memory = MemoryStateModel(
@@ -1483,6 +1589,41 @@ def world_state_manager_node(state: GameState) -> dict[str, Any]:
         "content": final_narrative,
     }
 
+    # ==========================================================================
+    # ENHANCEMENT ENGINE - Post-Narrative Processing
+    # Event detection, world state updates, and auto-save
+    # ==========================================================================
+    enhancement_state = state.get("enhancements", {})
+    updated_enhancement_state = {}
+    try:
+        from src.enhancement_engine import EnhancementEngine
+        
+        enhancement_engine = EnhancementEngine.from_dict(enhancement_state) if enhancement_state else EnhancementEngine()
+        
+        world = state.get("world")
+        
+        # Post-narrative processing: detect events, update world state
+        enhancement_engine.post_narrative(
+            narrative_output=final_narrative,
+            location=world.current_location if world else "",
+            active_npcs=updated_memory.active_npcs if updated_memory else [],
+            player_name=character.name if character else "the protagonist",
+        )
+        
+        # Auto-save
+        full_state = {
+            "character": character.model_dump() if character and hasattr(character, 'model_dump') else {},
+            "world": world.model_dump() if world and hasattr(world, 'model_dump') else {},
+            "memory": updated_memory.model_dump() if updated_memory and hasattr(updated_memory, 'model_dump') else {},
+            "turn_count": session.turn_count if session else 0,
+        }
+        enhancement_engine.auto_save(full_state)
+        
+        # Serialize updated enhancement state
+        updated_enhancement_state = enhancement_engine.to_dict()
+    except Exception:
+        pass  # Graceful fallback
+
     return {
         "messages": [new_message],
         "character": character,
@@ -1494,6 +1635,7 @@ def world_state_manager_node(state: GameState) -> dict[str, Any]:
         ) if narrative else None,
         "memory": updated_memory,
         "consequences": updated_consequences,
+        "enhancements": updated_enhancement_state,
         "session": SessionState(
             awaiting_approval=False,
             turn_count=session.turn_count if session else 0,

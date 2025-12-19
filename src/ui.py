@@ -141,6 +141,11 @@ class GameSession:
         self.last_roll: str = ""
         self.awaiting_approval: bool = False
         self.chat_history: list[tuple[str, str]] = []
+        
+        # New System States
+        self.quest_lore: dict | None = None
+        self.world: dict | None = None
+        self.companions: dict | None = None
 
     def reset(self):
         """Reset session state."""
@@ -179,6 +184,9 @@ def create_character(name: str, edge: int, heart: int, iron: int, shadow: int, w
         format_momentum(_session.character.momentum.value),
         format_condition(_session.character.condition),
         format_vows(_session.character.vows),
+        format_quests(_session.quest_lore),
+        format_combat(_session.world),
+        format_companions(_session.companions),
     )
 
 
@@ -288,15 +296,84 @@ def format_delayed_beats(consequence_state) -> str:
     return "\n".join(lines) if lines else "*No events queued*"
 
 
+def format_quests(quest_lore_state) -> str:
+    """Format active quests and objectives."""
+    try:
+        from src.quest_lore import QuestLoreEngine
+        
+        # Safely handle Dict or Pydantic model
+        if hasattr(quest_lore_state, 'model_dump'):
+            data = quest_lore_state.model_dump()
+        elif isinstance(quest_lore_state, dict):
+            data = quest_lore_state
+        else:
+            return "*No active quests*"
+            
+        engine = QuestLoreEngine.from_dict(data)
+        
+        # Get simplified text representation
+        lines = []
+        for q_id, quest in engine.quests.quests.items():
+            if quest.status.value != "completed":
+                lines.append(f"**{quest.title}**")
+                for obj in quest.objectives:
+                    status = "☑️" if obj.completed else "⬜"
+                    lines.append(f"{status} {obj.description}")
+        
+        return "\n".join(lines) if lines else "*No active quests*"
+    except Exception:
+        return "*No active quests*"
+
+
+def format_combat(world_state) -> str:
+    """Format combat status if active."""
+    if not world_state or not getattr(world_state, 'combat_active', False):
+        return "*Safe*"
+        
+    count = getattr(world_state, 'enemy_count', 0)
+    strength = getattr(world_state, 'enemy_strength', 1.0)
+    threat = getattr(world_state, 'threat_level', 0.0)
+    
+    # Visual threat bar
+    threat_int = int(threat * 5)
+    bar = "⚠️" * threat_int + "⚪" * (5 - threat_int)
+    
+    return f"""
+**COMBAT ACTIVE**
+{bar}
+**Enemies:** {count}
+**Strength:** {strength:.1f}
+    """.strip()
+
+
+def format_companions(companion_state) -> str:
+    """Format active companion status."""
+    active_id = getattr(companion_state, 'active_companion', "")
+    companions = getattr(companion_state, 'companions', {})
+    
+    if not active_id or active_id not in companions:
+        return "*Solo*"
+        
+    comp = companions[active_id]
+    name = comp.get("name", "Companion")
+    role = comp.get("archetype", "Ally").title()
+    loyalty = comp.get("loyalty", 0)
+    
+    return f"""
+**{name}** ({role})
+Loyalty: {loyalty}/10
+    """.strip()
+
+
 def process_player_input(message: str, history: list) -> Generator:
     """Process player input and generate narrative response."""
     if not _session.character:
-        yield history + [("System", "Please create a character first.")], "", "", "", ""
+        yield history + [("System", "Please create a character first.")], "", "", "", "", "", "", ""
         return
 
     # Add player message to history
     history = history + [(message, None)]
-    yield history, "", "", "", ""
+    yield history, "", "", "", "", "", "", ""
 
     # Generate narrative response
     config = NarratorConfig()
@@ -311,7 +388,16 @@ def process_player_input(message: str, history: list) -> Generator:
     ):
         narrative += chunk
         history[-1] = (message, narrative)
-        yield history, format_stats(_session.character), format_momentum(_session.character.momentum.value), format_condition(_session.character.condition), format_vows(_session.character.vows)
+        yield (
+            history, 
+            format_stats(_session.character), 
+            format_momentum(_session.character.momentum.value), 
+            format_condition(_session.character.condition), 
+            format_vows(_session.character.vows),
+            format_quests(_session.quest_lore),
+            format_combat(_session.world),
+            format_companions(_session.companions),
+        )
 
     _session.pending_narrative = narrative
     _session.awaiting_approval = True
@@ -422,6 +508,15 @@ def create_ui() -> gr.Blocks:
                         
                         gr.Markdown("### Upcoming Events", elem_classes=["section-header"])
                         beats_display = gr.Markdown("*No delayed beats*")
+                        
+                        gr.Markdown("### Quests", elem_classes=["section-header"])
+                        quests_display = gr.Markdown("*No active quests*")
+                        
+                        gr.Markdown("### Combat Status", elem_classes=["section-header"])
+                        combat_display = gr.Markdown("*Safe*")
+                        
+                        gr.Markdown("### Companions", elem_classes=["section-header"])
+                        companion_display = gr.Markdown("*Solo*")
 
                         gr.Markdown("---")
                         with gr.Row():
@@ -432,19 +527,19 @@ def create_ui() -> gr.Blocks:
         create_btn.click(
             create_character,
             inputs=[char_name, edge_stat, heart_stat, iron_stat, shadow_stat, wits_stat],
-            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display],
+            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display, quests_display, combat_display, companion_display],
         )
 
         submit_btn.click(
             process_player_input,
             inputs=[player_input, chatbot],
-            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display],
+            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display, quests_display, combat_display, companion_display],
         ).then(lambda: "", outputs=player_input)
 
         player_input.submit(
             process_player_input,
             inputs=[player_input, chatbot],
-            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display],
+            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display, quests_display, combat_display, companion_display],
         ).then(lambda: "", outputs=player_input)
 
         accept_btn.click(accept_narrative)

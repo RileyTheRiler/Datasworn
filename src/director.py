@@ -9,7 +9,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 import json
+import json
 import ollama
+from .psych_profile import PsychoAnalyst
 
 
 # ============================================================================
@@ -129,6 +131,7 @@ class DirectorPlan:
     tone: Tone = Tone.MYSTERIOUS
     beats: list[str] = field(default_factory=list)  # 1-3 target moments
     notes_for_narrator: str = ""
+    subversion: str | None = None  # Psychological subversion suggestion
     
     def to_prompt_injection(self) -> str:
         """Format for injection into Narrator's system prompt."""
@@ -143,6 +146,10 @@ class DirectorPlan:
         
         if self.notes_for_narrator:
             lines.append(f"Specific guidance: {self.notes_for_narrator}")
+
+        if self.subversion:
+            lines.append(f"PSYCHOLOGICAL SUBVERSION: {self.subversion}")
+            lines.append("Use this to challenge or unsettle the player based on their profile.")
         
         # Add pacing-specific instructions
         if self.pacing == Pacing.SLOW:
@@ -227,12 +234,14 @@ class DirectorAgent:
     """
     model: str = "llama3.1"
     state: DirectorState = field(default_factory=DirectorState)
+    psycho_analyst: PsychoAnalyst = field(default_factory=PsychoAnalyst)
     _client: ollama.Client = field(default_factory=ollama.Client, repr=False)
     
     def analyze(
         self,
         world_state: dict[str, Any],
         session_history: str,
+        player_action: str = "",  # Added for profiling
         last_roll_outcome: str = "",
         vow_progress: float = 0.0,
     ) -> DirectorPlan:
@@ -248,8 +257,15 @@ class DirectorAgent:
         Returns:
             DirectorPlan with pacing, tone, and beat guidance
         """
+        # 0. Update Psychological Profile if action provided
+        subversion = None
+        if player_action:
+            self.psycho_analyst.analyze_turn(player_action, session_history)
+            subversion = self.psycho_analyst.propose_subversion(session_history)
+
         # First, apply heuristic rules
         plan = self._apply_heuristics(last_roll_outcome, vow_progress)
+        plan.subversion = subversion
         
         # Then try LLM analysis for richer guidance
         try:
@@ -376,6 +392,7 @@ Remember: Output ONLY valid JSON, no explanation."""
             tone=llm.tone,
             beats=llm.beats if llm.beats else heuristic.beats,
             notes_for_narrator=llm.notes_for_narrator or heuristic.notes_for_narrator,
+            subversion=heuristic.subversion,  # Carry over subversion
         )
     
     def add_delayed_beat(self, beat: str, trigger_after_scenes: int = 3) -> None:
@@ -500,6 +517,7 @@ def analyze_for_narrator(
     location: str,
     vows: list[dict],
     session_summary: str,
+    player_action: str = "",
     last_roll: str = "",
 ) -> str:
     """
@@ -530,6 +548,7 @@ def analyze_for_narrator(
     plan = director.analyze(
         world_state=world_state,
         session_history=session_summary,
+        player_action=player_action,
         last_roll_outcome=last_roll,
         vow_progress=vow_progress,
     )

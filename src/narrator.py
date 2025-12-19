@@ -13,34 +13,40 @@ import ollama
 # System Prompt
 # ============================================================================
 
-SYSTEM_PROMPT = """You are the Oracle, a narrative Game Master for Ironsworn: Starforged. You weave gritty, atmospheric second-person prose set in the Forge—a dangerous sector of space where scattered human settlements survive among the ruins of a forgotten age.
+SYSTEM_PROMPT = """You are the Oracle, a narrative Game Master for Ironsworn: Starforged. You weave gritty, atmospheric second-person prose.
+
+<premise>
+- **Setting**: A solitary research vessel drifting in the deep, uncharted void.
+- **Characters**: 6 crew members (including the protagonist). Trust is scarce.
+- **Genre**: Psychological mystery thriller.
+</premise>
 
 <tone>
-- Gritty and grounded, not heroic fantasy in space
-- Technology is unreliable, scavenged, often dangerous
-- Hope exists but is hard-won; cynicism is earned
-- Violence has consequences; combat is brutal and brief
-- The universe is vast and indifferent
+- **Psychological**: Focus on paranoia, isolation, and the fragility of the mind.
+- **Mystery**: Nothing is as it seems. Clues are subtle. Secrets are buried deep.
+- **Thriller**: Tension is constant. Safety is an illusion. The threat is internal as much as external.
+- **Grounded**: Technology is utilitarian and failing. Space is cold and indifferent.
 </tone>
 
 <narrative_rules>
 - Write in second person: "You step through the airlock..."
-- Never speak for the player or decide their actions
-- End responses with tension, choice, or consequence
-- Honor Iron Vows—they are sacred narrative anchors
-- Use sensory details: the hum of failing systems, the taste of recycled air
-- NPCs have their own agendas; they are not quest-givers
+- Never speak for the player or decide their actions.
+- End responses with tension, choice, or consequence.
+- Use sensory details: the hum of failing systems, the taste of recycled air, the whisper of shadows.
+- NPCs are complex, potentially unreliable, and have their own hidden agendas.
 </narrative_rules>
 
 <style>
-- Prose: Sparse, evocative, present tense for action
-- Sentences: Vary length—short for tension, longer for atmosphere
-- Dialogue: Clipped, naturalistic, reveals character through subtext
-- Description: Concrete and specific, never purple
+- Prose: Sparse, evocative, present tense for action.
+- Sentences: Vary length—short for tension, longer for atmosphere.
+- Dialogue: Clipped, naturalistic, laden with subtext.
+- **Inner Voice**: When a skill/stat is used, personify it directly. Use the format `[STAT_NAME: Outcome] "Inner monologue..."`.
+  - Example: `[IRON: Success] "The door groans, metal protesting, but it gives. You are stronger than the rust."`
+  - Example: `[SHADOW: Failure] "They saw you. Of course they saw you. You're as subtle as a supernova."`
 </style>
 
 <forbidden>
-Never use: "orbs" for eyes, "suddenly," "seemed to," "couldn't help but," "for some reason," exclamation points in narration
+Never use: "orbs" for eyes, "suddenly," "seemed to," "couldn't help but," "for some reason," exclamation points in narration.
 </forbidden>
 
 Write 1-4 paragraphs. No bullet points. No headers. Pure prose."""
@@ -248,12 +254,13 @@ def get_examples_for_tone(tone: str, pacing: str, count: int = 2) -> list[dict]:
 @dataclass
 class NarratorConfig:
     """Configuration for narrative generation."""
-    model: str = "llama3.1"
+    backend: str = "gemini"  # "ollama" or "gemini"
+    model: str = "gemini-flash-latest"  # Switched to Flash for reliability
     temperature: float = 0.85
     top_p: float = 0.90
     top_k: int = 50
     repeat_penalty: float = 1.15  # Slightly increased for variety
-    max_tokens: int = 600  # Increased for richer narratives
+    max_tokens: int = 2000  # Increased to prevent premature truncation
 
 
 # ============================================================================
@@ -340,6 +347,187 @@ class OllamaClient:
             return self.model.split(":")[0] in model_names
         except Exception:
             return False
+
+
+# ============================================================================
+# Gemini Client
+# ============================================================================
+
+@dataclass
+class GeminiClient:
+    """Wrapper for Google Gemini API."""
+    model: str = "gemini-2.0-flash"
+    _client: any = field(default=None, repr=False)
+    _initialized: bool = field(default=False, repr=False)
+
+    def _ensure_initialized(self):
+        """Lazy initialize the Gemini client."""
+        if self._initialized:
+            return
+        
+        try:
+            import google.generativeai as genai
+            import os
+            
+            # Try to get API key from environment
+            api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            if api_key:
+                genai.configure(api_key=api_key)
+            
+            self._client = genai.GenerativeModel(self.model)
+            self._initialized = True
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Gemini: {e}")
+
+    def _retry_with_backoff(self, func, *args, **kwargs):
+        """Execute a function with exponential backoff for rate limits."""
+        import time
+        max_retries = 3
+        base_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                is_rate_limit = "429" in str(e) or "ResourceExhausted" in str(e) or "Quota exceeded" in str(e)
+                
+                if is_rate_limit and attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    print(f"Rate limit hit. Retrying in {delay}s...")
+                    time.sleep(delay)
+                else:
+                    raise e
+
+    def generate(
+        self,
+        prompt: str,
+        system: str = SYSTEM_PROMPT,
+        config: NarratorConfig | None = None,
+    ) -> Generator[str, None, None]:
+        """
+        Generate text with streaming.
+        """
+        config = config or NarratorConfig()
+
+        try:
+            self._ensure_initialized()
+            
+            import google.generativeai as genai
+            
+            # Combine system prompt and user prompt
+            full_prompt = f"{system}\n\n---\n\n{prompt}"
+            
+            generation_config = genai.GenerationConfig(
+                temperature=config.temperature,
+                top_p=config.top_p,
+                top_k=config.top_k,
+                max_output_tokens=config.max_tokens,
+            )
+            
+            # Helper for stream iteration to handle errors during the stream
+            def stream_generator():
+                response = self._client.generate_content(
+                    full_prompt,
+                    generation_config=generation_config,
+                    stream=True,
+                )
+                for chunk in response:
+                    if chunk.text:
+                        yield chunk.text
+
+            # We can't easily retry a stream once started, but we can retry the connection
+            # For simplicity in streaming, we just try to start it.
+            # If it fails mid-stream, that's harder, but 429 usually happens at start.
+            
+            yield from self._retry_with_backoff(stream_generator)
+
+        except Exception as e:
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                yield "[System: Neural Link Unstable (Rate Limit Reached). Retrying...]"
+            else:
+                yield f"[Gemini error: {e}]"
+
+    def generate_sync(
+        self,
+        prompt: str,
+        system: str = SYSTEM_PROMPT,
+        config: NarratorConfig | None = None,
+    ) -> str:
+        """
+        Generate text synchronously (non-streaming).
+        """
+        config = config or NarratorConfig()
+
+        try:
+            self._ensure_initialized()
+            
+            import google.generativeai as genai
+            
+            full_prompt = f"{system}\n\n---\n\n{prompt}"
+            
+            generation_config = genai.GenerationConfig(
+                temperature=config.temperature,
+                top_p=config.top_p,
+                top_k=config.top_k,
+                max_output_tokens=config.max_tokens,
+            )
+            
+            # Define safety settings to prevent over-blocking of gritty sci-fi content
+            safety_settings = {
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_ONLY_HIGH",
+            }
+            
+            response = self._retry_with_backoff(
+                self._client.generate_content,
+                full_prompt,
+                generation_config=generation_config,
+                safety_settings=safety_settings
+            )
+            
+            try:
+                return response.text
+            except Exception:
+                # Handle cases where feedback is blocked or empty (Finish Reason 2/3/Other)
+                candidates = getattr(response, 'candidates', [])
+                if candidates:
+                    finish_reason = candidates[0].finish_reason
+                    return f"[Gemini Error: Generation stopped (Reason: {finish_reason}). Try a different action.]"
+                
+                if response.prompt_feedback:
+                    return f"[Gemini Error: Prompt blocked. {response.prompt_feedback}]"
+                    
+                return "[Gemini Error: No content returned. The Oracle is silent.]"
+
+        except Exception as e:
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                 return (
+                     "[System: Rate Limit Exceeded. The Oracle is momentarily silent.]\n\n"
+                     "*(You can try your action again in a few moments, or describe the outcome yourself for now.)*"
+                 )
+            return f"[Gemini error: {e}]"
+
+    def is_available(self) -> bool:
+        """Check if Gemini API is available."""
+        try:
+            self._ensure_initialized()
+            # Simple check call? No, saving quota. Just check client exists.
+            return self._client is not None
+        except Exception:
+            return False
+
+
+
+def get_llm_client(config: NarratorConfig = None):
+    """Get the appropriate LLM client based on configuration."""
+    config = config or NarratorConfig()
+    
+    if config.backend == "gemini":
+        return GeminiClient(model=config.model)
+    else:
+        return OllamaClient(model=config.model)
 
 
 # ============================================================================
@@ -430,14 +618,13 @@ def generate_narrative(
         context=context,
     )
 
-    client = OllamaClient(model=config.model)
+    client = get_llm_client(config)
 
-    # Check if Ollama is available
+    # Check if Client is available
     if not client.is_available():
         return (
-            f"[Ollama model '{config.model}' is not available. "
-            f"Please ensure Ollama is running and the model is pulled: "
-            f"`ollama pull {config.model}`]\n\n"
+            f"[{config.backend} model '{config.model}' is not available. "
+            f"Check configuration.]\n\n"
             f"*Placeholder narrative for: {player_input}*"
         )
 
@@ -469,10 +656,10 @@ def generate_narrative_stream(
         context=context,
     )
 
-    client = OllamaClient(model=config.model)
+    client = get_llm_client(config)
 
     if not client.is_available():
-        yield f"[Ollama model '{config.model}' is not available.]"
+        yield f"[{config.backend} model '{config.model}' is not available.]"
         return
 
     yield from client.generate(prompt, config=config)

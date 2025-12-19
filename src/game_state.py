@@ -70,10 +70,17 @@ class Character(BaseModel):
 class WorldState(BaseModel):
     """World information."""
     current_location: str = "Unknown Sector"
+    location_type: str = "neutral"
     discovered_locations: list[str] = Field(default_factory=list)
     truths: dict[str, str] = Field(default_factory=dict)
     npcs: list[dict[str, Any]] = Field(default_factory=list)
     factions: list[dict[str, Any]] = Field(default_factory=list)
+    
+    # Combat State
+    combat_active: bool = False
+    enemy_count: int = 0
+    enemy_strength: float = 1.0
+    threat_level: float = 0.0
 
 
 class NarrativeState(BaseModel):
@@ -153,6 +160,28 @@ class VowManagerState(BaseModel):
     vow_counter: int = 0
 
 
+class QuestLoreState(BaseModel):
+    """Combined state for Quest, Lore, Schedules, and Rumors."""
+    quests: dict[str, Any] = Field(default_factory=dict)
+    lore: dict[str, Any] = Field(default_factory=dict)
+    schedules: dict[str, Any] = Field(default_factory=dict)
+    rumors: dict[str, Any] = Field(default_factory=dict)
+
+
+class CompanionManagerState(BaseModel):
+    """Companion AI persistence."""
+    companions: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    active_companion: str = ""
+
+
+class ThemeTrackerState(BaseModel):
+    """Theme tracking persistence."""
+    primary_theme: str = "love_vs_survival"
+    theme_moments: list[str] = Field(default_factory=list)
+    theme_reinforced_count: int = 0
+    theme_subverted_count: int = 0
+
+
 # ============================================================================
 # LangGraph State TypedDict (uses Annotated for reducers)
 # ============================================================================
@@ -192,6 +221,15 @@ class GameState(TypedDict):
     # Vow management
     vows: VowManagerState
 
+    # Quest & Lore systems
+    quest_lore: QuestLoreState
+
+    # Companion AI
+    companions: CompanionManagerState
+
+    # Theme tracking
+    theme_tracker: ThemeTrackerState
+
     # Routing decision
     route: str  # "move", "oracle", "narrative", "end_turn", "approval"
 
@@ -228,6 +266,9 @@ def create_initial_state(character_name: str) -> GameState:
         voices=VoiceManagerState(),
         consequences=ConsequenceEngineState(),
         vows=VowManagerState(),
+        quest_lore=QuestLoreState(),
+        companions=CompanionManagerState(),
+        theme_tracker=ThemeTrackerState(),
         route="",
     )
 

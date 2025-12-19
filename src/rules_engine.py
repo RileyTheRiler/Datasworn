@@ -208,3 +208,33 @@ def action_roll(stat: int, adds: int = 0) -> ActionRollResult:
         result=result,
         is_match=is_match,
     )
+
+
+def calculate_probability(stat: int, adds: int = 0) -> dict[str, float]:
+    """
+    Calculate the exact probability of Strong Hit, Weak Hit, and Miss.
+    Used for UI display before rolling (Disco Elysium style).
+    """
+    total_combinations = 6 * 10 * 10
+    strong_hits = 0
+    weak_hits = 0
+    misses = 0
+
+    # Iterate through all dice combinations
+    for action_die in range(1, 7):
+        action_score = action_die + stat + adds
+        for d1 in range(1, 11):
+            for d2 in range(1, 11):
+                if action_score > d1 and action_score > d2:
+                    strong_hits += 1
+                elif action_score > d1 or action_score > d2:
+                    weak_hits += 1
+                else:
+                    misses += 1
+    
+    return {
+        "strong_hit": round(strong_hits / total_combinations, 3),
+        "weak_hit": round(weak_hits / total_combinations, 3),
+        "miss": round(misses / total_combinations, 3)
+    }
+
