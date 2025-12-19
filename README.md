@@ -70,6 +70,15 @@ from src.llm_provider import configure_gemini
 configure_gemini("your-api-key-here")
 ```
 
+**🔒 Security Best Practices:**
+
+Your API key should **ONLY** be stored in the `.env` file, which is already in `.gitignore` and will not be committed to git.
+
+1. **Copy the template**: `cp .env.example .env`
+2. **Add your new key**: Edit `.env` and replace `your-new-api-key-here` with your actual Gemini API key
+3. **Never commit `.env`**: The `.gitignore` file already protects this file from being committed
+4. **Use `.env.example` for documentation only**: This file should only contain placeholder values
+
 **Environment Variables:**
 | Variable | Description | Default |
 |----------|-------------|---------|
