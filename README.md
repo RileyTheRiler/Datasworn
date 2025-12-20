@@ -8,6 +8,7 @@ A professional-grade AI Game Master for **Ironsworn: Starforged** TTRPG, featuri
 - **Prose Craft Engine** — Sentence rhythm, sensory details, dialogue compression
 - **Narrative Architecture** — Tension arcs, foreshadowing, thematic echoes
 - **Character Systems** — Hero's Journey tracking, relationship dynamics
+- **Voice Integration** — Real-time Speech-to-Text and immersive AI narration (`🎙️`)
 - **World Simulation** — Faction politics, weather, economy, NPC schedules
 
 ### 🧠 Self-Improving AI

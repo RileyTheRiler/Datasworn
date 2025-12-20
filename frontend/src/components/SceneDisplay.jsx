@@ -5,9 +5,11 @@ import React, { useState, useEffect, useRef } from 'react';
  * - Ken Burns effect (slow zoom/pan when idle)
  * - Smooth crossfade between scene changes
  * - Parallax effect on mouse movement
+ * - Weather overlays (rain, fog, dust, snow)
+ * - Time of day filters (day, night, twilight)
  * - Enhanced loading states
  */
-const SceneDisplay = ({ imageUrl, isLoading, locationName }) => {
+const SceneDisplay = ({ imageUrl, isLoading, locationName, weather = 'Clear', timeOfDay = 'Day' }) => {
     const [localImage, setLocalImage] = useState(null);
     const [isDragging, setIsDragging] = useState(false);
     const [previousImage, setPreviousImage] = useState(null);
@@ -72,6 +74,21 @@ const SceneDisplay = ({ imageUrl, isLoading, locationName }) => {
     const parallaxX = (mousePosition.x - 0.5) * 10;
     const parallaxY = (mousePosition.y - 0.5) * 10;
 
+    // Time of day filter styles
+    const getTimeFilter = () => {
+        switch (timeOfDay) {
+            case 'Night':
+                return 'brightness(0.4) contrast(1.2) saturate(0.8) hue-rotate(200deg)';
+            case 'Twilight':
+                return 'brightness(0.7) contrast(1.1) saturate(1.2) sepia(0.3) hue-rotate(-10deg)';
+            case 'Dawn':
+                return 'brightness(0.8) contrast(1.05) saturate(1.1) hue-rotate(10deg)';
+            case 'Day':
+            default:
+                return 'brightness(1) contrast(1) saturate(1)';
+        }
+    };
+
     return (
         <div
             ref={containerRef}
@@ -94,7 +111,7 @@ const SceneDisplay = ({ imageUrl, isLoading, locationName }) => {
                 </div>
             )}
 
-            {/* Current Image Layer with Ken Burns */}
+            {/* Current Image Layer with Ken Burns and Time Filter */}
             <div
                 className="absolute inset-[-20px] z-1 transition-transform duration-300 ease-out"
                 style={{
@@ -112,9 +129,78 @@ const SceneDisplay = ({ imageUrl, isLoading, locationName }) => {
                     `}
                     style={{
                         animationPlayState: isLoading ? 'paused' : 'running',
+                        filter: getTimeFilter()
                     }}
                 />
             </div>
+
+            {/* Weather Overlays */}
+            {weather === 'Rain' && (
+                <div className="absolute inset-0 z-5 pointer-events-none">
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-900/10 to-blue-900/20" />
+                    {[...Array(50)].map((_, i) => (
+                        <div
+                            key={i}
+                            className="absolute w-px bg-gradient-to-b from-transparent via-white/60 to-transparent animate-rain"
+                            style={{
+                                left: `${Math.random() * 100}%`,
+                                top: `-${Math.random() * 20}%`,
+                                height: `${20 + Math.random() * 30}px`,
+                                animationDelay: `${Math.random() * 2}s`,
+                                animationDuration: `${0.5 + Math.random() * 0.5}s`
+                            }}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {weather === 'Fog' && (
+                <div className="absolute inset-0 z-5 pointer-events-none">
+                    <div className="absolute inset-0 bg-gradient-to-t from-gray-300/40 via-gray-400/20 to-transparent backdrop-blur-sm animate-pulse" />
+                </div>
+            )}
+
+            {weather === 'Dust Storm' && (
+                <div className="absolute inset-0 z-5 pointer-events-none">
+                    <div className="absolute inset-0 bg-gradient-to-br from-orange-900/30 via-yellow-900/20 to-transparent animate-pulse" />
+                    {[...Array(30)].map((_, i) => (
+                        <div
+                            key={i}
+                            className="absolute w-1 h-1 bg-yellow-700/40 rounded-full animate-dust"
+                            style={{
+                                left: `${Math.random() * 100}%`,
+                                top: `${Math.random() * 100}%`,
+                                animationDelay: `${Math.random() * 3}s`,
+                                animationDuration: `${3 + Math.random() * 2}s`
+                            }}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {weather === 'Snow' && (
+                <div className="absolute inset-0 z-5 pointer-events-none">
+                    {[...Array(40)].map((_, i) => (
+                        <div
+                            key={i}
+                            className="absolute w-1 h-1 bg-white rounded-full animate-snow"
+                            style={{
+                                left: `${Math.random() * 100}%`,
+                                top: `-${Math.random() * 20}%`,
+                                animationDelay: `${Math.random() * 3}s`,
+                                animationDuration: `${3 + Math.random() * 2}s`
+                            }}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {weather === 'Storm' && (
+                <div className="absolute inset-0 z-5 pointer-events-none">
+                    <div className="absolute inset-0 bg-gradient-to-b from-gray-900/40 to-transparent animate-pulse" />
+                    <div className="absolute inset-0 animate-lightning" />
+                </div>
+            )}
 
             {/* Loading Overlay */}
             {isLoading && (

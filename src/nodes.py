@@ -5,6 +5,7 @@ Each node processes state and returns updates.
 
 from __future__ import annotations
 import re
+import time
 from typing import Any
 
 from langgraph.types import interrupt, Command
@@ -206,7 +207,7 @@ def rules_engine_node(state: GameState) -> dict[str, Any]:
 # Director Node - Enhanced with Vow and Consequence Integration
 # ============================================================================
 
-def director_node(state: GameState) -> dict[str, Any]:
+async def director_node(state: GameState) -> dict[str, Any]:
     """
     Analyze dramatic state and set pacing/tone for the narrator.
     Now integrates:
@@ -216,7 +217,10 @@ def director_node(state: GameState) -> dict[str, Any]:
     """
     from src.director import DirectorAgent, DirectorState, Pacing, Tone
     from src.knowledge_graph import VowTracker, VowManager, ConsequenceEngine, DelayedBeat
-    from src.game_state import VowManagerState, ConsequenceEngineState
+    from src.game_state import VowManagerState, ConsequenceEngineState, PhotoAlbumState
+    from src.photo_album import PhotoAlbumManager
+    from src.image_gen import generate_location_image
+
     
     last_roll = state.get("last_roll", RollState())
     character = state.get("character")
@@ -433,13 +437,41 @@ def director_node(state: GameState) -> dict[str, Any]:
         except Exception:
             pass
 
-    # Companion AI Integration
-    if companion_state.active_companion and companion_state.companions:
-        # Check for intervention logic could go here
-        pass
+    # Cinematic Scene Trigger Logic
+    # -----------------------------
+    album_state = state.get("album", PhotoAlbumState())
+    album_manager = PhotoAlbumManager(album_state)
+    
+    # 1. Tension Peak Trigger
+    # Trigger if tension is high (>0.8) and we haven't just taken a photo of this scene (heuristic)
+    # Using a simple check on the last photo's timestamp or ID vs current turn count could work better,
+    # but for now we'll rely on the director's state change or a random chance at peak tension.
+    if director.state.tension_level >= 0.8 and plan.pacing == Pacing.CLIMAX:
+        # Check if we already have a recent photo for this "climax"
+        latest_photo = album_manager.get_latest_photo()
+        should_snap = True
+        if latest_photo and "Climax" in latest_photo.tags:
+             # Avoid spamming photos during prolonged climax
+            should_snap = False 
+            
+        if should_snap:
+             try:
+                scene_desc = f"Dramatic climax in {world.current_location}. {plan.notes_for_narrator}"
+                filename = f"cinematic_{hash(scene_desc)}_{int(time.time())}.png"
+                img_url = await generate_location_image(scene_desc, filename)
+                if img_url:
+                    album_manager.capture_moment(
+                        image_url=img_url,
+                        caption=f"High tension at {world.current_location}",
+                        tags=["Climax", "High Tension"],
+                        scene_id=world.current_location
+                    )
+             except Exception as e:
+                print(f"Failed to auto-capture cinematic: {e}")
 
     return {
         "director": updated_director,
+
         "consequences": updated_consequences,
         "quiet_moment": quiet_moment_context if quiet_moment_context else None,
         "dilemma": dilemma_context if dilemma_context else None,

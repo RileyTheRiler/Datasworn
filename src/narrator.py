@@ -36,6 +36,7 @@ SYSTEM_PROMPT = """You are the Oracle, a narrative Game Master for Ironsworn: St
 - End responses with tension, choice, or consequence.
 - Use sensory details: the hum of failing systems, the taste of recycled air, the whisper of shadows.
 - NPCs are complex, potentially unreliable, and have their own hidden agendas.
+- **NPC Names**: When first mentioning a crew member in a scene, wrap their name in double brackets like [[Commander Vasquez]] or [[Chen Wei]]. This enables the player to hover over names for character info.
 </narrative_rules>
 
 <style>

@@ -11,6 +11,15 @@ import RuleTooltip, { QuickReferencePanel } from './components/RuleTooltip';
 import { useKeyboardShortcuts, KeyboardHelpOverlay } from './components/KeyboardShortcuts';
 import { useAccessibility } from './contexts/AccessibilityContext';
 import { useSoundEffects } from './contexts/SoundEffectsContext';
+import { useVoice } from './contexts/VoiceContext';
+import VoiceInput from './components/VoiceInput';
+import TacticalBlueprint from './components/TacticalBlueprint';
+import PortraitSettings from './components/PortraitSettings';
+import PhotoAlbum from './components/PhotoAlbum';
+import StarMap from './components/StarMap';
+import RumorBoard from './components/RumorBoard';
+import ShipBlueprintViewer from './components/ShipBlueprintViewer';
+
 
 const API_URL = 'http://localhost:8000/api';
 
@@ -76,7 +85,7 @@ const StatBar = ({ label, value, max, color }) => {
     );
 }
 
-const Layout = ({ gameState, assets, onAction, isLoading }) => {
+const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     const { character, narrative, world, session } = gameState;
     const scrollRef = useRef(null);
     const [input, setInput] = React.useState("");
@@ -87,11 +96,32 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
     const [showTimer, setShowTimer] = useState(true);
     const [showSoundSettings, setShowSoundSettings] = useState(false);
     const [showQuickReference, setShowQuickReference] = useState(false);
+    const [showBlueprint, setShowBlueprint] = useState(false);
+    const [showPortraitSettings, setShowPortraitSettings] = useState(false);
+    const [showAlbum, setShowAlbum] = useState(false);
+    const [showStarMap, setShowStarMap] = useState(false);
+    const [showRumorBoard, setShowRumorBoard] = useState(false);
+    const [showShipBlueprint, setShowShipBlueprint] = useState(false);
     const [activeStat, setActiveStat] = useState({ name: 'Iron', value: character.stats.iron });
 
     // Accessibility and sound contexts
     const { highContrast, setHighContrast } = useAccessibility();
     const { toggleMute } = useSoundEffects();
+    const { speak, voiceEnabled, isListening, startListening, stopListening, transcript, setTranscript, supported: voiceSupported } = useVoice();
+    const [lastSpoken, setLastSpoken] = useState('');
+
+    // Update input from voice transcript
+    useEffect(() => {
+        if (transcript) setInput(transcript);
+    }, [transcript]);
+
+    // Auto-narrate new text
+    useEffect(() => {
+        if (voiceEnabled && narrative.pending_narrative && !isLoading && narrative.pending_narrative !== lastSpoken) {
+            speak(narrative.pending_narrative);
+            setLastSpoken(narrative.pending_narrative);
+        }
+    }, [narrative.pending_narrative, voiceEnabled, isLoading, speak, lastSpoken]);
 
     // Stat selection handler for keyboard shortcuts
     const handleStatSelect = useCallback((statName) => {
@@ -118,6 +148,9 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
             setShowRecap(false);
             setShowSoundSettings(false);
             setShowQuickReference(false);
+            setShowBlueprint(false);
+            setShowAlbum(false);
+            setShowShipBlueprint(false);
         }, []),
         onShowHelp: useCallback(() => setShowHelp(true), []),
         onToggleMute: toggleMute,
@@ -168,7 +201,34 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
         if (!input.trim() || isLoading) return;
         onAction(input);
         setInput("");
-    }
+        setTranscript("");
+    };
+
+    const handleManualCapture = async () => {
+        if (!narrative.pending_narrative) return;
+
+        try {
+            const response = await fetch(`${API_URL}/album/capture`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: 'default',
+                    image_url: assets.scene_image || '/assets/defaults/location_placeholder.png',
+                    caption: `Manual Capture: ${world.current_location}`,
+                    tags: ["Manual", world.current_location],
+                    scene_id: world.current_location
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                // Flash effect or notification?
+                console.log("Captured!");
+                setShowAlbum(true); // Open album to show result
+            }
+        } catch (error) {
+            console.error("Capture failed:", error);
+        }
+    };
 
     const handleRollComplete = async () => {
         // This needs to be a real API call.
@@ -225,6 +285,8 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                             imageUrl={assets?.scene_image}
                             locationName={world?.current_location}
                             isLoading={isLoading}
+                            weather={world?.current_weather || 'Clear'}
+                            timeOfDay={world?.current_time || 'Day'}
                         />
                     </div>
 
@@ -254,6 +316,14 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                                 alt="Character"
                                 className="w-full h-full object-cover grayscale-[30%] contrast-125 hover:grayscale-0 transition-all duration-700"
                             />
+                            {/* Edit Portrait Button via Overlay */}
+                            <button
+                                onClick={() => setShowPortraitSettings(true)}
+                                className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-disco-cyan/80 text-disco-cyan hover:text-black rounded opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                                title="Customize Appearance"
+                            >
+                                ✏️
+                            </button>
                         </div>
                         <div className="flex-1 pt-2">
                             <h3 className="font-serif text-3xl font-bold text-disco-paper text-outline tracking-wider">{character.name}</h3>
@@ -289,6 +359,7 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                         <div className="prose prose-invert prose-lg text-disco-paper/90 fade-in leading-loose">
                             <TypewriterText
                                 text={narrative.pending_narrative}
+                                characters={gameState.relationships?.crew || {}}
                                 baseSpeed={20}
                                 className="font-mono text-base leading-relaxed tracking-wide"
                                 onComplete={() => {
@@ -325,6 +396,8 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                             🎲
                         </button>
 
+                        <VoiceInput />
+
                         <input
                             type="text"
                             className="flex-1 bg-black/40 border-b-2 border-disco-muted text-disco-paper font-serif text-xl p-4 focus:outline-none focus:border-disco-accent focus:ring-2 focus:ring-disco-accent/50 focus:animate-[inputPulse_2s_ease-in-out_infinite] transition-all placeholder:text-disco-muted/30"
@@ -332,8 +405,15 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             disabled={isLoading}
-                            autoFocus
                         />
+                        <button
+                            type="button"
+                            onClick={handleManualCapture}
+                            className="absolute right-16 top-1/2 -translate-y-1/2 text-disco-purple hover:text-disco-paper transition-colors opacity-60 hover:opacity-100"
+                            title="Capture Cinematic Moment"
+                        >
+                            📷
+                        </button>
                         <button
                             type="submit"
                             className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 transition-opacity text-disco-accent font-serif font-bold tracking-wider uppercase"
@@ -374,6 +454,13 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                         >
                             🔊 Sound
                         </button>
+                        <button
+                            onClick={() => setShowBlueprint(true)}
+                            className="text-disco-green hover:text-disco-paper transition-colors"
+                            title="Tactical Blueprint (M)"
+                        >
+                            🗺️ Map
+                        </button>
                         <a
                             href={`${API_URL}/export/story/default`}
                             download
@@ -382,6 +469,34 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                         >
                             📤 Export
                         </a>
+                        <button
+                            onClick={() => setShowAlbum(true)}
+                            className="text-disco-purple hover:text-disco-paper transition-colors"
+                            title="Photo Album - Captured Moments"
+                        >
+                            📸 Album
+                        </button>
+                        <button
+                            onClick={() => setShowStarMap(true)}
+                            className="text-disco-cyan hover:text-disco-paper transition-colors"
+                            title="Star Map Navigation"
+                        >
+                            🌌 Star Map
+                        </button>
+                        <button
+                            onClick={() => setShowRumorBoard(true)}
+                            className="text-disco-orange hover:text-disco-paper transition-colors"
+                            title="Rumor Network"
+                        >
+                            📡 Rumors
+                        </button>
+                        <button
+                            onClick={() => setShowShipBlueprint(true)}
+                            className="text-disco-red hover:text-disco-paper transition-colors"
+                            title="Ship Schematic & Condition"
+                        >
+                            🚀 Ship
+                        </button>
                     </div>
 
                     {/* Dice/Skill Check Overlay */}
@@ -429,6 +544,51 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                     <QuickReferencePanel
                         isOpen={showQuickReference}
                         onClose={() => setShowQuickReference(false)}
+                    />
+
+                    {/* Tactical Blueprint Modal */}
+                    <TacticalBlueprint
+                        sessionId="default"
+                        visible={showBlueprint}
+                        onClose={() => setShowBlueprint(false)}
+                    />
+
+                    {/* Portrait Settings Modal */}
+                    <PortraitSettings
+                        isOpen={showPortraitSettings}
+                        onClose={() => setShowPortraitSettings(false)}
+                        characterName={character.name}
+                        onUpdate={(newAssets) => {
+                            if (onAssetsUpdate) onAssetsUpdate(prev => ({ ...prev, ...newAssets }));
+                        }}
+                    />
+
+                    {/* Star Map Modal */}
+                    <StarMap
+                        sessionId="default"
+                        visible={showStarMap}
+                        onClose={() => setShowStarMap(false)}
+                    />
+
+                    {/* Rumor Board Modal */}
+                    <RumorBoard
+                        sessionId="default"
+                        visible={showRumorBoard}
+                        onClose={() => setShowRumorBoard(false)}
+                    />
+
+                    {/* Ship Blueprint Modal */}
+                    <ShipBlueprintViewer
+                        sessionId="default"
+                        visible={showShipBlueprint}
+                        onClose={() => setShowShipBlueprint(false)}
+                    />
+
+                    {/* Photo Album Modal */}
+                    <PhotoAlbum
+                        sessionId="default"
+                        visible={showAlbum}
+                        onClose={() => setShowAlbum(false)}
                     />
                 </div>
             </div>

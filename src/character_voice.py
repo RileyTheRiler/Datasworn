@@ -43,6 +43,9 @@ class CharacterProfile:
     # Secret the player doesn't know (for dramatic irony)
     secret: str = ""
     
+    # ElevenLabs Voice ID
+    voice_id: str | None = None
+    
     def get_voice_injection(self) -> str:
         """
         Generate text to inject into narrator prompt for this character.
@@ -80,6 +83,7 @@ class CharacterProfile:
             "current_disposition": self.current_disposition,
             "relationship_to_player": self.relationship_to_player,
             "secret": self.secret,
+            "voice_id": self.voice_id,
         }
     
     @classmethod
@@ -95,6 +99,7 @@ class CharacterProfile:
             current_disposition=data.get("current_disposition", "neutral"),
             relationship_to_player=data.get("relationship_to_player", "stranger"),
             secret=data.get("secret", ""),
+            voice_id=data.get("voice_id"),
         )
 
 
@@ -134,6 +139,7 @@ ARCHETYPE_PROFILES = {
             "Checks exits when entering rooms",
             "Stands with weight on back foot, ready to move",
         ],
+        voice_id="21m00Tcm4TlvDq8ikWAM"
     ),
     
     "nervous_scholar": CharacterProfile(
@@ -166,6 +172,7 @@ ARCHETYPE_PROFILES = {
             "Takes notes on everything",
             "Mumbles calculations under breath",
         ],
+        voice_id="AZnzlk1XvdvUeBnXmlld"
     ),
     
     "pragmatic_merchant": CharacterProfile(
@@ -198,6 +205,7 @@ ARCHETYPE_PROFILES = {
             "Counts things (people, exits, valuables)",
             "Always positioned near the exit",
         ],
+        voice_id="EXAVITQu4vr4xnSDxMaL"
     ),
     
     "charismatic_rebel": CharacterProfile(
@@ -230,6 +238,7 @@ ARCHETYPE_PROFILES = {
             "Touches scars from past protests",
             "Makes eye contact too intensely",
         ],
+        voice_id="ErXwobaYiN019PkySvjV"
     ),
     
     "enigmatic_oracle": CharacterProfile(
@@ -262,6 +271,7 @@ ARCHETYPE_PROFILES = {
             "Touches things as if reading them",
             "Moves in ways that seem unhurried but cover ground quickly",
         ],
+        voice_id="MF3mGyEYCl7XYWbV9V6O"
     ),
 }
 
@@ -310,6 +320,7 @@ class VoiceManager:
             signature_phrases=template.signature_phrases.copy(),
             forbidden_expressions=template.forbidden_expressions.copy(),
             physical_mannerisms=template.physical_mannerisms.copy(),
+            voice_id=template.voice_id
         )
         
         self.add_character(profile)

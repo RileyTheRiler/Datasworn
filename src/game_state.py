@@ -29,6 +29,32 @@ class CharacterCondition(BaseModel):
     supply: int = Field(default=5, ge=0, le=5)
 
 
+class ShipModule(BaseModel):
+    """Component of a ship."""
+    id: str
+    name: str
+    type: str  # bridge, engineering, cargo, quarters, medical
+    integrity: int = 100
+    max_integrity: int = 100
+    status: str = "operational"
+    description: str = ""
+
+
+class ShipState(BaseModel):
+    """Player ship state."""
+    name: str = "The Exile's Gambit"
+    class_type: str = "freighter"
+    hull_integrity: int = 100
+    max_hull: int = 100
+    shield_integrity: int = 100
+    max_shield: int = 100
+    modules: list[ShipModule] = Field(default_factory=list)
+    active_alerts: list[str] = Field(default_factory=list)
+    
+    def get_module(self, module_id: str) -> ShipModule | None:
+        return next((m for m in self.modules if m.id == module_id), None)
+
+
 class MomentumState(BaseModel):
     """Momentum tracking."""
     value: int = Field(default=2, ge=-6, le=10)
@@ -51,6 +77,39 @@ class VowState(BaseModel):
     completed: bool = False
 
 
+class WorldState(BaseModel):
+    """World information."""
+    current_location: str = "Unknown Sector"
+    location_type: str = "neutral"
+    discovered_locations: list[str] = Field(default_factory=list)
+    truths: dict[str, str] = Field(default_factory=dict)
+    npcs: list[dict[str, Any]] = Field(default_factory=list)
+    factions: list[dict[str, Any]] = Field(default_factory=list)
+    ship: ShipState = Field(default_factory=lambda: ShipState())
+    
+    # Combat State
+    combat_active: bool = False
+    enemy_count: int = 0
+    enemy_strength: float = 1.0
+    threat_level: float = 0.0
+
+    # Environmental State
+    current_time: str = "Day"  # Day, Night, Twilight, Dawn
+    current_weather: str = "Clear"  # Clear, Rain, Dust Storm, Fog, Snow, Storm
+    location_visuals: dict[str, dict[str, str]] = Field(default_factory=dict)  # location -> {time, weather, image_url}
+
+
+class AudioState(BaseModel):
+    """Audio playback state."""
+    current_ambient: Optional[str] = None  # Zone type
+    current_music: Optional[str] = None  # Track ID
+    ambient_volume: float = 0.5
+    music_volume: float = 0.6
+    voice_volume: float = 0.8
+    master_volume: float = 1.0
+    muted: bool = False
+
+
 class Character(BaseModel):
     """Complete character state."""
     name: str
@@ -67,20 +126,7 @@ class Character(BaseModel):
     })
 
 
-class WorldState(BaseModel):
-    """World information."""
-    current_location: str = "Unknown Sector"
-    location_type: str = "neutral"
-    discovered_locations: list[str] = Field(default_factory=list)
-    truths: dict[str, str] = Field(default_factory=dict)
-    npcs: list[dict[str, Any]] = Field(default_factory=list)
-    factions: list[dict[str, Any]] = Field(default_factory=list)
-    
-    # Combat State
-    combat_active: bool = False
-    enemy_count: int = 0
-    enemy_strength: float = 1.0
-    threat_level: float = 0.0
+
 
 
 class NarrativeState(BaseModel):
@@ -217,6 +263,101 @@ class MysteryState(BaseModel):
 class NarrativeOrchestratorState(BaseModel):
     """Narrative orchestrator state for all narrative systems."""
     orchestrator_data: dict[str, Any] = Field(default_factory=dict)
+    
+    # Phase 1: Foundational Systems Persistence
+    payoff_tracker: dict[str, Any] = Field(default_factory=dict)
+    npc_memories: dict[str, dict[str, Any]] = Field(default_factory=dict)  # npc_id -> memory_data
+    consequence_manager: dict[str, Any] = Field(default_factory=dict)
+    echo_system: dict[str, Any] = Field(default_factory=dict)
+    
+    # Phase 2: NPC Depth Persistence
+    npc_emotions: dict[str, Any] = Field(default_factory=dict) # emotional_states
+    reputation: dict[str, Any] = Field(default_factory=dict)
+    irony_tracker: dict[str, Any] = Field(default_factory=dict)
+    
+    # Phase 3: Advanced Narrative Persistence
+    story_beats: dict[str, Any] = Field(default_factory=dict)
+    plot_manager: dict[str, Any] = Field(default_factory=dict)
+    branching_system: dict[str, Any] = Field(default_factory=dict)
+    npc_goals: dict[str, Any] = Field(default_factory=dict)
+    
+    # Phase 4: Polish Persistence
+    ending_system: dict[str, Any] = Field(default_factory=dict)
+    dilemma_generator: dict[str, Any] = Field(default_factory=dict)
+    environmental_storyteller: dict[str, Any] = Field(default_factory=dict)
+    flashback_system: dict[str, Any] = Field(default_factory=dict)
+    
+    # Phase 5: Experimental Persistence
+    unreliable_system: dict[str, Any] = Field(default_factory=dict)
+    meta_system: dict[str, Any] = Field(default_factory=dict)
+    npc_skills: dict[str, Any] = Field(default_factory=dict)
+    multiplayer_system: dict[str, Any] = Field(default_factory=dict)
+    
+    # Psychological Systems (Phase 1)
+    dream_engine: dict[str, Any] = Field(default_factory=dict)
+    phobia_system: dict[str, Any] = Field(default_factory=dict)
+    
+    # Psychological Systems (Phase 2)
+    addiction_system: dict[str, Any] = Field(default_factory=dict)
+    moral_injury_system: dict[str, Any] = Field(default_factory=dict)
+    
+    # Psychological Systems (Phase 3)
+    attachment_system: dict[str, Any] = Field(default_factory=dict)
+    # Psychological Systems (Phase 3)
+    attachment_system: dict[str, Any] = Field(default_factory=dict)
+    trust_dynamics: dict[str, Any] = Field(default_factory=dict)
+
+
+class StarmapState(BaseModel):
+    """Starmap and exploration state."""
+    current_sector: dict[str, Any] = Field(default_factory=dict)
+    current_system_id: str = ""
+    discovered_systems: list[str] = Field(default_factory=list)
+    travel_history: list[str] = Field(default_factory=list)
+
+
+class RumorState(BaseModel):
+    """Rumor network state."""
+    rumors: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    rumor_counter: int = 0
+
+
+class WorldSimState(BaseModel):
+    """State for the living world simulation."""
+    events: list[dict[str, Any]] = Field(default_factory=list)
+    event_counter: int = 0
+
+
+class HazardState(BaseModel):
+    """State for environmental hazards."""
+    active_hazards: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class AudioState(BaseModel):
+    """Audio engine state."""
+    current_ambient: str | None = None
+    current_music: str | None = None
+    ambient_volume: float = 0.5
+    music_volume: float = 0.6
+    voice_volume: float = 0.8
+    master_volume: float = 1.0
+    muted: bool = False
+
+
+class PhotoEntry(BaseModel):
+    """A captured moment in the photo album."""
+    id: str
+    image_url: str
+    caption: str
+    timestamp: str  # In-game date/time or real time
+    tags: list[str] = Field(default_factory=list)  # e.g., ["Boss", "Vow", "Betrayal"]
+    scene_id: str = ""
+
+
+class PhotoAlbumState(BaseModel):
+    """Persistent state for the photo album."""
+    photos: list[PhotoEntry] = Field(default_factory=list)
+
 
 
 # ============================================================================
@@ -279,6 +420,24 @@ class GameState(TypedDict):
     # Narrative Orchestrator (all narrative systems)
     narrative_orchestrator: NarrativeOrchestratorState
 
+    # Photo Album
+    album: PhotoAlbumState
+
+    # Star Map (stored as dict)
+    starmap: dict[str, Any] = Field(default_factory=dict)
+
+    # Rumor Network (stored as dict)
+    rumors: dict[str, Any] = Field(default_factory=dict)
+
+    # World Simulation (stored as dict)
+    world_sim: dict[str, Any] = Field(default_factory=dict)
+
+    # Hazards (stored as dict)
+    hazards: dict[str, Any] = Field(default_factory=dict)
+
+    # Audio State
+    audio: AudioState
+
     # Routing decision
     route: str
 
@@ -322,6 +481,12 @@ def create_initial_state(character_name: str) -> GameState:
         relationships=RelationshipState(),
         mystery=MysteryState(),
         narrative_orchestrator=NarrativeOrchestratorState(),
+        album=PhotoAlbumState(),
+        starmap={},
+        rumors={},
+        world_sim={},
+        hazards={},
+        audio=AudioState(),
         route="",
     )
 
