@@ -1,41 +1,124 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import SkillCheck from './components/SkillCheck';
 import SceneDisplay from './components/SceneDisplay';
+import TypewriterText from './components/TypewriterText';
+import SaveManager from './components/SaveManager';
+import SessionRecap from './components/SessionRecap';
+import { useKeyboardShortcuts, KeyboardHelpOverlay } from './components/KeyboardShortcuts';
 
 const API_URL = 'http://localhost:8000/api';
+
+// Atmospheric loading messages
+const LOADING_MESSAGES = [
+    "The stars align...",
+    "Consulting the Forge...",
+    "Fate deliberates...",
+    "The Oracle speaks...",
+    "Threads of destiny weave...",
+    "The void whispers back...",
+    "Calculating trajectories...",
+    "Reading the cosmic static...",
+];
+
+const getRandomLoadingMessage = () =>
+    LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)];
 
 const MarkdownText = ({ text }) => {
     return <div className="font-serif text-lg leading-relaxed whitespace-pre-wrap">{text}</div>
 }
 
-const StatBar = ({ label, value, max, color }) => (
-    <div className="mb-2">
-        <div className="flex justify-between text-xs font-mono uppercase text-disco-muted mb-1">
-            <span>{label}</span>
-            <span>{value}/{max}</span>
+// Icon map for stats
+const STAT_ICONS = {
+    'Health': '❤',
+    'Spirit': '✦',
+    'Supply': '▣',
+    'Momentum': '⚡'
+};
+
+const StatBar = ({ label, value, max, color }) => {
+    const percentage = (value / max) * 100;
+    const icon = STAT_ICONS[label] || '●';
+
+    return (
+        <div className="mb-3 group">
+            <div className="flex justify-between text-[10px] font-mono uppercase text-disco-cyan/70 mb-1.5">
+                <span className="flex items-center gap-1">
+                    <span className="text-xs">{icon}</span>
+                    {label}
+                </span>
+                <span className="font-bold text-disco-paper/80">{value}/{max}</span>
+            </div>
+            <div className="h-1.5 bg-black/60 border border-disco-cyan/20 relative overflow-hidden">
+                {/* Animated background grid */}
+                <div className="absolute inset-0 opacity-20" style={{
+                    backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(107, 228, 227, 0.1) 2px, rgba(107, 228, 227, 0.1) 4px)'
+                }} />
+                {/* Progress bar with gradient */}
+                <div
+                    style={{ width: `${percentage}%` }}
+                    className={`h-full ${color} transition-all duration-700 ease-out relative`}
+                >
+                    {/* Glow effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
+                </div>
+                {/* Danger indicator for low values */}
+                {percentage < 30 && (
+                    <div className="absolute right-0 top-0 w-1 h-full bg-disco-red animate-pulse" />
+                )}
+            </div>
         </div>
-        <div className="h-2 bg-disco-bg border border-disco-muted/30 rounded-sm overflow-hidden">
-            <div
-                style={{ width: `${(value / max) * 100}%` }}
-                className={`h-full ${color} transition-all duration-500`}
-            />
-        </div>
-    </div>
-)
+    );
+}
 
 const Layout = ({ gameState, assets, onAction, isLoading }) => {
-    const { character, narrative, world, session } = gameState; // Assuming session is passed in game state or we need it from prop
+    const { character, narrative, world, session } = gameState;
     const scrollRef = useRef(null);
     const [input, setInput] = React.useState("");
     const [showSkillCheck, setShowSkillCheck] = useState(false);
+    const [showHelp, setShowHelp] = useState(false);
+    const [showSaveManager, setShowSaveManager] = useState(false);
+    const [showRecap, setShowRecap] = useState(false);
     const [activeStat, setActiveStat] = useState({ name: 'Iron', value: character.stats.iron });
 
-    // We need session_id for the roll commit. 
-    // Usually it's in the top level App, let's assume we can pass it down via onAction wrapper or similar.
-    // For now, let's fetch it from a dirty global or verify where we get it.
-    // Ideally Layout should receive 'onRoll' prop.
+    // Keyboard shortcuts
+    useKeyboardShortcuts({
+        onToggleRoll: useCallback(() => setShowSkillCheck(prev => !prev), []),
+        onCloseModal: useCallback(() => {
+            setShowSkillCheck(false);
+            setShowHelp(false);
+            setShowSaveManager(false);
+        }, []),
+        onShowHelp: useCallback(() => setShowHelp(true), []),
+        onToggleMute: null, // Handled by SoundscapeEngine
+    });
 
-    // Quick fix: Add activeStat selection logic.
+    // Quick save/load keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'F5') {
+                e.preventDefault();
+                // Quick save via API
+                fetch(`${API_URL}/save/quicksave`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: 'default' })
+                }).then(() => console.log('Quick saved'));
+            }
+            if (e.key === 'F9') {
+                e.preventDefault();
+                // Quick load via API
+                fetch(`${API_URL}/save/quickload`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            window.location.reload(); // Simple reload for MVP
+                        }
+                    });
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -91,13 +174,16 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
     }
 
     return (
-        <div className="flex h-screen w-full bg-disco-bg bg-grunge bg-blend-multiply overflow-hidden">
+        <div className="flex h-screen w-full bg-disco-bg bg-grunge bg-blend-multiply overflow-hidden animate-[crtFlicker_0.15s_infinite]">
             {/* LEFT: Visual & Stats */}
-            <div className="w-1/3 border-r border-disco-muted/20 flex flex-col relative bg-black/20">
+            <div className="w-1/3 border-r border-disco-cyan/10 flex flex-col relative bg-black/20">
+                {/* HUD Corner Brackets - Top Left */}
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-disco-cyan/40 z-50" />
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-disco-cyan/40 z-50" />
                 {/* Isometric Viewport */}
                 <div className="flex-1 bg-black/80 relative overflow-hidden group">
                     {/* Scene Display */}
-                    <div className="absolute inset-0 z-0">
+                    <div className="absolute inset-0 z-0 group-hover:shadow-glow transition-shadow duration-300">
                         <SceneDisplay
                             imageUrl={assets?.scene_image}
                             locationName={world?.current_location}
@@ -127,7 +213,7 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                         <div className="w-24 h-32 bg-disco-dark border-2 border-disco-paper/20 shadow-hard rotate-[-1deg] relative overflow-hidden group transition-transform hover:rotate-0">
                             {/* Portrait */}
                             <img
-                                src={assets?.portrait || "/assets/defaults/portrait_placeholder.png"}
+                                src={assets?.portrait || "/assets/defaults/avatar_wireframe.svg"}
                                 alt="Character"
                                 className="w-full h-full object-cover grayscale-[30%] contrast-125 hover:grayscale-0 transition-all duration-700"
                             />
@@ -151,24 +237,46 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
             </div>
 
             {/* RIGHT: Narrative Flow */}
-            <div className="w-2/3 flex flex-col relative bg-disco-bg before:content-[''] before:absolute before:inset-0 before:bg-grunge before:opacity-10">
+            <div className="w-2/3 flex flex-col relative bg-disco-panel/60">
+                {/* HUD Corner Brackets - Top Right */}
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-disco-accent/40 z-50" />
+                {/* Animated grid background */}
+                <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
+                    backgroundImage: 'linear-gradient(rgba(107, 228, 227, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(107, 228, 227, 0.1) 1px, transparent 1px)',
+                    backgroundSize: '20px 20px',
+                    animation: 'gridScroll 20s linear infinite'
+                }} />
                 {/* Log */}
                 <div className="flex-1 overflow-y-auto p-12 scroll-smooth" ref={scrollRef}>
                     <div className="max-w-3xl mx-auto space-y-12">
-                        <div className="prose prose-invert prose-lg text-disco-paper/90 transition-opacity duration-500 font-serif leading-loose">
-                            <MarkdownText text={narrative.pending_narrative} />
+                        <div className="prose prose-invert prose-lg text-disco-paper/90 fade-in leading-loose">
+                            <TypewriterText
+                                text={narrative.pending_narrative}
+                                baseSpeed={20}
+                                className="font-mono text-base leading-relaxed tracking-wide"
+                                onComplete={() => {
+                                    // Auto-scroll after typewriter completes
+                                    if (scrollRef.current) {
+                                        scrollRef.current.scrollTo({
+                                            top: scrollRef.current.scrollHeight,
+                                            behavior: 'smooth'
+                                        });
+                                    }
+                                }}
+                            />
                         </div>
 
                         {isLoading && (
-                            <div className="flex items-center gap-3 text-disco-cyan font-mono text-sm animate-pulse">
-                                <span>[COMMUNICATING WITH ORACLE...]</span>
+                            <div className="flex items-center gap-3 text-disco-cyan font-mono text-sm loading-text">
+                                <span className="w-2 h-2 bg-disco-cyan rounded-full animate-pulse" />
+                                <span className="italic">{getRandomLoadingMessage()}</span>
                             </div>
                         )}
                     </div>
                 </div>
 
-                {/* Input Area */}
-                <div className="p-8 pb-12 bg-gradient-to-t from-disco-bg via-disco-bg to-transparent">
+                {/* Input Area - Sticky to Bottom */}
+                <div className="sticky bottom-0 p-8 pb-12 bg-disco-bg border-t border-disco-muted/30 backdrop-blur-sm">
                     <form onSubmit={handleSubmit} className="max-w-3xl mx-auto relative group flex gap-2">
                         {/* Skill Check Toggle */}
                         <button
@@ -182,7 +290,7 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
 
                         <input
                             type="text"
-                            className="flex-1 bg-black/40 border-b-2 border-disco-muted text-disco-paper font-serif text-xl p-4 focus:outline-none focus:border-disco-accent transition-colors placeholder:text-disco-muted/30"
+                            className="flex-1 bg-black/40 border-b-2 border-disco-muted text-disco-paper font-serif text-xl p-4 focus:outline-none focus:border-disco-accent focus:ring-2 focus:ring-disco-accent/50 focus:animate-[inputPulse_2s_ease-in-out_infinite] transition-all placeholder:text-disco-muted/30"
                             placeholder="What do you do?"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
@@ -197,6 +305,34 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                         </button>
                     </form>
 
+                    {/* Keyboard Shortcuts Hint */}
+                    <div className="mt-2 text-center text-[10px] font-mono text-disco-muted/50 uppercase flex justify-center items-center gap-4">
+                        <span>Press <kbd className="px-1 bg-disco-dark/50 rounded">R</kbd> to roll</span>
+                        <span><kbd className="px-1 bg-disco-dark/50 rounded">F5</kbd> save</span>
+                        <span><kbd className="px-1 bg-disco-dark/50 rounded">F9</kbd> load</span>
+                        <span><kbd className="px-1 bg-disco-dark/50 rounded">?</kbd> help</span>
+                        <button
+                            onClick={() => setShowSaveManager(true)}
+                            className="text-disco-cyan hover:text-disco-paper transition-colors"
+                        >
+                            💾 Saves
+                        </button>
+                        <button
+                            onClick={() => setShowRecap(true)}
+                            className="text-disco-accent hover:text-disco-paper transition-colors"
+                        >
+                            📜 Recap
+                        </button>
+                        <a
+                            href={`${API_URL}/export/story/default`}
+                            download
+                            className="text-disco-yellow hover:text-disco-paper transition-colors"
+                            title="Export your story as Markdown"
+                        >
+                            📤 Export
+                        </a>
+                    </div>
+
                     {/* Dice/Skill Check Overlay */}
                     {showSkillCheck && (
                         <SkillCheck
@@ -207,6 +343,30 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                             onClose={() => setShowSkillCheck(false)}
                         />
                     )}
+
+                    {/* Keyboard Help Overlay */}
+                    <KeyboardHelpOverlay
+                        isOpen={showHelp}
+                        onClose={() => setShowHelp(false)}
+                    />
+
+                    {/* Save Manager Modal */}
+                    <SaveManager
+                        isOpen={showSaveManager}
+                        onClose={() => setShowSaveManager(false)}
+                        sessionId="default"
+                        onLoadComplete={(loadedState) => {
+                            // For MVP, reload the page to refresh state
+                            window.location.reload();
+                        }}
+                    />
+
+                    {/* Session Recap Modal */}
+                    <SessionRecap
+                        isOpen={showRecap}
+                        onClose={() => setShowRecap(false)}
+                        sessionId="default"
+                    />
                 </div>
             </div>
         </div>

@@ -11,6 +11,8 @@ from enum import Enum
 from typing import Any, Callable
 import json
 
+from src.psych_profile import PsychologicalProfile, ValueSystem
+
 
 # ============================================================================
 # Narrative Node Types
@@ -60,6 +62,9 @@ class StoryNode:
     tension_level: float = 0.5  # 0-1 for pacing
     themes: list[str] = field(default_factory=list)
     involved_npcs: list[str] = field(default_factory=list)
+    
+    # Psychological Requirements
+    psych_requirements: dict[str, Any] = field(default_factory=dict)  # e.g., {"trauma": "Shattered Trust"}
     
     def to_dict(self) -> dict:
         return {
@@ -120,6 +125,58 @@ class StoryEdge:
         )
 
 
+@dataclass
+class TensionCurve:
+    """Tracks tension over time for pacing analysis."""
+    tension_history: List[tuple[int, float]] = field(default_factory=list)  # (scene, tension)
+    
+    def add_point(self, scene: int, tension: float):
+        """Record tension at a scene."""
+        self.tension_history.append((scene, tension))
+    
+    def get_recent_average(self, scenes: int = 5) -> float:
+        """Get average tension over recent scenes."""
+        if not self.tension_history:
+            return 0.5
+        recent = self.tension_history[-scenes:]
+        return sum(t for _, t in recent) / len(recent)
+    
+    def is_plateauing(self, threshold: float = 0.1) -> bool:
+        """Check if tension has plateaued (not varying enough)."""
+        if len(self.tension_history) < 5:
+            return False
+        recent = [t for _, t in self.tension_history[-5:]]
+        variance = max(recent) - min(recent)
+        return variance < threshold
+    
+    def get_pacing_guidance(self, current_scene: int) -> str:
+        """Get guidance for pacing based on tension curve."""
+        if not self.tension_history:
+            return ""
+        
+        avg = self.get_recent_average()
+        
+        if self.is_plateauing():
+            if avg > 0.6:
+                return "Tension is high but plateauing. Consider a brief respite or major escalation."
+            else:
+                return "Tension is low and flat. Introduce a complication or raise stakes."
+        
+        if avg > 0.8:
+            return "Tension is very high. Sustain for climax or provide brief relief."
+        elif avg < 0.3:
+            return "Tension is low. Good for character moments, but consider building toward conflict."
+        
+        return ""
+    
+    def to_dict(self) -> dict:
+        return {"tension_history": self.tension_history}
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "TensionCurve":
+        return cls(tension_history=data.get("tension_history", []))
+
+
 # ============================================================================
 # Story DAG
 # ============================================================================
@@ -135,6 +192,7 @@ class StoryDAG:
         self.edges: list[StoryEdge] = []
         self.current_node: str = ""
         self.visited_nodes: list[str] = []
+        self.tension_curve: TensionCurve = TensionCurve()
         self._node_counter = 0
     
     def _generate_id(self, node_type: NodeType) -> str:
@@ -231,8 +289,8 @@ class StoryDAG:
         
         return False
     
-    def get_available_transitions(self) -> list[StoryEdge]:
-        """Get edges available from current node."""
+    def get_available_transitions(self, profile: PsychologicalProfile | None = None) -> list[StoryEdge]:
+        """Get edges available from current node, filtered by psychological requirements."""
         if not self.current_node:
             # Find starting nodes (nodes with no incoming edges)
             incoming = {e.to_node for e in self.edges}
@@ -240,7 +298,51 @@ class StoryDAG:
             # Return as pseudo-edges
             return [StoryEdge(from_node="", to_node=n, label=self.nodes[n].title) for n in starting]
         
-        return [e for e in self.edges if e.from_node == self.current_node]
+        available_edges = [e for e in self.edges if e.from_node == self.current_node]
+        
+        # Filter based on psychological requirements
+        if profile:
+            filtered = []
+            for edge in available_edges:
+                target_node = self.nodes.get(edge.to_node)
+                if target_node and self._meets_psych_requirements(target_node, profile):
+                    filtered.append(edge)
+            return filtered
+        
+        return available_edges
+    
+    def _meets_psych_requirements(self, node: StoryNode, profile: PsychologicalProfile) -> bool:
+        """Check if profile meets node's psychological requirements."""
+        if not node.psych_requirements:
+            return True  # No requirements
+        
+        # Check trauma requirement
+        if "trauma" in node.psych_requirements:
+            required_trauma = node.psych_requirements["trauma"]
+            scar_names = [s.name for s in profile.trauma_scars]
+            if required_trauma not in scar_names:
+                return False
+        
+        # Check resolved conflict requirement
+        if "resolved_conflict" in node.psych_requirements:
+            req_values = node.psych_requirements["resolved_conflict"]
+            # Check if this specific conflict was resolved
+            for conflict in profile.active_conflicts:
+                if conflict.resolved and {conflict.value_a, conflict.value_b} == set(req_values):
+                    return True
+            return False
+        
+        # Check minimum sanity
+        if "min_sanity" in node.psych_requirements:
+            if profile.sanity < node.psych_requirements["min_sanity"]:
+                return False
+        
+        # Check maximum stress
+        if "max_stress" in node.psych_requirements:
+            if profile.stress_level > node.psych_requirements["max_stress"]:
+                return False
+        
+        return True
     
     def transition_to(self, node_id: str) -> bool:
         """
@@ -262,6 +364,10 @@ class StoryDAG:
         self.current_node = node_id
         self.visited_nodes.append(node_id)
         self.nodes[node_id].is_visited = True
+        
+        # Track tension
+        scene_num = len(self.visited_nodes)
+        self.tension_curve.add_point(scene_num, self.nodes[node_id].tension_level)
         
         return True
     

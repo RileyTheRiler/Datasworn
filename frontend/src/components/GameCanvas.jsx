@@ -4,6 +4,9 @@ import React, { useRef, useEffect, useState } from 'react';
 const GameCanvas = () => {
     const canvasRef = useRef(null);
     const [entities, setEntities] = useState([]);
+    const [psycheData, setPsycheData] = useState(null);
+    const [psycheEffects, setPsycheEffects] = useState('');
+    const [shakeAnimation, setShakeAnimation] = useState('');
 
     // Load assets
     const [bgImage, setBgImage] = useState(null);
@@ -26,6 +29,64 @@ const GameCanvas = () => {
             { id: 'player', x: 368, y: 268, color: 'cyan', size: 64 }, // Centered(ish)
         ]);
     }, []);
+
+    // Poll psyche data
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const res = await fetch('http://localhost:8000/api/psyche/default');
+                if (res.ok) {
+                    const json = await res.json();
+                    setPsycheData(json);
+                }
+            } catch (err) {
+                // Silently fail
+            }
+        };
+
+        const interval = setInterval(fetchData, 2000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Calculate visual effects from psyche
+    useEffect(() => {
+        if (!psycheData) return;
+
+        const profile = psycheData.profile || {};
+        const sanity = profile.sanity !== undefined ? profile.sanity : 1.0;
+        const traumaCount = profile.trauma_scars?.length || 0;
+        const emotion = profile.current_emotion || 'neutral';
+
+        let filters = [];
+
+        // Chromatic aberration at low sanity
+        if (sanity < 0.3) {
+            const intensity = (0.3 - sanity) * 10;
+            filters.push(`drop-shadow(${intensity}px 0 0 red) drop-shadow(-${intensity}px 0 0 cyan)`);
+        }
+
+        // Vignette from trauma
+        if (traumaCount > 0) {
+            const darkness = Math.min(0.5, traumaCount * 0.15);
+            filters.push(`brightness(${1 - darkness})`);
+        }
+
+        // Desaturation at low sanity
+        if (sanity < 0.3) {
+            const desaturation = (0.3 - sanity) * 100;
+            filters.push(`saturate(${100 - desaturation}%)`);
+        }
+
+        setPsycheEffects(filters.join(' '));
+
+        // Shake animation when afraid
+        if (emotion === 'afraid') {
+            setShakeAnimation('shake 0.5s infinite');
+        } else {
+            setShakeAnimation('');
+        }
+
+    }, [psycheData]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -98,6 +159,10 @@ const GameCanvas = () => {
                 width={800}
                 height={600}
                 className="block bg-gray-950"
+                style={{
+                    filter: psycheEffects,
+                    animation: shakeAnimation,
+                }}
             />
             <div className="absolute top-2 left-2 text-white bg-black/50 p-2 rounded pointer-events-none">
                 <h3 className="text-sm font-bold">2D Viewport</h3>

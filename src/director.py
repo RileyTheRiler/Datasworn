@@ -11,7 +11,10 @@ from typing import Any
 import json
 import json
 import ollama
-from .psych_profile import PsychoAnalyst
+from .psych_profile import PsychologicalProfile, PsychologicalEngine
+from .inner_voice import InnerVoiceSystem
+from .relationship_system import RelationshipWeb
+from .dream_system import DreamEngine
 
 
 # ============================================================================
@@ -132,6 +135,7 @@ class DirectorPlan:
     beats: list[str] = field(default_factory=list)  # 1-3 target moments
     notes_for_narrator: str = ""
     subversion: str | None = None  # Psychological subversion suggestion
+    inner_voices: list[dict] = field(default_factory=list) # Thoughts from the psyche
     
     def to_prompt_injection(self) -> str:
         """Format for injection into Narrator's system prompt."""
@@ -150,6 +154,12 @@ class DirectorPlan:
         if self.subversion:
             lines.append(f"PSYCHOLOGICAL SUBVERSION: {self.subversion}")
             lines.append("Use this to challenge or unsettle the player based on their profile.")
+        
+        if self.inner_voices:
+            lines.append("\n[INNER PSYCHE]")
+            for voice in self.inner_voices:
+                lines.append(f"[{voice['aspect'].upper()}]: {voice['content']}")
+            lines.append("Weave these thoughts into the narrative as internal monologue.")
         
         # Add pacing-specific instructions
         if self.pacing == Pacing.SLOW:
@@ -234,7 +244,10 @@ class DirectorAgent:
     """
     model: str = "llama3.1"
     state: DirectorState = field(default_factory=DirectorState)
-    psycho_analyst: PsychoAnalyst = field(default_factory=PsychoAnalyst)
+    psycho_engine: PsychologicalEngine = field(default_factory=PsychologicalEngine)
+    inner_voice: InnerVoiceSystem = field(default_factory=InnerVoiceSystem)
+    relationships: RelationshipWeb = field(default_factory=RelationshipWeb)
+    dream_engine: DreamEngine = field(default_factory=DreamEngine)
     _client: ollama.Client = field(default_factory=ollama.Client, repr=False)
     
     def analyze(
@@ -259,14 +272,91 @@ class DirectorAgent:
         """
         # 0. Update Psychological Profile if action provided
         subversion = None
-        if player_action:
-            self.psycho_analyst.analyze_turn(player_action, session_history)
-            subversion = self.psycho_analyst.propose_subversion(session_history)
+        if player_action and world_state.get('psyche'):
+            profile = world_state['psyche'].profile
+            self.psycho_engine.evolve_from_event(profile, player_action, outcome=last_roll_outcome)
+            
+            # Update Relationships if an NPC ID is found in the action or context
+            # (Heuristic: search for NPC IDs in the text)
+            act_type = "observe" # Default action type for perception update
+            for npc_id, npc in self.relationships.crew.items():
+                if npc_id in player_action.lower() or npc.name.lower() in player_action.lower():
+                    # Determine action type heuristically or let RelationshipWeb decide
+                    # For now, let's assume "help" if outcome is good, else neutral-ish
+                    act_type = "help" if last_roll_outcome == "strong_hit" else "investigate"
+                    self.relationships.apply_action(act_type, npc_id, context=session_history, psych_profile=profile)
+            
+            # Deep Mechanics: Value Conflicts
+            conflict = self.psycho_engine.detect_value_conflict(profile, player_action)
+            
+            # Deep Mechanics: Compulsion Tracking
+            self.psycho_engine.track_compulsion(profile, player_action)
+            self.psycho_engine.apply_withdrawal(profile)
+            
+            # Deep Mechanics: Memory Corruption (on high stress)
+            if profile.stress_level > 0.8 and profile.memories:
+                import random
+                if random.random() < 0.3:
+                    self.psycho_engine.corrupt_memory(profile)
+            
+            # Deep Mechanics: Social Perception Update
+            self.relationships.update_perception(act_type, last_roll_outcome)
+            
+        # 0.5 Generate Inner Voice Commentary & Check Hijack
+        # Extract profile context for inner voice
+        profile_context = ""
+        if world_state.get('psyche'):
+            profile_context = self.psycho_engine.get_narrative_context(world_state['psyche'].profile)
+            self.inner_voice.sync_with_profile(world_state['psyche'].profile)
+        
+        thoughts = self.inner_voice.trigger_voices(f"{session_history}\n{profile_context}")
+        hijack = self.inner_voice.check_hijack()
+        
+        # Deep Mechanics: Dream Sequences
+        dream_content = ""
+        if world_state.get('psyche'):
+            profile = world_state['psyche'].profile
+            dream_content = self.dream_engine.generate_dream(profile, session_history)
+            if not dream_content:
+                dream_content = self.dream_engine.get_narrator_injection(profile)
+        
+        # Deep Mechanics: NPC Tells
+        npc_tells = []
+        if world_state.get('psyche'):
+            player_emotion = world_state['psyche'].profile.current_emotion
+            for npc_id in self.relationships.crew.keys():
+                reaction = self.relationships.get_npc_reaction_to_emotion(npc_id, player_emotion)
+                if reaction:
+                    npc_tells.append(reaction)
 
-        # First, apply heuristic rules
         plan = self._apply_heuristics(last_roll_outcome, vow_progress)
         plan.subversion = subversion
+        plan.inner_voices = thoughts
         
+        # Inject deep mechanics context
+        if dream_content:
+            plan.notes_for_narrator = (plan.notes_for_narrator or "") + f"\n\n{dream_content}"
+        if npc_tells:
+            plan.notes_for_narrator = (plan.notes_for_narrator or "") + f"\n\n[NPC REACTIONS: {' | '.join(npc_tells)}]"
+        
+        # Add perception context
+        perception_ctx = self.relationships.get_perception_context()
+        if perception_ctx:
+            plan.notes_for_narrator = (plan.notes_for_narrator or "") + f"\n\n{perception_ctx}"
+        
+        # HIJACK OVERRIDE
+        if hijack:
+            plan.notes_for_narrator = (
+                f"!!! NEURAL HIJACK IN PROGRESS !!!\n"
+                f"Region: {hijack['aspect']}\n"
+                f"Effect: {hijack['description']}\n"
+                f"INSTRUCTION: The player has NO CONTROL. Describe them involuntarily performing the action described above. "
+                f"Ignore any player intent to the contrary."
+            )
+            plan.beats = ["The mind snaps.", "Control is lost.", f"The {hijack['aspect']} takes the wheel."]
+            # Return early to prevent LLM from overriding the hijack with "sensible" plot
+            return plan
+
         # Then try LLM analysis for richer guidance
         try:
             llm_plan = self._llm_analyze(world_state, session_history, last_roll_outcome)
@@ -393,6 +483,7 @@ Remember: Output ONLY valid JSON, no explanation."""
             beats=llm.beats if llm.beats else heuristic.beats,
             notes_for_narrator=llm.notes_for_narrator or heuristic.notes_for_narrator,
             subversion=heuristic.subversion,  # Carry over subversion
+            inner_voices=heuristic.inner_voices, # Carry over voices
         )
     
     def add_delayed_beat(self, beat: str, trigger_after_scenes: int = 3) -> None:

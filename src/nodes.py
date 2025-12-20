@@ -660,6 +660,50 @@ def narrator_node(state: GameState) -> dict[str, Any]:
     enhanced_system = SYSTEM_PROMPT
     enhanced_system += director_plan.to_prompt_injection()
     
+    # FEEDBACK LEARNING: Auto-inject learned preferences
+    try:
+        from src.feedback_learning import FeedbackLearningEngine, PromptModifier, ExampleRetriever
+        
+        feedback_engine = FeedbackLearningEngine(db_path="saves/feedback_learning.db")
+        
+        # Check if we have enough data for analysis
+        stats = feedback_engine.db.get_statistics()
+        
+        if stats["total_paragraphs"] >= 20:
+            # Run analysis if we haven't recently or if we have 10+ new decisions
+            current_profile = feedback_engine.current_profile
+            should_analyze = (
+                current_profile is None or 
+                stats["total_paragraphs"] - current_profile.total_decisions_analyzed >= 10
+            )
+            
+            if should_analyze:
+                # Analyze and save new preferences
+                new_profile = feedback_engine.run_preference_analysis()
+                feedback_engine.current_profile = new_profile
+            
+            # Inject learned preferences into prompt
+            if feedback_engine.current_profile:
+                modifier = PromptModifier(feedback_engine.current_profile)
+                preference_injection = modifier.generate_modifications()
+                if preference_injection:
+                    enhanced_system += f"\n\n{preference_injection}"
+            
+            # Add few-shot examples from similar accepted paragraphs
+            retriever = ExampleRetriever(feedback_engine.db)
+            context = {
+                "pacing": pacing,
+                "tone": tone,
+                "scene_type": "general",
+            }
+            few_shot_prompt = retriever.build_few_shot_prompt(context, n_positive=2, n_negative=1)
+            if few_shot_prompt:
+                enhanced_system += f"\n\n{few_shot_prompt}"
+    
+    except Exception as e:
+        # Graceful fallback if feedback learning fails
+        print(f"Feedback learning injection error: {e}")
+    
     # Narrative Craft Engine - genre, McKee structure, archetypes
     craft_state = state.get("narrative_craft", {})
     try:
@@ -1384,9 +1428,16 @@ def approval_node(state: GameState) -> dict[str, Any]:
     """
     Pause for human approval of the generated narrative.
     Uses LangGraph interrupt() for human-in-the-loop.
+    NOW INCLUDES: Feedback learning from accept/reject decisions.
     """
+    from src.feedback_learning import FeedbackLearningEngine
+    
     narrative = state.get("narrative")
     last_roll = state.get("last_roll")
+    director_state = state.get("director", DirectorStateModel())
+    character = state.get("character")
+    world = state.get("world")
+    session = state.get("session", SessionState())
 
     pending = narrative.pending_narrative if narrative else ""
     roll_text = last_roll.result_text if last_roll else ""
@@ -1398,6 +1449,31 @@ def approval_node(state: GameState) -> dict[str, Any]:
         "roll_result": roll_text,
         "message": "Accept this narrative? (accept/retry/edit)",
     })
+
+    # Initialize feedback engine
+    try:
+        feedback_engine = FeedbackLearningEngine(db_path="saves/feedback_learning.db")
+        
+        # Build context for feedback recording
+        feedback_context = {
+            "pacing": director_state.last_pacing if hasattr(director_state, 'last_pacing') else "standard",
+            "tone": director_state.last_tone if hasattr(director_state, 'last_tone') else "neutral",
+            "scene_type": "general",  # Could be enhanced
+            "npcs_present": [],  # Could extract from narrative
+            "location": world.current_location if world else "",
+            "oracle_result": "",
+            "move_triggered": "",
+            "session_number": session.turn_count if hasattr(session, 'turn_count') else 0,
+        }
+        
+        # Record feedback based on decision
+        if decision.get("decision") == "accept":
+            feedback_engine.record_feedback(pending, accepted=True, context=feedback_context)
+        elif decision.get("decision") == "retry":
+            feedback_engine.record_feedback(pending, accepted=False, context=feedback_context)
+    except Exception as e:
+        # Graceful fallback if feedback system fails
+        print(f"Feedback learning error: {e}")
 
     # This will resume when user provides decision
     if decision.get("decision") == "accept":
@@ -1419,6 +1495,12 @@ def approval_node(state: GameState) -> dict[str, Any]:
         }
     elif decision.get("decision") == "edit":
         edited = decision.get("edited_text", pending)
+        # Record edit as partial accept
+        try:
+            feedback_engine.record_feedback(edited, accepted=True, context=feedback_context)
+        except:
+            pass
+        
         return {
             "narrative": state.get("narrative", {}).__class__(
                 **(state.get("narrative", {}).__dict__ if hasattr(state.get("narrative", {}), '__dict__') else {}),

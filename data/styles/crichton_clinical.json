@@ -1,0 +1,31 @@
+{
+    "name": "Crichton Clinical",
+    "description": "Inspired by Michael Crichton's 'The Terminal Man'. Grounded, technical, and clinically precise.",
+    "tone_directives": [
+        "Use a detached, observational tone.",
+        "Focus on technical details and procedural steps.",
+        "Maintain a sense of clinical objectivity.",
+        "Avoid emotional hyperbole; let the facts create the tension.",
+        "Describe environments with architectural or mechanical precision."
+    ],
+    "sentence_patterns": [
+        "Vary sentence length, but favor brevity for action or technical observations.",
+        "Use simple, declarative sentences for impact.",
+        "Incorporate lists of technical specifications or sequence of events."
+    ],
+    "vocabulary_hints": [
+        "Use technical/medical terminology where appropriate (e.g., 'electrode', 'relay', 'interface').",
+        "Prefer precise verbs over vague ones (e.g., 'noted' instead of 'felt').",
+        "Incorporate temporal markers (e.g., 'At 0800', 'minutes later')."
+    ],
+    "few_shot_examples": [
+        {
+            "context": "Player enters a high-tech lab",
+            "narrative": "The lab was pressurized to three atmospheres. Rows of silver consoles sat beneath flickering fluorescent light. At the center of the room, the Alpha-9 reactor hummed at 400 gigahertz—a steady, rhythmic vibration that felt solid in the floorboards. You checked the pressure gauge. 2.9. Close enough."
+        },
+        {
+            "context": "A character reacts to a medical discovery",
+            "narrative": "Janet Ross did not look up from the monitor. She adjusted the contrast setting, bringing the synaptic map into sharper focus. 'The spikes are at nine volts,' she said. Her voice was flat, devoid of the panic that usually accompanied such a reading. She began the secondary diagnostic."
+        }
+    ]
+}

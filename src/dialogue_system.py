@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Callable
 from enum import Enum
+from src.psych_profile import EmotionalState
 
 
 class Disposition(Enum):
@@ -45,6 +46,10 @@ class DialogueOption:
     ends_dialogue: bool = False
     effects: List[str] = field(default_factory=list)
     hidden: bool = False
+    
+    # Emotional Gating
+    required_emotion: Optional[List[EmotionalState]] = None  # Must match one of these
+    restricted_emotion: Optional[List[EmotionalState]] = None  # Cannot match any of these
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -187,7 +192,8 @@ class DialogueSystem:
         npc_id: str = None,
         player_stats: Dict[str, int] = None,
         player_items: List[str] = None,
-        reputation: int = 0
+        reputation: int = 0,
+        psych_profile: "PsychologicalProfile" = None
     ) -> List[DialogueOption]:
         """
         Get options available to the player in current dialogue.
@@ -230,6 +236,18 @@ class DialogueSystem:
             if option.required_item:
                 if player_items and option.required_item not in player_items:
                     continue
+
+            # Emotional gating
+            if psych_profile:
+                # 1. Restricted Emotions (Block if current emotion matches)
+                if option.restricted_emotion:
+                    if psych_profile.current_emotion in option.restricted_emotion:
+                        continue
+                
+                # 2. Required Emotions (Block if current emotion DOES NOT match)
+                if option.required_emotion:
+                    if psych_profile.current_emotion not in option.required_emotion:
+                        continue
 
             available.append(option)
 

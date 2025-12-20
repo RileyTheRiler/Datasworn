@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Protocol
 from enum import Enum
+from src.psych_profile import PsychologicalProfile, PsychologicalEngine
 
 
 class DiceSystem(Enum):
@@ -47,6 +48,7 @@ class RollRequest:
     modifier: int = 0
     adds: List[str] = field(default_factory=list)
     context: str = ""
+    psych_profile: Optional["PsychologicalProfile"] = None
 
 
 @dataclass
@@ -152,7 +154,14 @@ class StarforgedAdapter(GameSystemAdapter):
 
         # Add stat and modifiers
         stat_value = request.modifier  # Would come from character
-        total = action_die + stat_value
+        
+        # Apply psychological modifiers
+        psych_modifier = 0
+        if request.psych_profile:
+            engine = PsychologicalEngine()
+            psych_modifier = engine.get_move_modifier(request.psych_profile, request.stat or "")
+        
+        total = action_die + stat_value + psych_modifier
 
         # Determine outcome
         hits = sum(1 for c in challenge_dice if total > c)

@@ -7,8 +7,8 @@
 @layer base {
   body {
     @apply bg-disco-bg text-disco-paper font-sans overflow-hidden;
-    /* Basic noise overlay texture if we have one, otherwise fallback */
-    background-image: repeating-linear-gradient(0deg, transparent, transparent 1px, #00000011 1px, #00000011 2px);
+    /* Reduced scanline intensity for better readability */
+    background-image: repeating-linear-gradient(0deg, transparent, transparent 1px, #00000005 1px, #00000005 2px);
     background-size: 100% 4px;
   }
 
@@ -42,4 +42,454 @@
   .text-outline {
     text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
   }
+
+  .fade-in {
+    animation: fadeIn 0.8s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Typewriter cursor blink */
+  .typewriter-cursor {
+    animation: blink 1s step-end infinite;
+  }
+
+  @keyframes blink {
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0;
+    }
+  }
+
+  /* Toast slide in */
+  .animate-slideIn {
+    animation: slideIn 0.3s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateX(100px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Screen shake variations */
+  .shake-light {
+    animation: shakeLight 0.2s ease-in-out;
+  }
+
+  .shake-medium {
+    animation: shakeMedium 0.3s ease-in-out;
+  }
+
+  .shake-heavy {
+    animation: shakeHeavy 0.5s ease-in-out;
+  }
+
+  @keyframes shakeLight {
+
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+
+    25% {
+      transform: translateX(-1px) rotate(-0.2deg);
+    }
+
+    75% {
+      transform: translateX(1px) rotate(0.2deg);
+    }
+  }
+
+  @keyframes shakeMedium {
+
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+
+    10% {
+      transform: translateX(-3px) rotate(-0.5deg);
+    }
+
+    30% {
+      transform: translateX(3px) rotate(0.5deg);
+    }
+
+    50% {
+      transform: translateX(-2px) rotate(-0.3deg);
+    }
+
+    70% {
+      transform: translateX(2px) rotate(0.3deg);
+    }
+
+    90% {
+      transform: translateX(-1px);
+    }
+  }
+
+  @keyframes shakeHeavy {
+
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+
+    10% {
+      transform: translateX(-6px) translateY(2px) rotate(-1deg);
+    }
+
+    20% {
+      transform: translateX(6px) translateY(-2px) rotate(1deg);
+    }
+
+    30% {
+      transform: translateX(-5px) translateY(1px) rotate(-0.8deg);
+    }
+
+    40% {
+      transform: translateX(5px) translateY(-1px) rotate(0.8deg);
+    }
+
+    50% {
+      transform: translateX(-4px) rotate(-0.5deg);
+    }
+
+    60% {
+      transform: translateX(4px) rotate(0.5deg);
+    }
+
+    70% {
+      transform: translateX(-2px);
+    }
+
+    80% {
+      transform: translateX(2px);
+    }
+
+    90% {
+      transform: translateX(-1px);
+    }
+  }
+
+  /* Tension pulse for vignette */
+  @keyframes tensionPulse {
+
+    0%,
+    100% {
+      opacity: 0.8;
+    }
+
+    50% {
+      opacity: 1;
+    }
+  }
+
+  /* Floating particles */
+  .animate-float {
+    animation: float linear infinite;
+  }
+
+  @keyframes float {
+    0% {
+      transform: translateY(100vh) translateX(0);
+      opacity: 0;
+    }
+
+    10% {
+      opacity: 1;
+    }
+
+    90% {
+      opacity: 1;
+    }
+
+    100% {
+      transform: translateY(-10vh) translateX(20px);
+      opacity: 0;
+    }
+  }
+
+  /* Ripple effect for momentum burst */
+  .animate-ripple {
+    animation: ripple 1s ease-out forwards;
+  }
+
+  @keyframes ripple {
+    0% {
+      transform: scale(0);
+      opacity: 1;
+    }
+
+    100% {
+      transform: scale(4);
+      opacity: 0;
+    }
+  }
+
+  /* Ken Burns effect - slow zoom/pan for scene images */
+  .animate-kenburns {
+    animation: kenburns 30s ease-in-out infinite alternate;
+  }
+
+  @keyframes kenburns {
+    0% {
+      transform: scale(1) translate(0, 0);
+    }
+
+    100% {
+      transform: scale(1.1) translate(-2%, -1%);
+    }
+  }
+
+  /* Flicker for hijack effect */
+  .animate-flicker {
+    animation: flicker 0.15s linear infinite;
+  }
+
+  @keyframes flicker {
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.7;
+    }
+
+    75% {
+      opacity: 0.9;
+    }
+  }
+
+  /* Glitch lines */
+  .animate-glitch {
+    animation: glitch 0.3s linear infinite alternate;
+  }
+
+  @keyframes glitch {
+    0% {
+      transform: translateX(0);
+    }
+
+    100% {
+      transform: translateX(10px);
+    }
+  }
+
+  /* Static noise animation */
+  .animate-static {
+    animation: static 0.1s steps(10) infinite;
+  }
+
+  @keyframes static {
+
+    0%,
+    100% {
+      background-position: 0 0;
+    }
+
+    50% {
+      background-position: 100% 100%;
+    }
+  }
+
+  /* Smooth scroll */
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+
+  /* Dice tumble animation */
+  .animate-tumble {
+    animation: tumble 1.5s ease-out;
+  }
+
+  @keyframes tumble {
+    0% {
+      transform: rotateX(0deg) rotateY(0deg) scale(0.5);
+      opacity: 0;
+    }
+
+    20% {
+      transform: rotateX(180deg) rotateY(90deg) scale(1.2);
+      opacity: 1;
+    }
+
+    40% {
+      transform: rotateX(360deg) rotateY(180deg) scale(1);
+    }
+
+    60% {
+      transform: rotateX(540deg) rotateY(270deg) scale(1.1);
+    }
+
+    80% {
+      transform: rotateX(680deg) rotateY(340deg) scale(1);
+    }
+
+    100% {
+      transform: rotateX(720deg) rotateY(360deg) scale(1);
+    }
+  }
+
+  /* Result flash effects */
+  .flash-success {
+    animation: flashSuccess 0.5s ease-out;
+  }
+
+  .flash-danger {
+    animation: flashDanger 0.5s ease-out;
+  }
+
+  @keyframes flashSuccess {
+    0% {
+      box-shadow: 0 0 0 0 rgba(107, 228, 227, 0.7);
+    }
+
+    50% {
+      box-shadow: 0 0 30px 10px rgba(107, 228, 227, 0.4);
+    }
+
+    100% {
+      box-shadow: 0 0 0 0 rgba(107, 228, 227, 0);
+    }
+  }
+
+  @keyframes flashDanger {
+    0% {
+      box-shadow: 0 0 0 0 rgba(185, 63, 63, 0.7);
+    }
+
+    50% {
+      box-shadow: 0 0 30px 10px rgba(185, 63, 63, 0.4);
+    }
+
+    100% {
+      box-shadow: 0 0 0 0 rgba(185, 63, 63, 0);
+    }
+  }
+
+  /* Loading text animation */
+  .loading-text {
+    animation: loadingPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes loadingPulse {
+
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+
+    50% {
+      opacity: 1;
+    }
+  }
+
+  /* Grid scroll animation for HUD background */
+  @keyframes gridScroll {
+    0% {
+      background-position: 0 0;
+    }
+
+    100% {
+      background-position: 20px 20px;
+    }
+  }
+
+  /* CRT flicker effect - very subtle */
+  @keyframes crtFlicker {
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.98;
+    }
+  }
+
+  /* Input glow pulse */
+  @keyframes inputPulse {
+
+    0%,
+    100% {
+      box-shadow: 0 0 5px rgba(212, 93, 53, 0.3), 0 0 0 1px rgba(212, 93, 53, 0.2);
+    }
+
+    50% {
+      box-shadow: 0 0 15px rgba(212, 93, 53, 0.6), 0 0 0 1px rgba(212, 93, 53, 0.4);
+    }
+  }
+}
+
+/* Accessibility: Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Disable specific animations */
+  .animate-pulse,
+  .animate-spin,
+  .animate-bounce,
+  .animate-tumble,
+  .animate-kenburns,
+  .animate-flicker,
+  .animate-glitch,
+  .loading-text {
+    animation: none !important;
+  }
+
+  /* Disable typewriter cursor blink */
+  .typewriter-cursor {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
+/* High Contrast Mode */
+.high-contrast {
+  --disco-bg: #000000;
+  --disco-paper: #FFFFFF;
+  --disco-accent: #FFFF00;
+  --disco-cyan: #00FFFF;
+  --disco-red: #FF0000;
+  --disco-yellow: #FFFF00;
+}
+
+.high-contrast * {
+  border-color: currentColor !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
 }

@@ -11,6 +11,8 @@ from collections import defaultdict
 from typing import Any
 import re
 
+from src.psych_profile import PsychologicalProfile
+
 
 # ============================================================================
 # Intent Categories
@@ -173,6 +175,57 @@ class NGramPredictor:
         predictions.sort(key=lambda x: x[1], reverse=True)
         
         return predictions[:n_predictions]
+    
+    def predict_from_profile(self, profile: PsychologicalProfile) -> list[tuple[str, float]]:
+        """
+        Predict player intent based on psychological profile.
+        Compulsions, stress, and trauma influence predictions.
+        """
+        predictions = []
+        
+        # Compulsion-based predictions
+        for comp in profile.compulsions:
+            if comp.uses >= comp.threshold and comp.satisfaction < 0.5:
+                # Predict they'll seek to satisfy the compulsion
+                if "stim" in comp.trigger:
+                    predictions.append((IntentCategory.REST, 0.7))  # Seeking relief
+                elif "check" in comp.trigger:
+                    predictions.append((IntentCategory.INVESTIGATION, 0.6))
+        
+        # Stress-based predictions
+        if profile.stress_level > 0.8:
+            # High stress = erratic, unpredictable
+            predictions.append((IntentCategory.REST, 0.5))
+            predictions.append((IntentCategory.MOVEMENT, 0.3))  # Flee/escape
+        elif profile.stress_level > 0.5:
+            predictions.append((IntentCategory.STEALTH, 0.4))  # Cautious
+        
+        # Value conflict predictions (ambiguous intent)
+        if profile.active_conflicts:
+            # Conflicted = unpredictable
+            predictions.append((IntentCategory.SOCIAL, 0.3))  # Might seek guidance
+        
+        # Trauma-based predictions
+        scar_names = [s.name for s in profile.trauma_scars]
+        if "Hyper-Vigilance" in scar_names:
+            predictions.append((IntentCategory.INVESTIGATION, 0.5))  # Always checking
+        if "Survivor's Guilt" in scar_names:
+            predictions.append((IntentCategory.REST, 0.4))  # Withdrawn
+        
+        # Deduplicate and normalize
+        intent_scores = defaultdict(float)
+        for intent, prob in predictions:
+            intent_scores[intent] += prob
+        
+        # Normalize
+        total = sum(intent_scores.values())
+        if total > 0:
+            normalized = [(intent, score / total) for intent, score in intent_scores.items()]
+            normalized.sort(key=lambda x: x[1], reverse=True)
+            return normalized[:3]
+        
+        # Fallback to standard prediction
+        return self.predict_next()
     
     def _fallback_prediction(self, n: int) -> list[tuple[str, float]]:
         """Fallback prediction using overall intent frequencies."""

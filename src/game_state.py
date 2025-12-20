@@ -183,6 +183,43 @@ class ThemeTrackerState(BaseModel):
 
 
 # ============================================================================
+# Psychological State (Updated)
+# ============================================================================
+
+from src.psych_profile import PsychologicalProfile
+
+class PsycheState(BaseModel):
+    """Psychological profile and inner voice state."""
+    profile: PsychologicalProfile = Field(default_factory=PsychologicalProfile)
+    # Map of Aspect Name -> Dominance (0.0-1.0)
+    voice_dominance: dict[str, float] = Field(default_factory=dict)
+    # List of unlocked memory IDs (linking to MemoryPalace)
+    unlocked_memories: list[str] = Field(default_factory=list)
+    # Current active hijack (if any)
+    active_hijack: dict[str, str] | None = None
+    # Track which stress/sanity events have already fired
+    events_triggered: list[str] = Field(default_factory=list)
+
+
+class RelationshipState(BaseModel):
+    """Crew relationship state."""
+    crew: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class MysteryState(BaseModel):
+    """Procedural mystery state."""
+    threat_id: str = ""
+    threat_motive: str = ""
+    clues: list[dict[str, Any]] = Field(default_factory=list)
+    is_revealed: bool = False
+
+
+class NarrativeOrchestratorState(BaseModel):
+    """Narrative orchestrator state for all narrative systems."""
+    orchestrator_data: dict[str, Any] = Field(default_factory=dict)
+
+
+# ============================================================================
 # LangGraph State TypedDict (uses Annotated for reducers)
 # ============================================================================
 
@@ -230,8 +267,20 @@ class GameState(TypedDict):
     # Theme tracking
     theme_tracker: ThemeTrackerState
 
+    # Psychological State
+    psyche: PsycheState
+
+    # Crew Relationships
+    relationships: RelationshipState
+
+    # Mystery Configuration
+    mystery: MysteryState
+    
+    # Narrative Orchestrator (all narrative systems)
+    narrative_orchestrator: NarrativeOrchestratorState
+
     # Routing decision
-    route: str  # "move", "oracle", "narrative", "end_turn", "approval"
+    route: str
 
 
 # ============================================================================
@@ -269,6 +318,10 @@ def create_initial_state(character_name: str) -> GameState:
         quest_lore=QuestLoreState(),
         companions=CompanionManagerState(),
         theme_tracker=ThemeTrackerState(),
+        psyche=PsycheState(),
+        relationships=RelationshipState(),
+        mystery=MysteryState(),
+        narrative_orchestrator=NarrativeOrchestratorState(),
         route="",
     )
 

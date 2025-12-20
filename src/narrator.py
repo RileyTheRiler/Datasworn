@@ -7,6 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Generator
 import ollama
+from src.psych_profile import PsychologicalProfile, PsychologicalEngine
+from src.style_profile import StyleProfile, load_style_profile
 
 
 # ============================================================================
@@ -261,6 +263,7 @@ class NarratorConfig:
     top_k: int = 50
     repeat_penalty: float = 1.15  # Slightly increased for variety
     max_tokens: int = 2000  # Increased to prevent premature truncation
+    style_profile_name: Optional[str] = None
 
 
 # ============================================================================
@@ -541,6 +544,9 @@ def build_narrative_prompt(
     character_name: str = "Traveler",
     location: str = "the void",
     context: str = "",
+    psych_profile: PsychologicalProfile | None = None,
+    hijack: str | None = None,
+    style_profile: StyleProfile | None = None,
 ) -> str:
     """
     Build the full prompt for narrative generation.
@@ -563,6 +569,36 @@ def build_narrative_prompt(
 
     parts.append(f"[Current location: {location}]")
     parts.append(f"[Character: {character_name}]")
+    
+    if psych_profile:
+        engine = PsychologicalEngine()
+        psych_context = engine.get_narrative_context(psych_profile)
+        parts.append(psych_context)
+        
+        # Determine Voice Persona based on top trait
+        top_traits = psych_profile.get_dominant_traits(1)
+        if top_traits:
+            trait_name, value = top_traits[0]
+            voice_personas = {
+                "caution": "A hesitant, safety-first observer. Always weighing risks.",
+                "empathy": "Compassionate and sensitive to the pain of others.",
+                "resilience": "Grim, enduring, and refuses to break under pressure.",
+                "paranoia": "Twitchy, suspicious, and sees shadows everywhere.",
+                "boldness": "Decisive, aggressive, and assumes they can handle any fallout.",
+                "logic": "Cold, analytical, and focused on efficiency over emotion."
+            }
+            persona = voice_personas.get(trait_name.lower(), "Balanced and observant.")
+            parts.append(f"<inner_voice_persona>\nTRAIT: {trait_name.upper()}\nSTYLE: {persona}\n</inner_voice_persona>")
+            
+        # Add Trauma Scars if any
+        if psych_profile.trauma_scars:
+            scars_str = "\n  - ".join([f"{s.name}: {s.description}" for s in psych_profile.trauma_scars])
+            parts.append(f"<trauma_scars>\n{scars_str}\n</trauma_scars>")
+    
+    if hijack:
+        parts.append(f"\n[HIJACK ACTIVE: {hijack}]")
+        parts.append("[URGENT: The character's psychological state overrides their intended action. Show the loss of agency and the involuntary behavior.]")
+    
     parts.append(f"\n[Player action]\n{player_input}")
 
     if roll_result:
@@ -575,6 +611,30 @@ def build_narrative_prompt(
             parts.append("\n[Guidance: The character succeeds but at a cost or with a complication. Include a tradeoff.]")
         elif outcome == "miss":
             parts.append("\n[Guidance: Things go wrong. Introduce a setback, danger, or escalation.]")
+
+    # Narrative Orchestrator Guidance (if available)
+    if hasattr(build_narrative_prompt, '_orchestrator') and build_narrative_prompt._orchestrator:
+        orchestrator_guidance = build_narrative_prompt._orchestrator.get_comprehensive_guidance(
+            location=location,
+            active_npcs=psych_profile.involved_characters if psych_profile and hasattr(psych_profile, 'involved_characters') else [],
+            player_action=player_input,
+        )
+        if orchestrator_guidance:
+            parts.append(f"\n{orchestrator_guidance}")
+    
+    if style_profile:
+        parts.append("\n[NARRATIVE STYLE ACTIVE]")
+        if style_profile.tone_directives:
+            parts.append(f"<tone_directives>\n- " + "\n- ".join(style_profile.tone_directives) + "\n</tone_directives>")
+        if style_profile.vocabulary_hints:
+            parts.append(f"<vocabulary_hints>\n- " + "\n- ".join(style_profile.vocabulary_hints) + "\n</vocabulary_hints>")
+        if style_profile.few_shot_examples:
+            parts.append("\n<style_examples>")
+            for i, ex in enumerate(style_profile.few_shot_examples):
+                parts.append(f"Example {i+1}:")
+                parts.append(f"Context: {ex.get('context', 'General')}")
+                parts.append(f"Narrative: {ex.get('narrative', '')}")
+            parts.append("</style_examples>")
 
     parts.append("\n[Write the narrative response now]")
 
@@ -589,6 +649,8 @@ def generate_narrative(
     location: str = "the void",
     context: str = "",
     config: NarratorConfig | None = None,
+    psych_profile: PsychologicalProfile | None = None,
+    hijack: str | None = None,
 ) -> str:
     """
     Generate narrative prose for the current game situation.
@@ -616,6 +678,9 @@ def generate_narrative(
         character_name=character_name,
         location=location,
         context=context,
+        psych_profile=psych_profile,
+        hijack=hijack,
+        style_profile=load_style_profile(config.style_profile_name) if config.style_profile_name else None,
     )
 
     client = get_llm_client(config)
@@ -639,6 +704,8 @@ def generate_narrative_stream(
     location: str = "the void",
     context: str = "",
     config: NarratorConfig | None = None,
+    psych_profile: PsychologicalProfile | None = None,
+    hijack: str | None = None,
 ) -> Generator[str, None, None]:
     """
     Generate narrative prose with streaming.
@@ -654,6 +721,9 @@ def generate_narrative_stream(
         character_name=character_name,
         location=location,
         context=context,
+        psych_profile=psych_profile,
+        hijack=hijack,
+        style_profile=load_style_profile(config.style_profile_name) if config.style_profile_name else None,
     )
 
     client = get_llm_client(config)

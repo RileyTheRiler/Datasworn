@@ -11,6 +11,8 @@ from enum import Enum
 from typing import Any
 import random
 
+from src.psych_profile import PsychologicalProfile, EmotionalState
+
 
 # ============================================================================
 # Bark Types
@@ -129,6 +131,51 @@ BARK_TEMPLATES = {
     ],
 }
 
+# Psychological State-Aware Barks
+PSYCH_AWARE_BARKS = {
+    EmotionalState.ANXIOUS: [
+        "You alright? You look pale.",
+        "Calm down. Deep breaths.",
+        "You're shaking. What's wrong?",
+        "*eyes narrow* Nervous about something?",
+    ],
+    EmotionalState.ANGRY: [
+        "Whoa, easy there.",
+        "Back off. I don't want trouble.",
+        "*raises hands defensively*",
+        "Calm yourself.",
+    ],
+    EmotionalState.AFRAID: [
+        "You look terrified. What happened?",
+        "*concerned* Are you okay?",
+        "What's got you so spooked?",
+    ],
+    EmotionalState.SUSPICIOUS: [
+        "Why are you looking at me like that?",
+        "*meets your gaze* Something on your mind?",
+        "You don't trust me, do you?",
+    ],
+    EmotionalState.GUILTY: [
+        "You look like you've seen a ghost.",
+        "What did you do?",
+        "*suspicious* You're hiding something.",
+    ],
+}
+
+# Trauma-Aware Barks
+TRAUMA_BARKS = {
+    "Shattered Trust": [
+        "Keep your distance.",
+        "I don't trust you.",
+        "*steps back* Stay away from me.",
+    ],
+    "Hyper-Vigilance": [
+        "*jumps at sudden movement*",
+        "You startled me.",
+        "Don't sneak up on people.",
+    ],
+}
+
 
 @dataclass
 class Bark:
@@ -238,15 +285,36 @@ class BarkManager:
         npc_name: str,
         bark_type: BarkType,
         context: str = "",
+        psych_profile: PsychologicalProfile | None = None,
     ) -> Bark | None:
         """Generate a bark for an NPC."""
         # Check cooldown
         if self.npc_bark_cooldowns.get(npc_name, 0) > 0:
             return None
         
-        # Get templates
-        templates = BARK_TEMPLATES.get(bark_type, BARK_TEMPLATES[BarkType.IDLE])
-        text = random.choice(templates)
+        # Psych-aware bark selection
+        if psych_profile and bark_type == BarkType.FRIENDLY:
+            # Check for emotional state overrides
+            if psych_profile.current_emotion in PSYCH_AWARE_BARKS:
+                templates = PSYCH_AWARE_BARKS[psych_profile.current_emotion]
+                text = random.choice(templates)
+            # Check for trauma-based reactions
+            elif psych_profile.trauma_scars:
+                for scar in psych_profile.trauma_scars:
+                    if scar.name in TRAUMA_BARKS:
+                        templates = TRAUMA_BARKS[scar.name]
+                        text = random.choice(templates)
+                        break
+                else:
+                    templates = BARK_TEMPLATES.get(bark_type, BARK_TEMPLATES[BarkType.IDLE])
+                    text = random.choice(templates)
+            else:
+                templates = BARK_TEMPLATES.get(bark_type, BARK_TEMPLATES[BarkType.IDLE])
+                text = random.choice(templates)
+        else:
+            # Default behavior
+            templates = BARK_TEMPLATES.get(bark_type, BARK_TEMPLATES[BarkType.IDLE])
+            text = random.choice(templates)
         
         # Customize based on context
         if context and "{context}" in text:

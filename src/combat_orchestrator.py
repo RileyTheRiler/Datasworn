@@ -13,6 +13,9 @@ from typing import Any
 import time
 import random
 
+from src.psych_profile import PsychologicalProfile
+
+
 
 # ============================================================================
 # Attack Grid System
@@ -137,6 +140,7 @@ class AttackTokenManager:
         combatant: Combatant,
         player_health: float,
         distance: float,
+        profile: PsychologicalProfile | None = None,
     ) -> float:
         """
         Calculate attack delay based on context.
@@ -157,16 +161,34 @@ class AttackTokenManager:
         # Threat level inversely affects delay (elite attacks faster)
         base -= (combatant.threat_level - 1.0) * 0.2
         
+        # Psych Integration: Stress and Trauma
+        if profile:
+            # High stress adds hesitation/shaking (delay)
+            if profile.stress_level > 0.6:
+                base += 0.4
+            
+            # Trauma Modifiers
+            # Assuming trauma_scars is a list of objects with 'name' attribute
+            scars = [s.name for s in profile.trauma_scars]
+            
+            if "Survivor's Guilt" in scars:
+                base += 0.3  # Hesitation
+            
+            if "Hyper-Vigilance" in scars:
+                base -= 0.2  # Faster reaction, but maybe lower accuracy elsewhere
+        
         return max(self.base_delay, min(self.max_delay, base))
     
     def issue_token(
         self,
         combatant: Combatant,
+
         player_health: float = 1.0,
         distance: float = 1.0,
+        profile: PsychologicalProfile | None = None,
     ) -> AttackToken:
         """Issue an attack token to a combatant."""
-        delay = self.calculate_delay(combatant, player_health, distance)
+        delay = self.calculate_delay(combatant, player_health, distance, profile)
         now = time.time()
         
         token = AttackToken(
@@ -285,11 +307,31 @@ class CombatOrchestrator:
         candidates.sort(key=lambda x: x[1], reverse=True)
         return candidates[0][0]
     
-    def update(self, player_health: float = 1.0) -> dict | None:
+    def check_panic(self, profile: PsychologicalProfile) -> bool:
+        """
+        Check if the player panics due to high stress, freezing or acting randomly.
+        Returns True if panicked.
+        """
+        if profile.stress_level < 0.8:
+            return False
+        
+        # Simple panic check: 20% chance per update if stressed
+        # In a real game, this would be determined by a move roll or similar
+        return random.random() < 0.2
+
+    def update(self, player_health: float = 1.0, profile: PsychologicalProfile | None = None) -> dict | None:
         """
         Update the combat system.
         Returns attack info if an attack should occur.
         """
+        # Psych Panic Check
+        if profile and self.check_panic(profile):
+            return {
+                "action": "panic",
+                "description": "You freeze in terror. Your hands shake uncontrollably.",
+                "effect": "skip_turn"
+            }
+
         # Check if current token is ready
         if self.token_manager.can_attack_now():
             attacker_id = self.token_manager.consume_token()
@@ -308,7 +350,7 @@ class CombatOrchestrator:
             attacker = self.select_attacker(player_health)
             if attacker:
                 self.grid.begin_attack(attacker)
-                self.token_manager.issue_token(attacker, player_health)
+                self.token_manager.issue_token(attacker, player_health, profile=profile)
                 self.current_attacker = attacker.id
         
         return None
