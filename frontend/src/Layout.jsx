@@ -4,7 +4,13 @@ import SceneDisplay from './components/SceneDisplay';
 import TypewriterText from './components/TypewriterText';
 import SaveManager from './components/SaveManager';
 import SessionRecap from './components/SessionRecap';
+import SessionTimer from './components/SessionTimer';
+import SoundSettings from './components/SoundSettings';
+import AutoSaveIndicator from './components/AutoSaveIndicator';
+import RuleTooltip, { QuickReferencePanel } from './components/RuleTooltip';
 import { useKeyboardShortcuts, KeyboardHelpOverlay } from './components/KeyboardShortcuts';
+import { useAccessibility } from './contexts/AccessibilityContext';
+import { useSoundEffects } from './contexts/SoundEffectsContext';
 
 const API_URL = 'http://localhost:8000/api';
 
@@ -78,18 +84,49 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
     const [showHelp, setShowHelp] = useState(false);
     const [showSaveManager, setShowSaveManager] = useState(false);
     const [showRecap, setShowRecap] = useState(false);
+    const [showTimer, setShowTimer] = useState(true);
+    const [showSoundSettings, setShowSoundSettings] = useState(false);
+    const [showQuickReference, setShowQuickReference] = useState(false);
     const [activeStat, setActiveStat] = useState({ name: 'Iron', value: character.stats.iron });
 
-    // Keyboard shortcuts
+    // Accessibility and sound contexts
+    const { highContrast, setHighContrast } = useAccessibility();
+    const { toggleMute } = useSoundEffects();
+
+    // Stat selection handler for keyboard shortcuts
+    const handleStatSelect = useCallback((statName) => {
+        const statMap = {
+            'edge': { name: 'Edge', value: character.stats.edge },
+            'heart': { name: 'Heart', value: character.stats.heart },
+            'iron': { name: 'Iron', value: character.stats.iron },
+            'shadow': { name: 'Shadow', value: character.stats.shadow },
+            'wits': { name: 'Wits', value: character.stats.wits },
+        };
+        if (statMap[statName]) {
+            setActiveStat(statMap[statName]);
+            setShowSkillCheck(true);
+        }
+    }, [character.stats]);
+
+    // Keyboard shortcuts - expanded
     useKeyboardShortcuts({
         onToggleRoll: useCallback(() => setShowSkillCheck(prev => !prev), []),
         onCloseModal: useCallback(() => {
             setShowSkillCheck(false);
             setShowHelp(false);
             setShowSaveManager(false);
+            setShowRecap(false);
+            setShowSoundSettings(false);
+            setShowQuickReference(false);
         }, []),
         onShowHelp: useCallback(() => setShowHelp(true), []),
-        onToggleMute: null, // Handled by SoundscapeEngine
+        onToggleMute: toggleMute,
+        onToggleSaves: useCallback(() => setShowSaveManager(prev => !prev), []),
+        onToggleCharacter: null, // Could add character sheet overlay
+        onTogglePsyche: null, // Handled by PsycheDashboard
+        onToggleTimer: useCallback(() => setShowTimer(prev => !prev), []),
+        onToggleHighContrast: useCallback(() => setHighContrast(prev => !prev), [setHighContrast]),
+        onSelectStat: handleStatSelect,
     });
 
     // Quick save/load keyboard shortcuts
@@ -306,10 +343,10 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                     </form>
 
                     {/* Keyboard Shortcuts Hint */}
-                    <div className="mt-2 text-center text-[10px] font-mono text-disco-muted/50 uppercase flex justify-center items-center gap-4">
-                        <span>Press <kbd className="px-1 bg-disco-dark/50 rounded">R</kbd> to roll</span>
+                    <div className="mt-2 text-center text-[10px] font-mono text-disco-muted/50 uppercase flex justify-center items-center gap-4 flex-wrap">
+                        <span>Press <kbd className="px-1 bg-disco-dark/50 rounded">R</kbd> roll</span>
+                        <span><kbd className="px-1 bg-disco-dark/50 rounded">1-5</kbd> stats</span>
                         <span><kbd className="px-1 bg-disco-dark/50 rounded">F5</kbd> save</span>
-                        <span><kbd className="px-1 bg-disco-dark/50 rounded">F9</kbd> load</span>
                         <span><kbd className="px-1 bg-disco-dark/50 rounded">?</kbd> help</span>
                         <button
                             onClick={() => setShowSaveManager(true)}
@@ -322,6 +359,20 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                             className="text-disco-accent hover:text-disco-paper transition-colors"
                         >
                             📜 Recap
+                        </button>
+                        <button
+                            onClick={() => setShowQuickReference(true)}
+                            className="text-disco-purple hover:text-disco-paper transition-colors"
+                            title="Quick Reference (rules)"
+                        >
+                            📖 Rules
+                        </button>
+                        <button
+                            onClick={() => setShowSoundSettings(true)}
+                            className="text-disco-muted hover:text-disco-paper transition-colors"
+                            title="Sound Settings"
+                        >
+                            🔊 Sound
                         </button>
                         <a
                             href={`${API_URL}/export/story/default`}
@@ -367,8 +418,33 @@ const Layout = ({ gameState, assets, onAction, isLoading }) => {
                         onClose={() => setShowRecap(false)}
                         sessionId="default"
                     />
+
+                    {/* Sound Settings Modal */}
+                    <SoundSettings
+                        isOpen={showSoundSettings}
+                        onClose={() => setShowSoundSettings(false)}
+                    />
+
+                    {/* Quick Reference Panel */}
+                    <QuickReferencePanel
+                        isOpen={showQuickReference}
+                        onClose={() => setShowQuickReference(false)}
+                    />
                 </div>
             </div>
+
+            {/* Session Timer - Fixed position */}
+            <SessionTimer
+                isVisible={showTimer}
+                onToggle={() => setShowTimer(false)}
+                breakReminderInterval={60}
+            />
+
+            {/* Auto-Save Indicator - Fixed position */}
+            <AutoSaveIndicator
+                sessionId="default"
+                saveInterval={120000}
+            />
         </div>
     )
 }

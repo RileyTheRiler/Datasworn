@@ -769,6 +769,7 @@ def quick_load():
 # ============================================================================
 
 from src.session_recap import SessionRecapEngine, RecapStyle
+from src.npc_templates import NPCRole, get_template, generate_quick_npc, get_all_roles, get_template_preview
 
 # Global recap engine instance
 RECAP_ENGINE = SessionRecapEngine()
@@ -985,6 +986,192 @@ def export_recap(session_id: str):
     )
     
     return {"recap": recap}
+
+
+# ============================================================================
+# NPC Templates API Endpoints
+# ============================================================================
+
+@app.get("/api/npc/roles")
+def get_npc_roles():
+    """Get all available NPC role archetypes."""
+    return {"roles": get_all_roles()}
+
+
+@app.get("/api/npc/template/{role}")
+def get_npc_template(role: str):
+    """Get preview of a specific NPC template."""
+    try:
+        npc_role = NPCRole(role.lower())
+        preview = get_template_preview(npc_role)
+        if preview:
+            return preview
+        raise HTTPException(status_code=404, detail=f"Template not found: {role}")
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
+
+
+class GenerateNPCRequest(BaseModel):
+    role: str
+    name: Optional[str] = None
+
+
+@app.post("/api/npc/generate")
+def generate_npc(req: GenerateNPCRequest):
+    """Generate a quick NPC from a template."""
+    try:
+        npc_role = NPCRole(req.role.lower())
+        npc = generate_quick_npc(npc_role, req.name)
+        return {"npc": npc}
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid role: {req.role}")
+
+
+@app.post("/api/npc/generate-random")
+def generate_random_npc():
+    """Generate a completely random NPC."""
+    import random
+    role = random.choice(list(NPCRole))
+    npc = generate_quick_npc(role)
+    return {"npc": npc}
+
+
+# ============================================================================
+# Quick Reference Commands API
+# ============================================================================
+
+QUICK_REFERENCE = {
+    "moves": {
+        "face_danger": {
+            "name": "Face Danger",
+            "stat": "Varies",
+            "description": "When you attempt something risky or react to an imminent threat.",
+            "strong_hit": "You succeed. Take +1 momentum.",
+            "weak_hit": "You succeed but face a troublesome cost.",
+            "miss": "You fail or your progress is undermined by a dramatic setback."
+        },
+        "secure_advantage": {
+            "name": "Secure an Advantage",
+            "stat": "Varies",
+            "description": "When you assess a situation, make preparations, or position yourself for success.",
+            "strong_hit": "You gain +2 momentum.",
+            "weak_hit": "Take +1 momentum.",
+            "miss": "You fail or your assumptions betray you."
+        },
+        "gather_information": {
+            "name": "Gather Information",
+            "stat": "Wits",
+            "description": "When you search an area, ask questions, or investigate.",
+            "strong_hit": "You discover something helpful and specific. Take +2 momentum.",
+            "weak_hit": "The information complicates your quest or introduces a new danger.",
+            "miss": "Your investigation reveals an unwelcome truth or triggers a perilous event."
+        },
+        "compel": {
+            "name": "Compel",
+            "stat": "Heart/Shadow/Iron",
+            "description": "When you attempt to persuade or intimidate someone to do what you want.",
+            "strong_hit": "They do what you want.",
+            "weak_hit": "They do it but ask something in return.",
+            "miss": "They refuse and your relationship worsens."
+        },
+        "aid_ally": {
+            "name": "Aid Your Ally",
+            "stat": "Varies",
+            "description": "When you act in support of an ally.",
+            "strong_hit": "They take +2 momentum.",
+            "weak_hit": "Take +1 momentum each but you both face a cost.",
+            "miss": "Your help fails and you both face the consequences."
+        },
+    },
+    "stats": {
+        "edge": "Quickness, agility, prowess in ranged combat",
+        "heart": "Courage, willpower, empathy, sociability, loyalty",
+        "iron": "Physical strength, endurance, prowess in close combat",
+        "shadow": "Sneakiness, deceptiveness, cunning",
+        "wits": "Expertise, knowledge, observation"
+    },
+    "momentum": {
+        "description": "Momentum represents your character's luck, confidence, and preparation.",
+        "reset": "Your momentum resets to +2 after you burn momentum.",
+        "max": "Maximum momentum is +10.",
+        "min": "Minimum momentum is -6.",
+        "burn": "You can burn momentum to improve a roll result, but you cannot burn on a match."
+    },
+    "progress": {
+        "troublesome": {"ticks_per_mark": 12, "description": "Easy challenges"},
+        "dangerous": {"ticks_per_mark": 8, "description": "Moderate challenges"},
+        "formidable": {"ticks_per_mark": 4, "description": "Hard challenges"},
+        "extreme": {"ticks_per_mark": 2, "description": "Very hard challenges"},
+        "epic": {"ticks_per_mark": 1, "description": "Legendary challenges"}
+    }
+}
+
+
+@app.get("/api/reference")
+def get_quick_reference():
+    """Get the complete quick reference guide."""
+    return QUICK_REFERENCE
+
+
+@app.get("/api/reference/moves")
+def get_moves_reference():
+    """Get quick reference for all moves."""
+    return {"moves": QUICK_REFERENCE["moves"]}
+
+
+@app.get("/api/reference/move/{move_name}")
+def get_move_reference(move_name: str):
+    """Get quick reference for a specific move."""
+    move = QUICK_REFERENCE["moves"].get(move_name.lower().replace(" ", "_"))
+    if move:
+        return move
+    raise HTTPException(status_code=404, detail=f"Move not found: {move_name}")
+
+
+@app.get("/api/reference/stats")
+def get_stats_reference():
+    """Get quick reference for all stats."""
+    return {"stats": QUICK_REFERENCE["stats"]}
+
+
+@app.get("/api/reference/momentum")
+def get_momentum_reference():
+    """Get quick reference for momentum rules."""
+    return QUICK_REFERENCE["momentum"]
+
+
+@app.get("/api/reference/progress")
+def get_progress_reference():
+    """Get quick reference for progress track ranks."""
+    return {"progress": QUICK_REFERENCE["progress"]}
+
+
+# ============================================================================
+# Auto-Save Status Endpoint
+# ============================================================================
+
+@app.get("/api/autosave/status/{session_id}")
+def get_autosave_status(session_id: str):
+    """Get the current auto-save status."""
+    # Check if there's a recent auto-save
+    saves = SAVE_SYSTEM.list_saves()
+    auto_saves = [s for s in saves if s.is_auto]
+
+    if auto_saves:
+        latest = auto_saves[0]
+        return {
+            "enabled": True,
+            "last_save": latest.timestamp,
+            "slot": latest.slot_name,
+            "description": latest.description
+        }
+
+    return {
+        "enabled": True,
+        "last_save": None,
+        "slot": None,
+        "description": "No auto-saves yet"
+    }
 
 
 def run():

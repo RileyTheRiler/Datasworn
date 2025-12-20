@@ -322,37 +322,97 @@
     scroll-behavior: smooth;
   }
 
-  /* Dice tumble animation */
+  /* Dice tumble animation - Enhanced 3D */
   .animate-tumble {
     animation: tumble 1.5s ease-out;
+    transform-style: preserve-3d;
+    perspective: 1000px;
   }
 
   @keyframes tumble {
     0% {
-      transform: rotateX(0deg) rotateY(0deg) scale(0.5);
+      transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(0.5) translateY(-20px);
       opacity: 0;
+      filter: blur(4px);
     }
 
-    20% {
-      transform: rotateX(180deg) rotateY(90deg) scale(1.2);
+    15% {
+      transform: rotateX(180deg) rotateY(90deg) rotateZ(45deg) scale(1.3) translateY(10px);
       opacity: 1;
+      filter: blur(0px);
     }
 
-    40% {
-      transform: rotateX(360deg) rotateY(180deg) scale(1);
+    30% {
+      transform: rotateX(360deg) rotateY(180deg) rotateZ(90deg) scale(1) translateY(-5px);
+    }
+
+    45% {
+      transform: rotateX(540deg) rotateY(270deg) rotateZ(135deg) scale(1.15) translateY(5px);
     }
 
     60% {
-      transform: rotateX(540deg) rotateY(270deg) scale(1.1);
+      transform: rotateX(680deg) rotateY(340deg) rotateZ(160deg) scale(1) translateY(-3px);
     }
 
-    80% {
-      transform: rotateX(680deg) rotateY(340deg) scale(1);
+    75% {
+      transform: rotateX(700deg) rotateY(350deg) rotateZ(175deg) scale(1.05) translateY(2px);
+    }
+
+    90% {
+      transform: rotateX(715deg) rotateY(358deg) rotateZ(178deg) scale(1) translateY(-1px);
     }
 
     100% {
-      transform: rotateX(720deg) rotateY(360deg) scale(1);
+      transform: rotateX(720deg) rotateY(360deg) rotateZ(180deg) scale(1) translateY(0px);
     }
+  }
+
+  /* Dice bounce landing */
+  .animate-dice-land {
+    animation: diceLand 0.3s ease-out;
+  }
+
+  @keyframes diceLand {
+    0% { transform: translateY(0); }
+    40% { transform: translateY(-8px); }
+    70% { transform: translateY(2px); }
+    100% { transform: translateY(0); }
+  }
+
+  /* Dice glow on result */
+  .dice-glow-hit {
+    animation: diceGlowHit 0.5s ease-out;
+    box-shadow: 0 0 20px rgba(107, 228, 227, 0.8), 0 0 40px rgba(107, 228, 227, 0.4);
+  }
+
+  .dice-glow-miss {
+    animation: diceGlowMiss 0.5s ease-out;
+    box-shadow: 0 0 20px rgba(185, 63, 63, 0.8), 0 0 40px rgba(185, 63, 63, 0.4);
+  }
+
+  @keyframes diceGlowHit {
+    0% { box-shadow: 0 0 0 rgba(107, 228, 227, 0); }
+    50% { box-shadow: 0 0 30px rgba(107, 228, 227, 1), 0 0 60px rgba(107, 228, 227, 0.6); }
+    100% { box-shadow: 0 0 20px rgba(107, 228, 227, 0.8), 0 0 40px rgba(107, 228, 227, 0.4); }
+  }
+
+  @keyframes diceGlowMiss {
+    0% { box-shadow: 0 0 0 rgba(185, 63, 63, 0); }
+    50% { box-shadow: 0 0 30px rgba(185, 63, 63, 1), 0 0 60px rgba(185, 63, 63, 0.6); }
+    100% { box-shadow: 0 0 20px rgba(185, 63, 63, 0.8), 0 0 40px rgba(185, 63, 63, 0.4); }
+  }
+
+  /* Dice shake anticipation */
+  .animate-dice-shake {
+    animation: diceShake 0.4s ease-in-out;
+  }
+
+  @keyframes diceShake {
+    0%, 100% { transform: translateX(0) rotate(0deg); }
+    20% { transform: translateX(-3px) rotate(-2deg); }
+    40% { transform: translateX(3px) rotate(2deg); }
+    60% { transform: translateX(-2px) rotate(-1deg); }
+    80% { transform: translateX(2px) rotate(1deg); }
   }
 
   /* Result flash effects */
@@ -478,18 +538,126 @@
   }
 }
 
-/* High Contrast Mode */
+/* High Contrast Mode - Enhanced Accessibility */
 .high-contrast {
   --disco-bg: #000000;
   --disco-paper: #FFFFFF;
+  --disco-panel: #1a1a1a;
+  --disco-dark: #0a0a0a;
   --disco-accent: #FFFF00;
   --disco-cyan: #00FFFF;
-  --disco-red: #FF0000;
+  --disco-red: #FF4444;
   --disco-yellow: #FFFF00;
+  --disco-purple: #FF00FF;
+  --disco-muted: #888888;
 }
 
 .high-contrast * {
-  border-color: currentColor !important;
   text-shadow: none !important;
-  box-shadow: none !important;
 }
+
+.high-contrast body {
+  background: #000000 !important;
+  background-image: none !important;
+}
+
+/* High contrast borders */
+.high-contrast .border,
+.high-contrast [class*="border-"] {
+  border-color: #FFFFFF !important;
+  border-width: 2px !important;
+}
+
+/* High contrast buttons */
+.high-contrast button,
+.high-contrast .btn-disco {
+  border: 2px solid #FFFFFF !important;
+  background: #000000 !important;
+  color: #FFFFFF !important;
+}
+
+.high-contrast button:hover,
+.high-contrast .btn-disco:hover {
+  background: #FFFFFF !important;
+  color: #000000 !important;
+}
+
+/* High contrast inputs */
+.high-contrast input,
+.high-contrast textarea {
+  border: 2px solid #FFFFFF !important;
+  background: #000000 !important;
+  color: #FFFFFF !important;
+}
+
+.high-contrast input:focus,
+.high-contrast textarea:focus {
+  border-color: #00FFFF !important;
+  outline: 2px solid #00FFFF !important;
+}
+
+/* High contrast links */
+.high-contrast a {
+  color: #00FFFF !important;
+  text-decoration: underline !important;
+}
+
+/* High contrast progress bars */
+.high-contrast [class*="bg-disco-"] {
+  border: 1px solid #FFFFFF;
+}
+
+/* High contrast status colors - more saturated */
+.high-contrast .text-disco-cyan {
+  color: #00FFFF !important;
+}
+
+.high-contrast .text-disco-red {
+  color: #FF4444 !important;
+}
+
+.high-contrast .text-disco-yellow {
+  color: #FFFF00 !important;
+}
+
+/* High contrast focus indicators */
+.high-contrast *:focus {
+  outline: 3px solid #FFFF00 !important;
+  outline-offset: 2px !important;
+}
+
+/* Remove gradients and transparency in high contrast */
+.high-contrast [class*="bg-gradient"],
+.high-contrast [class*="backdrop-blur"] {
+  background: #1a1a1a !important;
+  backdrop-filter: none !important;
+}
+
+/* High contrast animations - reduce motion */
+.high-contrast .animate-pulse,
+.high-contrast .animate-kenburns {
+  animation: none !important;
+}
+
+/* Ensure text is readable */
+.high-contrast .text-disco-muted {
+  color: #AAAAAA !important;
+}
+
+/* Dyslexia-friendly font option */
+.dyslexia-friendly {
+  font-family: 'OpenDyslexic', 'Comic Sans MS', sans-serif !important;
+  letter-spacing: 0.05em;
+  word-spacing: 0.1em;
+  line-height: 1.8;
+}
+
+/* Large text mode */
+.large-text {
+  font-size: 120% !important;
+}
+
+.large-text h1 { font-size: 2.5rem !important; }
+.large-text h2 { font-size: 2rem !important; }
+.large-text h3 { font-size: 1.75rem !important; }
+.large-text p, .large-text span { font-size: 1.25rem !important; }

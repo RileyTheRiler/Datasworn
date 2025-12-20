@@ -201,13 +201,16 @@ const SkillCheck = ({ stat, statName, character, onRollComplete, onClose }) => {
                         </div>
                     ) : (
                         /* Dice rolling display */
-                        <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-6" style={{ perspective: '1000px' }}>
                             {/* Action Die (d6) */}
                             <div className={`
-                                relative w-20 h-20 bg-disco-dark border-2 border-disco-cyan rounded-lg 
+                                relative w-20 h-20 bg-disco-dark border-2 border-disco-cyan rounded-lg
                                 flex items-center justify-center shadow-lg
-                                ${stage === 'gather' ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}
+                                ${stage === 'gather' ? 'scale-0 opacity-0 animate-dice-shake' : 'scale-100 opacity-100'}
                                 ${stage === 'tumble' ? 'animate-tumble' : ''}
+                                ${stage === 'complete' && result?.result === 'Strong Hit' ? 'dice-glow-hit animate-dice-land' : ''}
+                                ${stage === 'complete' && result?.result === 'Miss' ? 'dice-glow-miss animate-dice-land' : ''}
+                                ${stage === 'complete' && result?.result === 'Weak Hit' ? 'animate-dice-land' : ''}
                                 transition-all duration-300
                             `}>
                                 <span className="text-3xl font-mono font-bold text-disco-cyan">
@@ -230,10 +233,11 @@ const SkillCheck = ({ stat, statName, character, onRollComplete, onClose }) => {
                             {/* Challenge Dice (d10s) */}
                             <div className="flex gap-3">
                                 <div className={`
-                                    w-16 h-16 bg-disco-dark border-2 border-disco-red/70 rounded-lg 
+                                    w-16 h-16 bg-disco-dark border-2 border-disco-red/70 rounded-lg
                                     flex items-center justify-center shadow-lg
                                     ${stage === 'gather' ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}
                                     ${stage === 'tumble' ? 'animate-tumble' : ''}
+                                    ${stage === 'complete' ? 'animate-dice-land' : ''}
                                     transition-all duration-300 delay-75
                                 `} style={{ animationDelay: '0.1s' }}>
                                     <span className="text-2xl font-mono font-bold text-disco-red">
@@ -241,10 +245,11 @@ const SkillCheck = ({ stat, statName, character, onRollComplete, onClose }) => {
                                     </span>
                                 </div>
                                 <div className={`
-                                    w-16 h-16 bg-disco-dark border-2 border-disco-red/70 rounded-lg 
+                                    w-16 h-16 bg-disco-dark border-2 border-disco-red/70 rounded-lg
                                     flex items-center justify-center shadow-lg
                                     ${stage === 'gather' ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}
                                     ${stage === 'tumble' ? 'animate-tumble' : ''}
+                                    ${stage === 'complete' ? 'animate-dice-land' : ''}
                                     transition-all duration-300 delay-150
                                 `} style={{ animationDelay: '0.2s' }}>
                                     <span className="text-2xl font-mono font-bold text-disco-red">

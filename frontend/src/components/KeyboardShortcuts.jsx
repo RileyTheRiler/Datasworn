@@ -2,13 +2,19 @@ import { useEffect, useCallback } from 'react';
 
 /**
  * KeyboardController - Global keyboard shortcuts for power users
- * 
+ *
  * Shortcuts:
  * - R: Quick roll (opens skill check)
  * - M: Toggle mute (soundscape)
+ * - S: Open save manager
+ * - C: Toggle character sheet
+ * - P: Toggle psyche dashboard
+ * - T: Toggle session timer
+ * - H: Toggle high contrast mode
  * - Escape: Close any modal
  * - Space: Skip typewriter animation (handled in TypewriterText)
  * - ?: Show keyboard shortcuts help
+ * - 1-5: Quick stat selection for rolls
  */
 
 export const useKeyboardShortcuts = ({
@@ -16,6 +22,12 @@ export const useKeyboardShortcuts = ({
     onToggleMute,
     onCloseModal,
     onShowHelp,
+    onToggleSaves,
+    onToggleCharacter,
+    onTogglePsyche,
+    onToggleTimer,
+    onToggleHighContrast,
+    onSelectStat,
 }) => {
     const handleKeyDown = useCallback((e) => {
         // Don't trigger shortcuts when typing in input fields
@@ -38,6 +50,41 @@ export const useKeyboardShortcuts = ({
                 }
                 break;
 
+            case 's':
+                if (!e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    onToggleSaves?.();
+                }
+                break;
+
+            case 'c':
+                if (!e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    onToggleCharacter?.();
+                }
+                break;
+
+            case 'p':
+                if (!e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    onTogglePsyche?.();
+                }
+                break;
+
+            case 't':
+                if (!e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    onToggleTimer?.();
+                }
+                break;
+
+            case 'h':
+                if (!e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    onToggleHighContrast?.();
+                }
+                break;
+
             case 'escape':
                 onCloseModal?.();
                 break;
@@ -47,10 +94,23 @@ export const useKeyboardShortcuts = ({
                 onShowHelp?.();
                 break;
 
+            // Quick stat selection (1-5 for Edge, Heart, Iron, Shadow, Wits)
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+                if (!e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    const statMap = { '1': 'edge', '2': 'heart', '3': 'iron', '4': 'shadow', '5': 'wits' };
+                    onSelectStat?.(statMap[e.key]);
+                }
+                break;
+
             default:
                 break;
         }
-    }, [onToggleRoll, onToggleMute, onCloseModal, onShowHelp]);
+    }, [onToggleRoll, onToggleMute, onCloseModal, onShowHelp, onToggleSaves, onToggleCharacter, onTogglePsyche, onToggleTimer, onToggleHighContrast, onSelectStat]);
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);
@@ -67,6 +127,14 @@ export const KeyboardHelpOverlay = ({ isOpen, onClose }) => {
     const shortcuts = [
         { key: 'R', description: 'Open dice roll' },
         { key: 'M', description: 'Toggle soundscape' },
+        { key: 'S', description: 'Open save manager' },
+        { key: 'C', description: 'Toggle character sheet' },
+        { key: 'P', description: 'Toggle psyche dashboard' },
+        { key: 'T', description: 'Toggle session timer' },
+        { key: 'H', description: 'Toggle high contrast' },
+        { key: '1-5', description: 'Select stat (Edge/Heart/Iron/Shadow/Wits)' },
+        { key: 'F5', description: 'Quick save' },
+        { key: 'F9', description: 'Quick load' },
         { key: 'Esc', description: 'Close dialog' },
         { key: 'Space', description: 'Skip text animation' },
         { key: '?', description: 'Show this help' },
