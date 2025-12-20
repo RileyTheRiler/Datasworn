@@ -55,6 +55,8 @@ class CrewMember:
     is_threat: bool = False  # Assigned by mystery generator
     psyche: NPCPsyche | None = None  # Optional NPC psychological state
     emotional_history: list[EmotionalMemory] = field(default_factory=list)
+    image_url: str | None = None  # AI-generated portrait path
+    description: str = ""  # Brief character description for hover cards
     
     def modify_trust(self, delta: float):
         self.trust = max(0.0, min(1.0, self.trust + delta))
@@ -73,7 +75,9 @@ class CrewMember:
             "known_facts": self.known_facts,
             "is_threat": self.is_threat,
             "psyche": self.psyche.model_dump() if self.psyche else None,
-            "emotional_history": [{"emotion": m.emotion.value, "timestamp": m.timestamp.isoformat(), "context": m.context} for m in self.emotional_history[-5:]]
+            "emotional_history": [{"emotion": m.emotion.value, "timestamp": m.timestamp.isoformat(), "context": m.context} for m in self.emotional_history[-5:]],
+            "image_url": self.image_url,
+            "description": self.description
         }
 
     @classmethod

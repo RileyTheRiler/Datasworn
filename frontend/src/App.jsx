@@ -4,9 +4,12 @@ import PsycheDashboard from './components/PsycheDashboard'
 import CharacterCreation from './components/CharacterCreation'
 import { ToastProvider } from './components/ToastProvider'
 import { TensionVignette, AmbientParticles, HijackOverlay } from './components/UXEffects'
-import SoundscapeEngine from './components/SoundscapeEngine'
+import { TensionVignette, AmbientParticles, HijackOverlay } from './components/UXEffects'
+import AudioManager from './components/AudioManager'
 import { SoundEffectsProvider } from './contexts/SoundEffectsContext'
 import { AccessibilityProvider } from './contexts/AccessibilityContext'
+import { NPCCacheProvider } from './contexts/NPCCacheContext'
+import { AudioProvider } from './contexts/AudioContext'
 import api from './utils/api'
 
 function App() {
@@ -95,7 +98,12 @@ function App() {
         action: actionText
       });
       setGameState(data.state)
-      if (data.assets) setAssets(prev => ({ ...prev, ...data.assets }))
+      if (data.assets) {
+        setAssets(prev => ({ ...prev, ...data.assets }))
+        if (data.assets.voice_audio && window.playVoice) {
+          window.playVoice(data.assets.voice_audio);
+        }
+      }
       setIsOnline(true)
     } catch (err) {
       console.error("Action failed:", err)
@@ -158,43 +166,48 @@ function App() {
 
   return (
     <AccessibilityProvider>
-      <SoundEffectsProvider>
-        <ToastProvider>
-          {/* Connection Status Indicator */}
-          {!isOnline && (
-            <div className="fixed top-4 right-4 z-[200] bg-disco-red/90 text-white px-4 py-2 rounded-lg font-mono text-sm border border-disco-red shadow-lg">
-              ⚠ Offline Mode
-            </div>
-          )}
+      <AudioProvider>
+        <SoundEffectsProvider>
+          <NPCCacheProvider>
+            <ToastProvider>
+              {/* Connection Status Indicator */}
+              {!isOnline && (
+                <div className="fixed top-4 right-4 z-[200] bg-disco-red/90 text-white px-4 py-2 rounded-lg font-mono text-sm border border-disco-red shadow-lg">
+                  ⚠ Offline Mode
+                </div>
+              )}
 
-          {/* Ambient Particles - subtle floating dust */}
-          <AmbientParticles type="dust" count={15} />
+              {/* Ambient Particles - subtle floating dust */}
+              <AmbientParticles type="dust" count={15} />
 
-          {/* Tension Vignette - intensifies with stress */}
-          <TensionVignette tension={tension} isActive={true} />
+              {/* Tension Vignette - intensifies with stress */}
+              <TensionVignette tension={tension} isActive={true} />
 
-          {/* Hijack Overlay - full takeover on psychological hijack */}
-          <HijackOverlay
-            isActive={hijackActive}
-            aspect={hijackAspect}
-            onComplete={handleHijackComplete}
-          />
+              {/* Hijack Overlay - full takeover on psychological hijack */}
+              <HijackOverlay
+                isActive={hijackActive}
+                aspect={hijackAspect}
+                onComplete={handleHijackComplete}
+              />
 
-          {/* Main Game Layout */}
-          <Layout
-            gameState={gameState}
-            assets={assets}
-            onAction={handleAction}
-            isLoading={loading}
-          />
+              {/* Main Game Layout */}
+              <Layout
+                gameState={gameState}
+                assets={assets}
+                onAssetsUpdate={setAssets}
+                onAction={handleAction}
+                isLoading={loading}
+              />
 
-          {/* Psyche Dashboard - shows psychological state */}
-          <PsycheDashboard />
+              {/* Psyche Dashboard - shows psychological state */}
+              <PsycheDashboard />
 
-          {/* Soundscape Engine - ambient audio */}
-          <SoundscapeEngine />
-        </ToastProvider>
-      </SoundEffectsProvider>
+              {/* Audio Manager - handles all audio playback */}
+              <AudioManager sessionId={session} />
+            </ToastProvider>
+          </NPCCacheProvider>
+        </SoundEffectsProvider>
+      </AudioProvider>
     </AccessibilityProvider>
   )
 }

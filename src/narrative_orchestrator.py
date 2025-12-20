@@ -24,6 +24,16 @@ from src.prose_enhancement import ProseEnhancementEngine
 from src.emotional_storytelling import BondManager, BondEvent
 from src.world_coherence import WorldStateCoherence, WorldFactType
 from src.moral_dilemma import DilemmaGenerator, DilemmaType
+from src.narrative import (
+    PayoffTracker, NPCMemoryBank, ConsequenceManager, ChoiceEchoSystem,
+    OpeningHookSystem, NPCEmotionalStateMachine, MoralReputationSystem, DramaticIronyTracker,
+    StoryBeatGenerator, PlotManager, BranchingNarrativeSystem, NPCGoalPursuitSystem,
+    EndingPreparationSystem, ImpossibleChoiceGenerator, EnvironmentalStoryteller, FlashbackSystem,
+    EndingPreparationSystem, ImpossibleChoiceGenerator, EnvironmentalStoryteller, FlashbackSystem,
+    UnreliableNarratorSystem, MetaNarrativeSystem, NPCSkillSystem, NarrativeMultiplayerSystem
+)
+from src.psychology import DreamSequenceEngine, PhobiaSystem, AddictionSystem, MoralInjurySystem, AttachmentSystem, TrustDynamicsSystem
+
 
 
 @dataclass
@@ -42,6 +52,48 @@ class NarrativeOrchestrator:
     world_coherence: WorldStateCoherence = field(default_factory=WorldStateCoherence)
     dilemma_generator: DilemmaGenerator = field(default_factory=DilemmaGenerator)
     
+    # Phase 1 Systems
+    payoff_tracker: PayoffTracker = field(default_factory=PayoffTracker)
+    npc_memories: Dict[str, NPCMemoryBank] = field(default_factory=dict)
+    consequence_manager: ConsequenceManager = field(default_factory=ConsequenceManager)
+    echo_system: ChoiceEchoSystem = field(default_factory=ChoiceEchoSystem)
+    
+    # Phase 2 Systems
+    opening_hooks: OpeningHookSystem = field(default_factory=OpeningHookSystem)
+    npc_emotions: NPCEmotionalStateMachine = field(default_factory=NPCEmotionalStateMachine)
+    reputation: MoralReputationSystem = field(default_factory=MoralReputationSystem)
+    irony_tracker: DramaticIronyTracker = field(default_factory=DramaticIronyTracker)
+    
+    # Phase 3 Systems
+    story_beats: StoryBeatGenerator = field(default_factory=StoryBeatGenerator)
+    plot_manager: PlotManager = field(default_factory=PlotManager)
+    branching_system: BranchingNarrativeSystem = field(default_factory=BranchingNarrativeSystem)
+    npc_goals: NPCGoalPursuitSystem = field(default_factory=NPCGoalPursuitSystem)
+    
+    # Phase 4 Systems
+    ending_system: EndingPreparationSystem = field(default_factory=EndingPreparationSystem)
+    impossible_choices: ImpossibleChoiceGenerator = field(default_factory=ImpossibleChoiceGenerator)
+    environmental_storyteller: EnvironmentalStoryteller = field(default_factory=EnvironmentalStoryteller)
+    flashback_system: FlashbackSystem = field(default_factory=FlashbackSystem)
+    
+    # Phase 5 Systems
+    unreliable_system: UnreliableNarratorSystem = field(default_factory=UnreliableNarratorSystem)
+    meta_system: MetaNarrativeSystem = field(default_factory=MetaNarrativeSystem)
+    npc_skills: NPCSkillSystem = field(default_factory=NPCSkillSystem)
+    multiplayer_system: NarrativeMultiplayerSystem = field(default_factory=NarrativeMultiplayerSystem)
+    
+    # Psychological Systems
+    dream_engine: DreamSequenceEngine = field(default_factory=DreamSequenceEngine)
+    phobia_system: PhobiaSystem = field(default_factory=PhobiaSystem)
+    
+    # Psychological Systems - Phase 2
+    addiction_system: AddictionSystem = field(default_factory=AddictionSystem)
+    moral_injury_system: MoralInjurySystem = field(default_factory=MoralInjurySystem)
+    
+    # Psychological Systems - Phase 3
+    attachment_system: AttachmentSystem = field(default_factory=AttachmentSystem)
+    trust_dynamics: TrustDynamicsSystem = field(default_factory=TrustDynamicsSystem)
+    
     # State
     current_scene: int = 0
     
@@ -53,6 +105,17 @@ class NarrativeOrchestrator:
         self.narrative_variety.advance_scene()
         self.prose_engine.sensory_tracker.advance_scene()
         self.world_coherence.advance_scene()
+        
+        # Advance Consequence Chains
+        triggered_events = self.consequence_manager.check_progression(self.current_scene)
+        self._pending_consequences = triggered_events
+        
+        # Advance Plots (Phase 3)
+        if self.plot_manager.active_thread_id:
+             self.plot_manager.advance_plot(self.plot_manager.active_thread_id, self.current_scene)
+             
+        # Simulate background NPC actions (Phase 3)
+        self._pending_rumors = self.npc_goals.advance_npc_goals([]) # Pass active NPCs if we knew them ahead of time
     
     def get_comprehensive_guidance(
         self,
@@ -99,8 +162,53 @@ class NarrativeOrchestrator:
             location=location,
             active_npcs=active_npcs,
         )
+        # 16. Unreliable Narrator (Phase 5)
+        # Check if we need to distort perception
+        distortion = self.unreliable_system.get_narrator_instruction()
+        if distortion:
+             sections.append(f"\\n{distortion}")
+
         if prose_guidance:
             sections.append(f"\\n{prose_guidance}")
+            
+        # 13. Flashback Context (Phase 4)
+        fb_context = self.flashback_system.get_context_prefix()
+        if fb_context:
+            sections.insert(0, fb_context)
+            
+        # 17. Multiplayer Spotlight (Phase 5)
+        spotlight = self.multiplayer_system.get_spotlight_guidance()
+        if spotlight:
+             sections.append(f"\\n{spotlight}")
+             
+        # 18. Panic Check (Psychology Phase 1)
+        panic_status = self.phobia_system.get_panic_status()
+        if panic_status:
+             sections.append(f"\\n[WARNING: {panic_status} - Describe hyperventilation, terror, and irrational action.]")
+             
+        # 19. Addiction Withdrawal (Psychology Phase 2)
+        withdrawal_effects = self.addiction_system.get_withdrawal_effects()
+        if withdrawal_effects:
+            for effect in withdrawal_effects:
+                sections.append(f"\\n[{effect}]")
+                
+        # 20. Moral Guilt (Psychology Phase 2)
+        guilt_context = self.moral_injury_system.get_guilt_context()
+        if guilt_context:
+            sections.append(f"\\n{guilt_context}")
+            
+        # 21. Attachment/Trust Context (Psychology Phase 3)
+        for npc_id in active_npcs:
+            attach_ctx = self.attachment_system.get_relationship_guidance(npc_id)
+            if attach_ctx:
+                sections.append(f"\\n{attach_ctx}")
+            trust_ctx = self.trust_dynamics.get_trust_context(npc_id)
+            if trust_ctx:
+                sections.append(f"\\n{trust_ctx}")
+
+        # 1. World & Environmental Context (Phase 4 Enhanced)
+        sensory_detail = self.environmental_storyteller.generate_atmosphere(location, "mysterious")
+        sections.append(f"\\n<environment>\\n{sensory_detail}\\n</environment>")
             
         # 6. Emotional Bonds (New)
         bond_context = self.bond_manager.get_all_bonds_context()
@@ -108,7 +216,9 @@ class NarrativeOrchestrator:
             sections.append(f"\\n<relationship_context>\\n{bond_context}\\n</relationship_context>")
             
         # Quiet Moment Check
-        moment_type, moment_prompt = self.bond_manager.quiet_tracker.get_quiet_moment(context=player_action)
+        moment_data = self.bond_manager.quiet_tracker.get_quiet_moment(context=player_action)
+        moment_type = moment_data.get("type")
+        moment_prompt = moment_data.get("prompt")
         if moment_type:
             sections.append(f"\\n[PACING: A quiet moment is suggested ({moment_type}). {moment_prompt}]")
 
@@ -116,6 +226,74 @@ class NarrativeOrchestrator:
         coherence_context = self.world_coherence.get_coherence_context(location=location, active_npcs=active_npcs)
         if coherence_context:
             sections.append(f"\\n{coherence_context}")
+
+        # 8. Narrative Payoffs (New)
+        overdue_seeds = self.payoff_tracker.get_overdue_seeds(self.current_scene)
+        if overdue_seeds:
+            seed_list = "\\n".join([f"  - UNRESOLVED {s.seed_type}: {s.description}" for s in overdue_seeds])
+            sections.append(f"\\n<payoff_alert>\\nPAYOFFS DUE SOON:\\n{seed_list}\\nConsider resolving one of these now.\\n</payoff_alert>")
+
+        # 9. Consequence Triggers (New)
+        # If we had pending consequences from advance_scene
+        if getattr(self, "_pending_consequences", None):
+            cons_list = "\\n".join([f"  - FROM {e['cause']}: {e['event']} (Severity: {e['severity']})" for e in self._pending_consequences])
+            sections.append(f"\\n<consequence_trigger>\\nCONSEQUENCES MANIFESTING:\\n{cons_list}\\nIntegrate these events into the scene logic.\\n</consequence_trigger>")
+            self._pending_consequences = []
+
+        # 10. Echoes (New)
+        # Simple check for active NPCs
+        for npc in active_npcs:
+            if npc in self.npc_memories:
+                echo = self.npc_memories[npc].generate_callback(self.current_scene)
+                if echo:
+                    sections.append(f"\\n[CALLBACK SUGGESTION for {npc}: {echo}]")
+            
+            # Choice echoes
+            choice_recall = self.echo_system.generate_echo(
+                npc_id=npc, 
+                current_scene=self.current_scene, 
+                context=player_action
+            )
+            if choice_recall:
+                 sections.append(f"\\n[CHOICE ECHO for {npc}: {choice_recall}]")
+
+        # 11. NPC Depth Context (Phase 2)
+        # Add basic reputation summary
+        rep_summary = self.reputation.get_reputation_summary()
+        sections.append(f"\\n<reputation_context>\\nYour Reputation: {rep_summary}\\n</reputation_context>")
+        
+        # Add NPC Emotions
+        for npc in active_npcs:
+            emo_state = self.npc_emotions.get_state(npc)
+            if emo_state.intensity > 0.3:
+                 sections.append(f"\\n[EMOTION: {npc} is {emo_state.current_state.value} (Intensity: {emo_state.intensity:.1f})]")
+                 
+        # Add Irony Opportunities
+        irony_ops = self.irony_tracker.identify_irony_opportunities(active_npcs)
+        if irony_ops:
+            irony_text = "\\n".join([f"  - {op}" for op in irony_ops])
+            sections.append(f"\\n<dramatic_irony>\\nOPPORTUNITIES:\\n{irony_text}\\n</dramatic_irony>")   
+
+        # 12. Advanced Narrative (Phase 3)
+        # Suggest Beat
+        beat = self.story_beats.suggest_next_beat(tension=0.5) # Todo: hook up real tension
+        sections.append(f"\\n[SUGGESTED BEAT: {beat.value}]")
+        
+        # Suggest Plot Thread
+        next_thread = self.plot_manager.suggest_next_thread(self.current_scene)
+        if next_thread:
+             sections.append(f"\\n[PLOT FOCUS: {next_thread.title} ({next_thread.plot_type.value}) - {next_thread.description}]")
+             
+        # NPC Rumors
+        if getattr(self, "_pending_rumors", None):
+            rumor_text = "\\n".join([f"  - {r}" for r in self._pending_rumors])
+            sections.append(f"\\n<world_rumors>\\nNEWS FROM AFAR:\\n{rumor_text}\\n</world_rumors>")
+            self._pending_rumors = []
+            
+        # 14. Dilemma Check (Phase 4)
+        if self.impossible_choices.active_dilemma and not self.impossible_choices.active_dilemma.resolved:
+            d = self.impossible_choices.active_dilemma
+            sections.append(f"\\n[ACTIVE DILEMMA: {d.description} | A: {d.option_a.description} | B: {d.option_b.description}]")
 
         return "\\n".join(sections)
     
@@ -180,6 +358,38 @@ class NarrativeOrchestrator:
             # This would trigger a future dilemma setup
             pass    
             
+        # 6. Update NPC Memories (New)
+        for npc in active_npcs:
+            if npc not in self.npc_memories:
+                self.npc_memories[npc] = NPCMemoryBank(npc_id=npc)
+            
+            # Record that this interaction happened
+            # We assume a general "interaction" topic for now unless parsed
+            self.npc_memories[npc].record_interaction(
+                scene_num=self.current_scene,
+                topic="general_interaction",
+                content=narrative_output[:100], # Store brief snippet
+                emotion="NEUTRAL" # Todo: derive from sentiment analysis
+            )
+            
+        # 7. Update Reputation (Phase 2)
+        # Rough heuristic for now - real system would use LLM analysis of player_action
+        if "kill" in player_input.lower() or "attack" in player_input.lower():
+            self.reputation.record_choice("Violence used", mercy_delta=-5)
+        elif "save" in player_input.lower() or "help" in player_input.lower():
+            self.reputation.record_choice("Altruism shown", mercy_delta=5, selfless_delta=5)
+            
+        # 8. Update Emotions (Phase 2)
+        # Decay old emotions first
+        for npc in self.npc_emotions.states:
+             self.npc_emotions.decay_emotion(npc)
+        
+        # Trigger reactions based on keywords
+        # Hardcoded for demo - better to use LLM event detection
+        if "threat" in player_input.lower():
+            for npc in active_npcs:
+                self.npc_emotions.process_event(npc, "THREATENED")
+                
     def to_dict(self) -> dict:
         """Serialize all systems."""
         return {
@@ -192,6 +402,39 @@ class NarrativeOrchestrator:
             "world_coherence": self.world_coherence.to_dict(),
             "dilemma_generator": {}, # Stateless generator
             "current_scene": self.current_scene,
+            # Phase 1 Persistence
+            "payoff_tracker": self.payoff_tracker.to_dict(),
+            "npc_memories": {nid: mem.to_dict() for nid, mem in self.npc_memories.items()},
+            "consequence_manager": self.consequence_manager.to_dict(),
+            "echo_system": self.echo_system.to_dict(),
+            # Phase 2 Persistence
+            "npc_emotions": self.npc_emotions.to_dict(),
+            "reputation": self.reputation.to_dict(),
+            "irony_tracker": self.irony_tracker.to_dict(),
+            # Phase 3 Persistence
+            "story_beats": self.story_beats.to_dict(),
+            "plot_manager": self.plot_manager.to_dict(),
+            "branching_system": self.branching_system.to_dict(),
+            "npc_goals": self.npc_goals.to_dict(),
+            # Phase 4 Persistence
+            "ending_system": self.ending_system.to_dict(),
+            "impossible_choices": self.impossible_choices.to_dict(),
+            "environmental_storyteller": self.environmental_storyteller.to_dict(),
+            "flashback_system": self.flashback_system.to_dict(),
+            # Phase 5 Persistence
+            "unreliable_system": self.unreliable_system.to_dict(),
+            "meta_system": self.meta_system.to_dict(),
+            "npc_skills": self.npc_skills.to_dict(),
+            "multiplayer_system": self.multiplayer_system.to_dict(),
+            # Psychology Persistence
+            "dream_engine": self.dream_engine.to_dict(),
+            "phobia_system": self.phobia_system.to_dict(),
+            # Psychology Phase 2 Persistence
+            "addiction_system": self.addiction_system.to_dict(),
+            "moral_injury_system": self.moral_injury_system.to_dict(),
+            # Psychology Phase 3 Persistence
+            "attachment_system": self.attachment_system.to_dict(),
+            "trust_dynamics": self.trust_dynamics.to_dict(),
         }
     
     @classmethod
@@ -220,6 +463,95 @@ class NarrativeOrchestrator:
             
         if "world_coherence" in data:
             orchestrator.world_coherence = WorldStateCoherence.from_dict(data["world_coherence"])
+            
+        # Phase 1 Rehydration
+        if "payoff_tracker" in data:
+            orchestrator.payoff_tracker = PayoffTracker.from_dict(data["payoff_tracker"])
+            
+        if "npc_memories" in data:
+            orchestrator.npc_memories = {
+                nid: NPCMemoryBank.from_dict(mem_data) 
+                for nid, mem_data in data["npc_memories"].items()
+            }
+            
+        if "consequence_manager" in data:
+            orchestrator.consequence_manager = ConsequenceManager.from_dict(data["consequence_manager"])
+            
+        if "echo_system" in data:
+            orchestrator.echo_system = ChoiceEchoSystem.from_dict(data["echo_system"])
+            
+        # Phase 2 Rehydration
+        if "npc_emotions" in data:
+            orchestrator.npc_emotions = NPCEmotionalStateMachine.from_dict(data["npc_emotions"])
+            
+        if "reputation" in data:
+            orchestrator.reputation = MoralReputationSystem.from_dict(data["reputation"])
+            
+        if "irony_tracker" in data:
+            orchestrator.irony_tracker = DramaticIronyTracker.from_dict(data["irony_tracker"])
+            
+        # Phase 3 Rehydration
+        if "story_beats" in data:
+            orchestrator.story_beats = StoryBeatGenerator.from_dict(data["story_beats"])
+            
+        if "plot_manager" in data:
+            orchestrator.plot_manager = PlotManager.from_dict(data["plot_manager"])
+            
+        if "branching_system" in data:
+            orchestrator.branching_system = BranchingNarrativeSystem.from_dict(data["branching_system"])
+            
+        if "npc_goals" in data:
+            orchestrator.npc_goals = NPCGoalPursuitSystem.from_dict(data["npc_goals"])
+            
+        # Phase 4 Rehydration
+        if "ending_system" in data:
+            orchestrator.ending_system = EndingPreparationSystem.from_dict(data["ending_system"])
+            
+        if "dilemma_generator" in data: # Handle legacy/old dilemma generator if needed
+             pass
+
+        if "impossible_choices" in data:
+            orchestrator.impossible_choices = ImpossibleChoiceGenerator.from_dict(data["impossible_choices"])
+            
+        if "environmental_storyteller" in data:
+            orchestrator.environmental_storyteller = EnvironmentalStoryteller.from_dict(data["environmental_storyteller"])
+            
+        if "flashback_system" in data:
+            orchestrator.flashback_system = FlashbackSystem.from_dict(data["flashback_system"])
+            
+        # Phase 5 Rehydration
+        if "unreliable_system" in data:
+            orchestrator.unreliable_system = UnreliableNarratorSystem.from_dict(data["unreliable_system"])
+            
+        if "meta_system" in data:
+            orchestrator.meta_system = MetaNarrativeSystem.from_dict(data["meta_system"])
+            
+        if "npc_skills" in data:
+            orchestrator.npc_skills = NPCSkillSystem.from_dict(data["npc_skills"])
+            
+        if "multiplayer_system" in data:
+            orchestrator.multiplayer_system = NarrativeMultiplayerSystem.from_dict(data["multiplayer_system"])
+            
+        # Psychology Rehydration
+        if "dream_engine" in data:
+            orchestrator.dream_engine = DreamSequenceEngine.from_dict(data["dream_engine"])
+            
+        if "phobia_system" in data:
+            orchestrator.phobia_system = PhobiaSystem.from_dict(data["phobia_system"])
+            
+        # Psychology Phase 2 Rehydration
+        if "addiction_system" in data:
+            orchestrator.addiction_system = AddictionSystem.from_dict(data["addiction_system"])
+            
+        if "moral_injury_system" in data:
+            orchestrator.moral_injury_system = MoralInjurySystem.from_dict(data["moral_injury_system"])
+            
+        # Psychology Phase 3 Rehydration
+        if "attachment_system" in data:
+            orchestrator.attachment_system = AttachmentSystem.from_dict(data["attachment_system"])
+            
+        if "trust_dynamics" in data:
+            orchestrator.trust_dynamics = TrustDynamicsSystem.from_dict(data["trust_dynamics"])
         
         return orchestrator
 

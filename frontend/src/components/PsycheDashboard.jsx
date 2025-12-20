@@ -191,6 +191,72 @@ const PsycheDashboard = () => {
                         </div>
                     )}
 
+                    {/* Phobias */}
+                    {data.phobias && data.phobias.length > 0 && (
+                        <div className="mt-3 border-t border-yellow-800/50 pt-2">
+                            <h4 className="text-[10px] text-yellow-400 uppercase font-bold">Phobias</h4>
+                            <div className="space-y-1.5 mt-1">
+                                {data.phobias.map((phobia, idx) => (
+                                    <div key={idx} className="space-y-0.5">
+                                        <div className="flex justify-between text-[9px] text-yellow-300/70">
+                                            <span>{phobia.name}</span>
+                                            <span>{Math.round(phobia.panic * 100)}% Panic</span>
+                                        </div>
+                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                                            <div
+                                                className={`h-full transition-all duration-500 ${phobia.panic > 0.8 ? 'bg-red-500 animate-pulse' : 'bg-yellow-500'}`}
+                                                style={{ width: `${phobia.panic * 100}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Addictions */}
+                    {data.addictions && data.addictions.length > 0 && (
+                        <div className="mt-3 border-t border-orange-800/50 pt-2">
+                            <h4 className="text-[10px] text-orange-400 uppercase font-bold">Addictions</h4>
+                            <div className="space-y-1.5 mt-1">
+                                {data.addictions.map((addiction, idx) => (
+                                    <div key={idx} className="space-y-0.5">
+                                        <div className="flex justify-between text-[9px] text-orange-300/70">
+                                            <span>{addiction.substance}</span>
+                                            <span className={addiction.satisfaction < 0.3 ? 'text-red-400' : ''}>
+                                                {addiction.satisfaction < 0.3 ? 'CRAVING' : `${Math.round(addiction.satisfaction * 100)}%`}
+                                            </span>
+                                        </div>
+                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                                            <div
+                                                className={`h-full transition-all duration-500 ${addiction.satisfaction < 0.3 ? 'bg-red-500 animate-pulse' : 'bg-orange-500'}`}
+                                                style={{ width: `${addiction.satisfaction * 100}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Guilt Level */}
+                    {data.guilt > 0.1 && (
+                        <div className="mt-3 border-t border-indigo-800/50 pt-2">
+                            <div className="flex justify-between text-[10px] uppercase text-slate-500 mb-1">
+                                <span>Moral Burden</span>
+                                <span className={data.guilt > 0.5 ? "text-indigo-400" : "text-slate-400"}>
+                                    {Math.round(data.guilt * 100)}%
+                                </span>
+                            </div>
+                            <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                    className={`h-full transition-all duration-500 ${data.guilt > 0.7 ? 'bg-indigo-400' : 'bg-indigo-600'}`}
+                                    style={{ width: `${data.guilt * 100}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
                     {/* Suppressed Memories */}
                     {profile.suppressed_memories && profile.suppressed_memories.length > 0 && (
                         <div className="mt-3 border-t border-purple-800/50 pt-2">
