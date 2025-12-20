@@ -61,7 +61,7 @@ const PsycheDashboard = () => {
     const profile = data.profile || {};
 
     return (
-        <div className={`fixed bottom-4 right-4 p-4 rounded-xl border backdrop-blur-md transition-all duration-500 ${isCollapsed ? 'w-48' : 'w-64'} ${isHijacked ? 'bg-red-950/90 border-red-500 animate-pulse' : 'bg-slate-900/80 border-slate-700'}`}>
+        <div className={`fixed bottom-32 right-4 p-4 rounded-xl border backdrop-blur-md transition-all duration-500 z-40 ${isCollapsed ? 'w-48' : 'w-64'} ${isHijacked ? 'bg-red-950/90 border-red-500 animate-pulse' : 'bg-slate-900/80 border-slate-700'}`}>
             <div className="flex items-center justify-between mb-2">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 text-center flex-1">Neuro-Status</h3>
                 <button

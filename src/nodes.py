@@ -40,12 +40,17 @@ def get_datasworn():
 # ============================================================================
 
 MOVE_KEYWORDS = {
-    "face danger": ["face danger", "overcome", "act under pressure", "react to"],
+    "face danger": ["face danger", "overcome", "act under pressure", "react to", "dodge", "avoid", "block"],
     "gather information": ["investigate", "gather info", "search", "scan", "analyze"],
-    "secure an advantage": ["prepare", "secure", "position", "ready"],
+    "secure an advantage": ["prepare", "secure", "position", "ready", "aim", "flank"],
     "compel": ["convince", "persuade", "threaten", "compel"],
     "aid your ally": ["help", "aid", "assist"],
-    "enter the fray": ["attack", "fight", "enter combat", "draw weapon"],
+    "enter the fray": ["attack", "fight", "enter combat", "draw weapon", "charge"],
+    "strike": ["strike", "hit", "attack firmly"],
+    "clash": ["clash", "melee", "parry and strike"],
+    "turn the tide": ["turn the tide", "rally", "regain momentum"],
+    "battle": ["battle", "skirmish", "engage group"],
+    "endure harm": ["take damage", "hurt", "wounded", "hit by"],
     "undertake an expedition": ["travel", "journey", "expedition", "set course"],
     "make a connection": ["meet", "connect", "introduce", "befriend"],
 }
@@ -165,6 +170,9 @@ def rules_engine_node(state: GameState) -> dict[str, Any]:
         "secure an advantage": "edge",
         "compel": "heart",
         "enter the fray": "iron",
+        "strike": "edge",
+        "clash": "iron",
+        "battle": "iron",
         "undertake an expedition": "wits",
         "make a connection": "heart",
     }
@@ -192,6 +200,29 @@ def rules_engine_node(state: GameState) -> dict[str, Any]:
         f"**{result.result.value}**: {outcome_text}"
     )
 
+    # Post-roll Combat Initialization
+    if detected_move == "enter the fray" and outcome != "miss":
+        from src.combat_orchestrator import CombatOrchestrator, EnemyType
+        
+        # Initialize combat
+        orch = CombatOrchestrator()
+        
+        # Calculate enemy count based on tension
+        director = state.get("director")
+        tension = director.tension_level if director else 0.5
+        count = 1 + int(tension * 5)
+        
+        for i in range(count):
+            orch.add_combatant(
+                id=f"enemy_{i}",
+                name=f"Hostile {i+1}",
+                enemy_type=EnemyType.SOLDIER if tension < 0.7 else EnemyType.ELITE
+            )
+            
+        state["combat_orchestrator"] = orch
+        if world:
+            world.combat_active = True
+
     return {
         "last_roll": RollState(
             roll_type="action",
@@ -200,6 +231,41 @@ def rules_engine_node(state: GameState) -> dict[str, Any]:
             is_match=result.is_match,
         ),
         "route": "director",
+        "world": world
+    }
+
+
+def combat_node(state: GameState) -> dict[str, Any]:
+    """
+    Tactical combat tick.
+    Updates the CombatOrchestrator and captures enemy actions.
+    """
+    world = state.get("world")
+    if not world or not world.combat_active:
+        return {"route": "narrator"}
+
+    orch = state.get("combat_orchestrator")
+    if not orch:
+        return {"route": "narrator"}
+
+    # Update simulation
+    character = state.get("character")
+    p_health = character.condition.health / 5.0 if character else 1.0
+    psyche = state.get("psyche")
+    profile = psyche.profile if psyche else None
+
+    # Step the simulation
+    combat_result = orch.update(player_health=p_health, profile=profile)
+
+    # Capture result for narrator
+    combat_context = ""
+    if combat_result:
+        combat_context = f"[TACTICAL EVENT: {combat_result.get('description', 'Status update')}]"
+
+    return {
+        "combat_event": combat_context,
+        "combat_orchestrator": orch,
+        "route": "narrator",
     }
 
 
@@ -469,6 +535,11 @@ async def director_node(state: GameState) -> dict[str, Any]:
              except Exception as e:
                 print(f"Failed to auto-capture cinematic: {e}")
 
+    # Determine next route
+    next_route = "narrator"
+    if getattr(world, 'combat_active', False):
+        next_route = "combat"
+
     return {
         "director": updated_director,
 
@@ -476,7 +547,7 @@ async def director_node(state: GameState) -> dict[str, Any]:
         "quiet_moment": quiet_moment_context if quiet_moment_context else None,
         "dilemma": dilemma_context if dilemma_context else None,
         "quest_lore": QuestLoreState(**quest_lore_engine.to_dict()) if quest_lore_engine else quest_lore_state,
-        "route": "narrator",
+        "route": next_route,
         "combat_warning": combat_warning,
     }
 
@@ -686,6 +757,7 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         outcome=last_roll.outcome if last_roll else "",
         character_name=character.name if character else "Traveler",
         location=world.current_location if world else "the void",
+        combat_event=state.get("combat_event", ""),
     )
     
     # Compose enhanced system prompt with all injections

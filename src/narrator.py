@@ -548,6 +548,7 @@ def build_narrative_prompt(
     psych_profile: PsychologicalProfile | None = None,
     hijack: str | None = None,
     style_profile: StyleProfile | None = None,
+    combat_event: str = "",
 ) -> str:
     """
     Build the full prompt for narrative generation.
@@ -559,6 +560,7 @@ def build_narrative_prompt(
         character_name: The PC's name.
         location: Current location.
         context: Additional context (previous narrative, etc.).
+        combat_event: Tactical events from the combat engine.
 
     Returns:
         Complete prompt string.
@@ -570,6 +572,9 @@ def build_narrative_prompt(
 
     parts.append(f"[Current location: {location}]")
     parts.append(f"[Character: {character_name}]")
+    
+    if combat_event:
+        parts.append(f"\n{combat_event}")
     
     if psych_profile:
         engine = PsychologicalEngine()
@@ -652,6 +657,7 @@ def generate_narrative(
     config: NarratorConfig | None = None,
     psych_profile: PsychologicalProfile | None = None,
     hijack: str | None = None,
+    combat_event: str = "",
 ) -> str:
     """
     Generate narrative prose for the current game situation.
@@ -682,6 +688,7 @@ def generate_narrative(
         psych_profile=psych_profile,
         hijack=hijack,
         style_profile=load_style_profile(config.style_profile_name) if config.style_profile_name else None,
+        combat_event=combat_event,
     )
 
     client = get_llm_client(config)
@@ -707,6 +714,7 @@ def generate_narrative_stream(
     config: NarratorConfig | None = None,
     psych_profile: PsychologicalProfile | None = None,
     hijack: str | None = None,
+    combat_event: str = "",
 ) -> Generator[str, None, None]:
     """
     Generate narrative prose with streaming.
@@ -725,6 +733,7 @@ def generate_narrative_stream(
         psych_profile=psych_profile,
         hijack=hijack,
         style_profile=load_style_profile(config.style_profile_name) if config.style_profile_name else None,
+        combat_event=combat_event,
     )
 
     client = get_llm_client(config)

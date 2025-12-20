@@ -19,6 +19,11 @@ import PhotoAlbum from './components/PhotoAlbum';
 import StarMap from './components/StarMap';
 import RumorBoard from './components/RumorBoard';
 import ShipBlueprintViewer from './components/ShipBlueprintViewer';
+import CharacterHUD from './components/CharacterHUD';
+import CombatDashboard from './components/CombatDashboard';
+import StoryThreads from './components/StoryThreads';
+import PsycheDashboard from './components/PsycheDashboard';
+import WorldEvents from './components/WorldEvents';
 
 
 const API_URL = 'http://localhost:8000/api';
@@ -33,6 +38,7 @@ const LOADING_MESSAGES = [
     "The void whispers back...",
     "Calculating trajectories...",
     "Reading the cosmic static...",
+    "Awaiting tactical uplink...",
 ];
 
 const getRandomLoadingMessage = () =>
@@ -40,49 +46,6 @@ const getRandomLoadingMessage = () =>
 
 const MarkdownText = ({ text }) => {
     return <div className="font-serif text-lg leading-relaxed whitespace-pre-wrap">{text}</div>
-}
-
-// Icon map for stats
-const STAT_ICONS = {
-    'Health': '❤',
-    'Spirit': '✦',
-    'Supply': '▣',
-    'Momentum': '⚡'
-};
-
-const StatBar = ({ label, value, max, color }) => {
-    const percentage = (value / max) * 100;
-    const icon = STAT_ICONS[label] || '●';
-
-    return (
-        <div className="mb-3 group">
-            <div className="flex justify-between text-[10px] font-mono uppercase text-disco-cyan/70 mb-1.5">
-                <span className="flex items-center gap-1">
-                    <span className="text-xs">{icon}</span>
-                    {label}
-                </span>
-                <span className="font-bold text-disco-paper/80">{value}/{max}</span>
-            </div>
-            <div className="h-1.5 bg-black/60 border border-disco-cyan/20 relative overflow-hidden">
-                {/* Animated background grid */}
-                <div className="absolute inset-0 opacity-20" style={{
-                    backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(107, 228, 227, 0.1) 2px, rgba(107, 228, 227, 0.1) 4px)'
-                }} />
-                {/* Progress bar with gradient */}
-                <div
-                    style={{ width: `${percentage}%` }}
-                    className={`h-full ${color} transition-all duration-700 ease-out relative`}
-                >
-                    {/* Glow effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
-                </div>
-                {/* Danger indicator for low values */}
-                {percentage < 30 && (
-                    <div className="absolute right-0 top-0 w-1 h-full bg-disco-red animate-pulse" />
-                )}
-            </div>
-        </div>
-    );
 }
 
 const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
@@ -102,6 +65,9 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     const [showStarMap, setShowStarMap] = useState(false);
     const [showRumorBoard, setShowRumorBoard] = useState(false);
     const [showShipBlueprint, setShowShipBlueprint] = useState(false);
+    const [showCombatDashboard, setShowCombatDashboard] = useState(false);
+    const [showStoryThreads, setShowStoryThreads] = useState(false);
+    const [showWorldEvents, setShowWorldEvents] = useState(false);
     const [activeStat, setActiveStat] = useState({ name: 'Iron', value: character.stats.iron });
 
     // Accessibility and sound contexts
@@ -151,6 +117,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             setShowBlueprint(false);
             setShowAlbum(false);
             setShowShipBlueprint(false);
+            setShowCombatDashboard(false);
         }, []),
         onShowHelp: useCallback(() => setShowHelp(true), []),
         onToggleMute: toggleMute,
@@ -199,6 +166,14 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         if (!input.trim() || isLoading) return;
+
+        // Check for debug command to open combat dashboard
+        if (input.trim().toLowerCase() === '/combat') {
+            setShowCombatDashboard(true);
+            setInput("");
+            return;
+        }
+
         onAction(input);
         setInput("");
         setTranscript("");
@@ -231,15 +206,6 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     };
 
     const handleRollComplete = async () => {
-        // This needs to be a real API call.
-        // Since we don't have session ID easily here without refactoring App.jsx heavily to pass it,
-        // We will hacky-fetch it or assume onAction can handle a special object?
-        // No, let's just use the `fetch` here, assuming we need to grab session ID.
-        // Actually, let's assume valid session for now or mock it if strictly visual.
-        // But we want it to work.
-        // Let's add session_id to `gameState` in `server.py`? 
-        // Good idea.
-
         const sessionId = "default"; // Hardcoded in server.py MVP
 
         const res = await fetch(`${API_URL}/roll/commit`, {
@@ -254,26 +220,13 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             })
         });
         const data = await res.json();
-        // Update global state via parent?
-        // The parent `onAction` updates state. We should probably trigger a state update here too.
-        // Let's reload state? or pass a refresh callback?
-        // For MVP, we'll just reload the page/state via a "look" action or similar invisible update?
-        // Better: App.jsx should pass a `setGameState` equivalent.
-        // Using `onAction` with a special string is a hack.
-        // Let's just do `onAction("Checking " + activeStat.name)`... 
-        // Wait, that generates text narrative. 
-        // `data` contains the new state and narrative!
-        // We can't update state effortlessly without lifting state up or a callback.
-        // Let's cheat and reload via window for the "Verification" phase if needed, 
-        // OR better: Assume the user sees the output in the component, and then the narrative updates on next action.
-
         return data;
     }
 
     return (
         <div className="flex h-screen w-full bg-disco-bg bg-grunge bg-blend-multiply overflow-hidden animate-[crtFlicker_0.15s_infinite]">
             {/* LEFT: Visual & Stats */}
-            <div className="w-1/3 border-r border-disco-cyan/10 flex flex-col relative bg-black/20">
+            <div className={`w-1/3 border-r border-disco-cyan/10 flex flex-col relative bg-black/20 transition-all duration-300 ${isLoading ? 'opacity-80' : 'opacity-100'}`}>
                 {/* HUD Corner Brackets - Top Left */}
                 <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-disco-cyan/40 z-50" />
                 <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-disco-cyan/40 z-50" />
@@ -303,44 +256,13 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                     </div>
                 </div>
 
-                {/* Character HUD */}
-                <div className="h-1/3 bg-disco-panel p-6 border-t border-disco-muted/20 flex flex-col relative overflow-hidden">
-                    {/* Grunge Overlay for Panel */}
-                    <div className="absolute inset-0 bg-grunge opacity-20 pointer-events-none"></div>
-
-                    <div className="flex items-start gap-6 mb-6 relative z-10">
-                        <div className="w-24 h-32 bg-disco-dark border-2 border-disco-paper/20 shadow-hard rotate-[-1deg] relative overflow-hidden group transition-transform hover:rotate-0">
-                            {/* Portrait */}
-                            <img
-                                src={assets?.portrait || "/assets/defaults/avatar_wireframe.svg"}
-                                alt="Character"
-                                className="w-full h-full object-cover grayscale-[30%] contrast-125 hover:grayscale-0 transition-all duration-700"
-                            />
-                            {/* Edit Portrait Button via Overlay */}
-                            <button
-                                onClick={() => setShowPortraitSettings(true)}
-                                className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-disco-cyan/80 text-disco-cyan hover:text-black rounded opacity-0 group-hover:opacity-100 transition-opacity z-20"
-                                title="Customize Appearance"
-                            >
-                                ✏️
-                            </button>
-                        </div>
-                        <div className="flex-1 pt-2">
-                            <h3 className="font-serif text-3xl font-bold text-disco-paper text-outline tracking-wider">{character.name}</h3>
-                            <div className="flex gap-2 mt-3">
-                                <span className="px-2 py-0.5 bg-disco-red/10 border border-disco-red text-disco-red text-[10px] font-mono uppercase tracking-wider font-bold">Iron Sworn</span>
-                                <span className="px-2 py-0.5 bg-disco-cyan/10 border border-disco-cyan text-disco-cyan text-[10px] font-mono uppercase tracking-wider font-bold">Lvl 1</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-4 relative z-10">
-                        <StatBar label="Health" value={character.condition.health} max={5} color="bg-disco-red" />
-                        <StatBar label="Spirit" value={character.condition.spirit} max={5} color="bg-disco-purple" />
-                        <StatBar label="Supply" value={character.condition.supply} max={5} color="bg-disco-yellow" />
-                        <StatBar label="Momentum" value={character.momentum.value} max={10} color="bg-disco-cyan" />
-                    </div>
-                </div>
+                {/* Character HUD (Replacing hardcoded version) */}
+                <CharacterHUD
+                    character={character}
+                    assets={assets}
+                    onAssetsUpdate={onAssetsUpdate}
+                    className="h-1/3"
+                />
             </div>
 
             {/* RIGHT: Narrative Flow */}
@@ -428,6 +350,17 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                         <span><kbd className="px-1 bg-disco-dark/50 rounded">1-5</kbd> stats</span>
                         <span><kbd className="px-1 bg-disco-dark/50 rounded">F5</kbd> save</span>
                         <span><kbd className="px-1 bg-disco-dark/50 rounded">?</kbd> help</span>
+
+                        <div className="h-4 w-px bg-disco-muted/30 mx-2"></div>
+
+                        <button
+                            onClick={() => setShowCombatDashboard(true)}
+                            className="text-disco-red hover:text-disco-paper transition-colors font-bold flex items-center gap-1"
+                            title="Combat Dashboard"
+                        >
+                            ⚔️ TACTICAL
+                        </button>
+
                         <button
                             onClick={() => setShowSaveManager(true)}
                             className="text-disco-cyan hover:text-disco-paper transition-colors"
@@ -497,6 +430,20 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                         >
                             🚀 Ship
                         </button>
+                        <button
+                            onClick={() => setShowWorldEvents(true)}
+                            className="text-amber-500 hover:text-white transition-colors"
+                            title="Sector Intelligence & Events"
+                        >
+                            🌍 Log
+                        </button>
+                        <button
+                            onClick={() => setShowStoryThreads(true)}
+                            className="text-cyan-400 hover:text-white transition-colors"
+                            title="Narrative Threads & Tension"
+                        >
+                            🧶 Story
+                        </button>
                     </div>
 
                     {/* Dice/Skill Check Overlay */}
@@ -553,16 +500,6 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                         onClose={() => setShowBlueprint(false)}
                     />
 
-                    {/* Portrait Settings Modal */}
-                    <PortraitSettings
-                        isOpen={showPortraitSettings}
-                        onClose={() => setShowPortraitSettings(false)}
-                        characterName={character.name}
-                        onUpdate={(newAssets) => {
-                            if (onAssetsUpdate) onAssetsUpdate(prev => ({ ...prev, ...newAssets }));
-                        }}
-                    />
-
                     {/* Star Map Modal */}
                     <StarMap
                         sessionId="default"
@@ -590,6 +527,35 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                         visible={showAlbum}
                         onClose={() => setShowAlbum(false)}
                     />
+
+                    {/* Combat Dashboard Modal */}
+                    <CombatDashboard
+                        sessionId="default"
+                        visible={showCombatDashboard}
+                        onClose={() => setShowCombatDashboard(false)}
+                    />
+
+                    {/* Narrative Threads Modal */}
+                    {showStoryThreads && (
+                        <StoryThreads
+                            onClose={() => setShowStoryThreads(false)}
+                        />
+                    )}
+
+                    {/* World Events Modal */}
+                    {showWorldEvents && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setShowWorldEvents(false)}>
+                            <div className="bg-gray-900 border border-amber-900/50 rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                                <WorldEvents sessionId="default" />
+                                <div className="p-2 text-center border-t border-gray-800">
+                                    <button onClick={() => setShowWorldEvents(false)} className="text-gray-500 hover:text-white text-sm">Close Log</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Psyche Dashboard (Always On Widget) */}
+                    <PsycheDashboard />
                 </div>
             </div>
 

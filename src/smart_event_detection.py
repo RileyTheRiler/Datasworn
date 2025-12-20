@@ -31,6 +31,8 @@ class EventType(Enum):
     PROMISE = "promise"
     BREAK_PROMISE = "break_promise"
     INSULT = "insult"
+    THREAT = "threat" # Added for payoff tracking
+    CHALLENGE = "challenge"
     HONOR = "honor"
     ROMANCE = "romance"
 

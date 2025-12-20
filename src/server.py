@@ -43,6 +43,9 @@ from src.auto_save import AutoSaveSystem
 from src.photo_album import PhotoAlbumManager
 from src.psychology_api_models import *
 from src.additional_api import register_starmap_routes, register_rumor_routes, register_audio_routes  # Added import
+from src.narrative_api import register_narrative_routes
+from src.psych_api import register_psychology_routes
+from src.combat_api import register_combat_routes
 
 app = FastAPI(title="Starforged AI GM")
 
@@ -68,6 +71,9 @@ app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 register_starmap_routes(app, SESSIONS)
 register_rumor_routes(app, SESSIONS)
 register_audio_routes(app, SESSIONS)
+register_narrative_routes(app, SESSIONS)
+register_psychology_routes(app, SESSIONS)
+register_combat_routes(app, SESSIONS)
 
 
 # Global save system instance
@@ -453,6 +459,24 @@ def slice_asset(req: SliceRequest):
             sliced_files.append(f"/assets/{output_dir.name}/{f.name}")
             
     return {"created": sliced_files}
+    
+@app.get("/api/combat/debug/{session_id}")
+def get_combat_debug(session_id: str):
+    """Get attack grid and token status for debugging."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Hydrate Orchestrator
+    from src.narrative_orchestrator import NarrativeOrchestrator
+    orchestrator_data = state.get("narrative_orchestrator", {}).get("orchestrator_data", {})
+    if orchestrator_data:
+        orchestrator = NarrativeOrchestrator.from_dict(orchestrator_data)
+        if orchestrator.combat_system:
+            return orchestrator.combat_system.to_dict()
+            
+    return {"status": "No active combat system"}
 
 @app.post("/api/chat")
 async def chat(req: ActionRequest):
@@ -480,6 +504,15 @@ async def chat(req: ActionRequest):
             
     director.relationships = RelationshipWeb.from_dict(state['relationships'].dict())
             
+    # Process Combat Update BEFORE Analysis if in combat
+    # This allows the Director to react to the changing tide of battle
+    combat_update = None
+    if orchestrator.combat_system and orchestrator.combat_system.combatants:
+        combat_update = orchestrator.combat_system.update(
+            player_health=state['character'].health if hasattr(state['character'], 'health') else 1.0, 
+            profile=state['psyche'].profile
+        )
+            
     # Run analysis
     director_plan = director.analyze(
         world_state=state['world'].dict(),
@@ -506,6 +539,13 @@ async def chat(req: ActionRequest):
         player_action=req.action
     )
     
+    # Append immediate combat update result if any
+    if combat_update:
+        if combat_update.get("action") == "attacks":
+            orchestrator_guidance += f"\\n\\n[COMBAT EVENT]\\n{combat_update['attacker']} attacks! Threat: {combat_update['threat_level']}"
+        elif combat_update.get("action") == "panic":
+            orchestrator_guidance += f"\\n\\n[PSYCHE EVENT]\\n{combat_update['description']}"
+            
     context_with_director = f"{state['narrative'].pending_narrative}\\n\\n{director_injection}\\n\\n{orchestrator_guidance}"
     
     narrative = generate_narrative(

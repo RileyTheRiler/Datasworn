@@ -14,6 +14,7 @@ import time
 import random
 
 from src.psych_profile import PsychologicalProfile
+from src.npc_agent import create_combat_agent # Added integration
 
 
 
@@ -32,6 +33,7 @@ class Combatant:
     is_attacking: bool = False
     last_attack_time: float = 0.0
     attack_cooldown: float = 2.0  # Seconds between attacks
+    agent: Any = None  # NPCAgent instance
 
 
 class EnemyType(Enum):
@@ -53,11 +55,22 @@ ENEMY_SLOT_COSTS = {
 @dataclass
 class AttackGrid:
     """
-    Manages how many enemies can attack simultaneously.
+    Manages how many enemies can attack simultaneously and their positions.
     Prevents unfair dogpiling while keeping pressure.
     """
     max_capacity: int = 12  # Total attack slots available
     current_usage: int = 0
+    
+    # Enhanced: Positional Slots
+    # Maps slot_name -> combatant_id (or None)
+    # Frontend Expects: ENGAGED_PRIMARY, FLANK_LEFT, FLANK_RIGHT, REAR_CENTER
+    slots: dict[str, str | None] = field(default_factory=lambda: {
+        "ENGAGED_PRIMARY": None,
+        "FLANK_LEFT": None,
+        "FLANK_RIGHT": None,
+        "REAR_CENTER": None,
+    })
+    
     active_attackers: list[str] = field(default_factory=list)
     waiting_queue: list[str] = field(default_factory=list)
     
@@ -69,6 +82,22 @@ class AttackGrid:
         available = self.max_capacity - self.current_usage
         return combatant.slot_cost <= available
     
+    def assign_best_slot(self, combatant: Combatant) -> str | None:
+        """Find the best available slot for a combatant."""
+        # Logic: 
+        # 1. Primary if empty
+        # 2. Flanks if Primary taken
+        # 3. Rear if Flanks taken
+        if self.slots["ENGAGED_PRIMARY"] is None:
+            return "ENGAGED_PRIMARY"
+        elif self.slots["FLANK_LEFT"] is None:
+            return "FLANK_LEFT"
+        elif self.slots["FLANK_RIGHT"] is None:
+            return "FLANK_RIGHT"
+        elif self.slots["REAR_CENTER"] is None:
+            return "REAR_CENTER"
+        return None  # No physical slot (maybe RANGED/OFF-GRID)
+    
     def begin_attack(self, combatant: Combatant) -> bool:
         """Register a combatant as attacking."""
         if not self.can_attack(combatant):
@@ -79,6 +108,11 @@ class AttackGrid:
         if combatant.id not in self.active_attackers:
             self.active_attackers.append(combatant.id)
             self.current_usage += combatant.slot_cost
+            
+            # Assign positional slot
+            slot = self.assign_best_slot(combatant)
+            if slot:
+                self.slots[slot] = combatant.name # Store Name for frontend visibility
         
         combatant.is_attacking = True
         return True
@@ -88,6 +122,12 @@ class AttackGrid:
         if combatant.id in self.active_attackers:
             self.active_attackers.remove(combatant.id)
             self.current_usage = max(0, self.current_usage - combatant.slot_cost)
+            
+            # Clear slot
+            for k, v in self.slots.items():
+                if v == combatant.name:
+                    self.slots[k] = None
+                    break
         
         combatant.is_attacking = False
         combatant.last_attack_time = time.time()
@@ -101,10 +141,21 @@ class AttackGrid:
         return None
     
     def get_status(self) -> dict:
-        """Get current grid status."""
+        """Get current grid status formatted for Frontend."""
+        # Frontend expects:
+        # active_attackers: dict
+        # attack_grid: { slots: { ENGAGED: {primary}, FLANK: {left, right}, REAR: {center} } }
+        
         return {
             "capacity": f"{self.current_usage}/{self.max_capacity}",
-            "active_attackers": len(self.active_attackers),
+            "slots": {
+                "ENGAGED": {"primary": self.slots["ENGAGED_PRIMARY"]},
+                "FLANK": {
+                    "left": self.slots["FLANK_LEFT"],
+                    "right": self.slots["FLANK_RIGHT"]
+                },
+                "REAR": {"center": self.slots["REAR_CENTER"]}
+            },
             "waiting": len(self.waiting_queue),
         }
 
@@ -259,6 +310,7 @@ class CombatOrchestrator:
             name=name,
             slot_cost=ENEMY_SLOT_COSTS[enemy_type],
             threat_level=threat_level,
+            agent=create_combat_agent(id, name) # Initialize GOAP brain
         )
         self.combatants[id] = combatant
         return combatant
@@ -337,12 +389,23 @@ class CombatOrchestrator:
             attacker_id = self.token_manager.consume_token()
             if attacker_id and attacker_id in self.combatants:
                 attacker = self.combatants[attacker_id]
+                
+                # Use GOAP to determine specific action
+                action_info = None
+                if attacker.agent:
+                    # Update perception (e.g., target is in range if we issued a token)
+                    attacker.agent.update_perception({"target_in_range": True})
+                    action_info = attacker.agent.get_next_action()
+                
                 self.grid.end_attack(attacker)
+                
                 return {
                     "attacker": attacker.name,
                     "attacker_id": attacker_id,
                     "threat_level": attacker.threat_level,
-                    "action": "attacks",
+                    "action": action_info["name"] if action_info else "attacks",
+                    "description": action_info["description"] if action_info else f"{attacker.name} attacks you!",
+                    "effect": action_info.get("effect") if action_info else {"target_damaged": True}
                 }
         
         # Issue new token if needed
@@ -392,23 +455,57 @@ class CombatOrchestrator:
     @classmethod
     def from_dict(cls, data: dict) -> "CombatOrchestrator":
         orch = cls()
-        
+        # Basic hydration for now - in production would need full state restoration
+        # Re-adding combatants
         for cid, cdata in data.get("combatants", {}).items():
-            combatant = Combatant(
+            orch.add_combatant(
                 id=cid,
-                name=cdata.get("name", "Enemy"),
-                slot_cost=cdata.get("slot_cost", 4),
-                threat_level=cdata.get("threat_level", 1.0),
-                is_attacking=cdata.get("is_attacking", False),
+                name=cdata["name"],
+                threat_level=cdata["threat_level"]
             )
-            orch.combatants[cid] = combatant
-        
-        grid_data = data.get("grid", {})
-        orch.grid.max_capacity = grid_data.get("max_capacity", 12)
-        orch.grid.current_usage = grid_data.get("current_usage", 0)
-        orch.grid.active_attackers = grid_data.get("active_attackers", [])
-        
         return orch
+
+    def get_debug_state(self) -> dict:
+        """
+        Get comprehensive debug state for the Combat Dashboard.
+        Matches the structure expected by CombatDashboard.jsx.
+        """
+        now = time.time()
+        
+        # Build active tokens dict
+        active_tokens = {}
+        if self.token_manager.active_token and not self.token_manager.active_token.is_used:
+            t = self.token_manager.active_token
+            remaining = max(0, t.expires_at - now)
+            active_tokens[t.combatant_id] = {"duration": round(remaining, 1)}
+            
+        # Build cooldowns dict
+        cooldowns = {}
+        for c in self.combatants.values():
+            if not c.is_attacking:
+                remaining = max(0, (c.last_attack_time + c.attack_cooldown) - now)
+                if remaining > 0:
+                    cooldowns[c.id] = round(remaining, 1)
+
+        # Build NPC intelligence (Goal/Plan)
+        npc_intelligence = {}
+        for cid, c in self.combatants.items():
+            if c.agent:
+                npc_intelligence[cid] = {
+                    "goal": c.agent.goals[0].name if c.agent.goals else "Idle",
+                    "plan": [a.name for a in c.agent.current_plan]
+                }
+        
+        return {
+            "status": "Active",
+            "token_manager": {
+                "available_tokens": 1 if not self.token_manager.active_token else 0,
+                "active_tokens": active_tokens,
+                "cooldowns": cooldowns
+            },
+            "attack_grid": self.grid.get_status(),
+            "npc_intelligence": npc_intelligence
+        }
 
 
 # ============================================================================

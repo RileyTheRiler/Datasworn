@@ -13,7 +13,6 @@ from .branching import BranchingNarrativeSystem
 from .npc_goals import NPCGoalPursuitSystem
 from .endings import EndingPreparationSystem, EndingType
 from .dilemmas import ImpossibleChoiceGenerator, DilemmaType
-from .environment import EnvironmentalStoryteller
 from .flashbacks import FlashbackSystem
 from .unreliable import UnreliableNarratorSystem
 from .meta import MetaNarrativeSystem
@@ -40,7 +39,6 @@ __all__ = [
     "EndingType",
     "ImpossibleChoiceGenerator",
     "DilemmaType",
-    "EnvironmentalStoryteller",
     "FlashbackSystem",
     "UnreliableNarratorSystem",
     "MetaNarrativeSystem",

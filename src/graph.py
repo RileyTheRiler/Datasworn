@@ -21,6 +21,7 @@ from src.nodes import (
     approval_node,
     world_state_manager_node,
     command_node,
+    combat_node,
 )
 
 
@@ -43,6 +44,14 @@ def route_after_router(state: GameState) -> Literal["rules_engine", "oracle", "d
     else:
         # For pure narrative, route through director first
         return "director"
+
+
+def route_after_director(state: GameState) -> Literal["combat", "narrator"]:
+    """Conditional routing after director node."""
+    route = state.get("route", "narrator")
+    if route == "combat":
+        return "combat"
+    return "narrator"
 
 
 def route_after_approval(state: GameState) -> Literal["narrator", "world_state", "end"]:
@@ -101,11 +110,22 @@ def create_game_graph(checkpoint_path: str = "saves/game_sessions.db") -> StateG
     )
 
     # Rules engine and oracle both go to director (which then goes to narrator)
+    builder.add_node("combat", combat_node)
     builder.add_edge("rules_engine", "director")
     builder.add_edge("oracle", "director")
     
-    # Director goes to narrator
-    builder.add_edge("director", "narrator")
+    # Conditional edges from director
+    builder.add_conditional_edges(
+        "director",
+        route_after_director,
+        {
+            "combat": "combat",
+            "narrator": "narrator",
+        }
+    )
+
+    # Combat goes to narrator
+    builder.add_edge("combat", "narrator")
 
     # Narrator goes to approval
     builder.add_edge("narrator", "approval")

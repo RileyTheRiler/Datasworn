@@ -28,10 +28,14 @@ from src.narrative import (
     PayoffTracker, NPCMemoryBank, ConsequenceManager, ChoiceEchoSystem,
     OpeningHookSystem, NPCEmotionalStateMachine, MoralReputationSystem, DramaticIronyTracker,
     StoryBeatGenerator, PlotManager, BranchingNarrativeSystem, NPCGoalPursuitSystem,
-    EndingPreparationSystem, ImpossibleChoiceGenerator, EnvironmentalStoryteller, FlashbackSystem,
-    EndingPreparationSystem, ImpossibleChoiceGenerator, EnvironmentalStoryteller, FlashbackSystem,
+    EndingPreparationSystem, ImpossibleChoiceGenerator, FlashbackSystem,
+    EndingPreparationSystem, ImpossibleChoiceGenerator, FlashbackSystem,
     UnreliableNarratorSystem, MetaNarrativeSystem, NPCSkillSystem, NarrativeMultiplayerSystem
 )
+from src.environmental_storytelling import EnvironmentalStoryGenerator, CallbackManager, create_environmental_generator
+from src.combat_orchestrator import CombatOrchestrator, create_combat_orchestrator
+from src.utility_ai import evaluate_tactical_decision
+from src.goap import plan_npc_action
 from src.psychology import DreamSequenceEngine, PhobiaSystem, AddictionSystem, MoralInjurySystem, AttachmentSystem, TrustDynamicsSystem
 
 
@@ -51,6 +55,15 @@ class NarrativeOrchestrator:
     bond_manager: BondManager = field(default_factory=BondManager)
     world_coherence: WorldStateCoherence = field(default_factory=WorldStateCoherence)
     dilemma_generator: DilemmaGenerator = field(default_factory=DilemmaGenerator)
+    
+    # Narrative Depth (New)
+    callback_manager: CallbackManager = field(default_factory=CallbackManager)
+    
+    # Smart Event Detection (New)
+    event_detector: Any = field(default=None)  # Lazy loaded to avoid circular imports? No, passed in.
+    
+    # Combat & AI (New)
+    combat_system: CombatOrchestrator = field(default_factory=create_combat_orchestrator)
     
     # Phase 1 Systems
     payoff_tracker: PayoffTracker = field(default_factory=PayoffTracker)
@@ -73,7 +86,7 @@ class NarrativeOrchestrator:
     # Phase 4 Systems
     ending_system: EndingPreparationSystem = field(default_factory=EndingPreparationSystem)
     impossible_choices: ImpossibleChoiceGenerator = field(default_factory=ImpossibleChoiceGenerator)
-    environmental_storyteller: EnvironmentalStoryteller = field(default_factory=EnvironmentalStoryteller)
+    environmental_storyteller: EnvironmentalStoryGenerator = field(default_factory=create_environmental_generator)
     flashback_system: FlashbackSystem = field(default_factory=FlashbackSystem)
     
     # Phase 5 Systems
@@ -207,9 +220,42 @@ class NarrativeOrchestrator:
                 sections.append(f"\\n{trust_ctx}")
 
         # 1. World & Environmental Context (Phase 4 Enhanced)
-        sensory_detail = self.environmental_storyteller.generate_atmosphere(location, "mysterious")
-        sections.append(f"\\n<environment>\\n{sensory_detail}\\n</environment>")
+        # Use new Environmental Storyteller
+        discovery = self.environmental_storyteller.generate_discovery(location_context=location)
+        sections.append(f"\\n{discovery.get_narrator_context()}")
+        
+        # Add Show, Don't Tell Guidance (once per scene ideally, but here is fine)
+        sections.append(f"\\n{self.environmental_storyteller.get_show_dont_tell_guidance()}")
+
+        # 2. Narrative Callbacks (New)
+        callback = self.callback_manager.get_callback_for_moment(
+            current_scene=self.current_scene, 
+            context=player_action,
+            character=active_npcs[0] if active_npcs else None
+        )
+        if callback:
+             sections.append(f"\\n{callback}")
+
+        # 3. Combat Tactics (New)
+        if self.combat_system.combatants:
+             combat_ctx = self.combat_system.get_combat_context()
+             sections.append(f"\\n{combat_ctx}")
             
+        # 4. NPC Plans (GOAP) (New)
+        # Use simple heuristic: if there's a leader or specific goal
+        if active_npcs and not self.combat_system.combatants:
+             # Example: create a plan for one NPC
+             leader = active_npcs[0]
+             # Demo goal: Gather resources
+             plan = plan_npc_action(
+                 goal_name="prepare_defenses",
+                 goal_conditions={"has_wood": True, "has_iron": True},
+                 current_state={"near_trees": True},
+                 action_type="resource"
+             )
+             if plan:
+                sections.append(f"\\n[NPC PLAN: {leader}]\\n" + "\\n".join([f"- {a['description']}" for a in plan]))
+        
         # 6. Emotional Bonds (New)
         bond_context = self.bond_manager.get_all_bonds_context()
         if bond_context:
@@ -228,9 +274,9 @@ class NarrativeOrchestrator:
             sections.append(f"\\n{coherence_context}")
 
         # 8. Narrative Payoffs (New)
-        overdue_seeds = self.payoff_tracker.get_overdue_seeds(self.current_scene)
+        overdue_seeds = self.narrative_memory.get_pending_payoffs()
         if overdue_seeds:
-            seed_list = "\\n".join([f"  - UNRESOLVED {s.seed_type}: {s.description}" for s in overdue_seeds])
+            seed_list = "\\n".join([f"  - UNRESOLVED {s.plant_type.value}: {s.description}" for s in overdue_seeds])
             sections.append(f"\\n<payoff_alert>\\nPAYOFFS DUE SOON:\\n{seed_list}\\nConsider resolving one of these now.\\n</payoff_alert>")
 
         # 9. Consequence Triggers (New)
@@ -324,11 +370,54 @@ class NarrativeOrchestrator:
             active_npcs
         )
         
+        
         # 2. Auto-detect & record narrative plants
-        from src.narrative_memory import auto_detect_plants
-        detected_plants = auto_detect_plants(narrative_output, self.current_scene)
-        for plant_type, description, importance in detected_plants:
-            self.narrative_memory.plant_element(plant_type, description, importance)
+        try:
+            from src.smart_event_detection import SmartEventDetector, EventType
+            from src.narrative_memory import PlantType
+            
+            # Initialize detector if needed (it wasn't in __init__ properly, so lazy load or use field)
+            if not self.event_detector:
+                self.event_detector = SmartEventDetector(use_llm=True) # Assume LLM enabled for this high-level orchestrator
+                
+            detected_events = self.event_detector.detect_events(
+                narrative=narrative_output,
+                location=location,
+                active_npcs=active_npcs,
+                player_name="Player" # Todo: pass character name
+            )
+            
+            # Map DetectedEvents to NarrativeMemory Plants
+            for event in detected_events:
+                plant_type = None
+                
+                # Mapping logic
+                if event.event_type in [EventType.PROMISE, EventType.OATH]:
+                    plant_type = PlantType.PROMISE
+                elif event.event_type in [EventType.KILL, EventType.WOUND, EventType.THREAT, EventType.BETRAY]:
+                    plant_type = PlantType.THREAT
+                elif event.event_type in [EventType.DISCOVER, EventType.LEARN_SECRET, EventType.SOLVE_MYSTERY]:
+                    plant_type = PlantType.MYSTERY
+                elif event.event_type in [EventType.ACQUIRE, EventType.STEAL, EventType.LOSE]:
+                    plant_type = PlantType.OBJECT
+                elif event.event_type in [EventType.ALLY, EventType.ROMANCE, EventType.INSULT, EventType.HONOR]:
+                    plant_type = PlantType.RELATIONSHIP
+                    
+                if plant_type:
+                    self.narrative_memory.plant_element(
+                        plant_type=plant_type,
+                        description=f"{event.description} ({event.event_type.value})",
+                        importance=event.severity,
+                        involved_characters=event.entities,
+                        related_themes=[event.location] if event.location else []
+                    )
+        except Exception as e:
+            # Fallback to simple detection if LLM/Import fails
+            print(f"Smart Event Detection failed: {e}")
+            from src.narrative_memory import auto_detect_plants
+            detected_plants = auto_detect_plants(narrative_output, self.current_scene)
+            for plant_type, description, importance in detected_plants:
+                self.narrative_memory.plant_element(plant_type, description, importance)
             
         # 3. Update Bonds
         # Simple heuristic: if player talks to NPC, record interaction
@@ -390,6 +479,21 @@ class NarrativeOrchestrator:
             for npc in active_npcs:
                 self.npc_emotions.process_event(npc, "THREATENED")
                 
+        # 9. Store Narrative Callback (New)
+        self.callback_manager.store_moment(
+            scene=self.current_scene,
+            description=narrative_output[:200], # Capture snippet
+            characters=active_npcs,
+            emotional_weight=0.5, # Base weight
+            ideal_context=location
+        )
+        
+        # 10. Update Combat State (New)
+        # 10. Update Combat State (New)
+        # Simple heuristic: if action implies violence, update combat
+        if any(w in player_input.lower() for w in ["attack", "shoot", "hit", "fire", "fight"]):
+             self.combat_system.update(player_health=1.0) # Placeholder health
+                
     def to_dict(self) -> dict:
         """Serialize all systems."""
         return {
@@ -434,7 +538,11 @@ class NarrativeOrchestrator:
             "moral_injury_system": self.moral_injury_system.to_dict(),
             # Psychology Phase 3 Persistence
             "attachment_system": self.attachment_system.to_dict(),
+            "attachment_system": self.attachment_system.to_dict(),
+            "attachment_system": self.attachment_system.to_dict(),
             "trust_dynamics": self.trust_dynamics.to_dict(),
+            "callback_manager": self.callback_manager.to_dict(),
+            "combat_system": self.combat_system.to_dict(),
         }
     
     @classmethod
@@ -552,6 +660,12 @@ class NarrativeOrchestrator:
             
         if "trust_dynamics" in data:
             orchestrator.trust_dynamics = TrustDynamicsSystem.from_dict(data["trust_dynamics"])
+            
+        if "callback_manager" in data:
+            orchestrator.callback_manager = CallbackManager.from_dict(data["callback_manager"])
+            
+        if "combat_system" in data:
+            orchestrator.combat_system = CombatOrchestrator.from_dict(data["combat_system"])
         
         return orchestrator
 
