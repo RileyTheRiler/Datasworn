@@ -6,14 +6,16 @@ Handles generation of location visuals, character portraits, and tactical bluepr
 import os
 import io
 import base64
-import google.generativeai as genai
+from google import genai
 from pathlib import Path
 from typing import Optional, Any
 
-# Configure API key
+# Global client instance
+CLIENT: Optional[genai.Client] = None
+
 API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 if API_KEY:
-    genai.configure(api_key=API_KEY)
+    CLIENT = genai.Client(api_key=API_KEY)
 
 # Directory for saving generated assets
 ASSETS_DIR = Path("data/assets/generated")
@@ -172,14 +174,30 @@ async def _generate_ai_background(prompt: str, provider: ImageProvider = ImagePr
 
 async def _generate_gemini_image(prompt: str) -> Optional[bytes]:
     """Generate image using Gemini (Imagen 3)."""
+    if not CLIENT:
+        print("Gemini Client not initialized.")
+        return None
+        
     try:
-        # Note: This requires a version of the SDK that supports Imagen
-        # and appropriate project permissions.
-        model = genai.GenerativeModel("imagen-3.0-generate-001")
-        response = await model.generate_content_async(prompt)
-        # This is speculative as SDK patterns vary for Imagen
-        if hasattr(response, "images") and response.images:
-            return response.images[0].data
+        # Use the newer SDK's image generation method if available, 
+        # otherwise fallback to content generation with the imagen model
+        try:
+            response = CLIENT.models.generate_image(
+                model='imagen-3.0-generate-001',
+                prompt=prompt
+            )
+            if response.generated_images:
+                return response.generated_images[0].image_bytes
+        except Exception:
+            # Fallback for different SDK versions/permissions
+            response = CLIENT.models.generate_content(
+                model='imagen-3.0-generate-001',
+                contents=prompt
+            )
+            # speculative mapping for Imagen via generate_content
+            if hasattr(response, "images") and response.images:
+                return response.images[0].data
+                
     except Exception as e:
         print(f"Gemini Image Gen Error: {e}")
     return None

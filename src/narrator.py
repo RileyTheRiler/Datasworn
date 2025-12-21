@@ -370,15 +370,13 @@ class GeminiClient:
             return
         
         try:
-            import google.generativeai as genai
+            from google import genai
             import os
             
             # Try to get API key from environment
             api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-            if api_key:
-                genai.configure(api_key=api_key)
             
-            self._client = genai.GenerativeModel(self.model)
+            self._client = genai.Client(api_key=api_key)
             self._initialized = True
         except Exception as e:
             raise RuntimeError(f"Failed to initialize Gemini: {e}")
@@ -416,24 +414,20 @@ class GeminiClient:
         try:
             self._ensure_initialized()
             
-            import google.generativeai as genai
+            config_dict = {
+                "temperature": config.temperature,
+                "top_p": config.top_p,
+                "top_k": config.top_k,
+                "max_output_tokens": config.max_tokens,
+                "system_instruction": system
+            }
             
-            # Combine system prompt and user prompt
-            full_prompt = f"{system}\n\n---\n\n{prompt}"
-            
-            generation_config = genai.GenerationConfig(
-                temperature=config.temperature,
-                top_p=config.top_p,
-                top_k=config.top_k,
-                max_output_tokens=config.max_tokens,
-            )
-            
-            # Helper for stream iteration to handle errors during the stream
+            # Helper for stream iteration
             def stream_generator():
-                response = self._client.generate_content(
-                    full_prompt,
-                    generation_config=generation_config,
-                    stream=True,
+                response = self._client.models.generate_content_stream(
+                    model=self.model,
+                    contents=prompt,
+                    config=config_dict,
                 )
                 for chunk in response:
                     if chunk.text:
@@ -465,30 +459,28 @@ class GeminiClient:
         try:
             self._ensure_initialized()
             
-            import google.generativeai as genai
-            
-            full_prompt = f"{system}\n\n---\n\n{prompt}"
-            
-            generation_config = genai.GenerationConfig(
-                temperature=config.temperature,
-                top_p=config.top_p,
-                top_k=config.top_k,
-                max_output_tokens=config.max_tokens,
-            )
-            
             # Define safety settings to prevent over-blocking of gritty sci-fi content
-            safety_settings = {
-                "HARM_CATEGORY_HARASSMENT": "BLOCK_ONLY_HIGH",
-                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_ONLY_HIGH",
-                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_ONLY_HIGH",
-                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_ONLY_HIGH",
+            safety_settings = [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
+            ]
+
+            config_dict = {
+                "temperature": config.temperature,
+                "top_p": config.top_p,
+                "top_k": config.top_k,
+                "max_output_tokens": config.max_tokens,
+                "system_instruction": system,
+                "safety_settings": safety_settings
             }
             
             response = self._retry_with_backoff(
-                self._client.generate_content,
-                full_prompt,
-                generation_config=generation_config,
-                safety_settings=safety_settings
+                self._client.models.generate_content,
+                model=self.model,
+                contents=prompt,
+                config=config_dict
             )
             
             try:

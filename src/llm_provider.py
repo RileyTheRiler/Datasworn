@@ -149,9 +149,8 @@ class GeminiProvider(LLMProvider):
         
         if self.api_key:
             try:
-                import google.generativeai as genai
-                genai.configure(api_key=self.api_key)
-                self._client = genai.GenerativeModel(self.model)
+                from google import genai
+                self._client = genai.Client(api_key=self.api_key)
             except ImportError:
                 self._client = None
         else:
@@ -167,45 +166,38 @@ class GeminiProvider(LLMProvider):
         if not self._client:
             if not self.api_key:
                 return "[Gemini API key not set. Set GEMINI_API_KEY environment variable.]"
-            return "[google-generativeai not installed. Run: pip install google-generativeai]"
+            return "[google-genai not installed. Run: pip install google-genai]"
         
         try:
-            # Convert messages to Gemini format
-            gemini_messages = []
-            system_prompt = ""
+            # Prepare contents (user and model roles)
+            gemini_contents = []
+            system_instruction = None
             
             for msg in messages:
                 role = msg.get("role", "user")
                 content = msg.get("content", "")
                 
                 if role == "system":
-                    system_prompt = content
+                    system_instruction = content
                 elif role == "user":
-                    gemini_messages.append({"role": "user", "parts": [content]})
+                    gemini_contents.append({"role": "user", "parts": [content]})
                 elif role == "assistant":
-                    gemini_messages.append({"role": "model", "parts": [content]})
+                    gemini_contents.append({"role": "model", "parts": [content]})
             
-            # Start chat with history
-            chat = self._client.start_chat(history=gemini_messages[:-1] if len(gemini_messages) > 1 else [])
-            
-            # Get the last user message
-            last_message = gemini_messages[-1]["parts"][0] if gemini_messages else ""
-            
-            # Prepend system prompt to first message if present
-            if system_prompt and last_message:
-                last_message = f"[System: {system_prompt}]\n\n{last_message}"
-            
-            generation_config = {
+            config = {
                 "temperature": temperature,
                 "max_output_tokens": max_tokens,
             }
+            if system_instruction:
+                config["system_instruction"] = system_instruction
             
             if stream:
-                return self._stream_chat(chat, last_message, generation_config)
+                return self._stream_chat(gemini_contents, config)
             else:
-                response = chat.send_message(
-                    last_message,
-                    generation_config=generation_config
+                response = self._client.models.generate_content(
+                    model=self.model,
+                    contents=gemini_contents,
+                    config=config
                 )
                 return response.text
                 
@@ -214,15 +206,14 @@ class GeminiProvider(LLMProvider):
     
     def _stream_chat(
         self,
-        chat,
-        message: str,
-        generation_config: dict
+        contents: list,
+        config: dict
     ) -> Generator[str, None, None]:
         try:
-            response = chat.send_message(
-                message,
-                generation_config=generation_config,
-                stream=True
+            response = self._client.models.generate_content_stream(
+                model=self.model,
+                contents=contents,
+                config=config
             )
             for chunk in response:
                 if chunk.text:
