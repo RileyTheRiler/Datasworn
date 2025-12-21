@@ -1,5 +1,4 @@
 from .payoff import PayoffTracker
-from .npc_memory import NPCMemoryBank
 from .consequence import ConsequenceManager
 from .echo import ChoiceEchoSystem
 
@@ -21,7 +20,7 @@ from .multiplayer import NarrativeMultiplayerSystem
 
 __all__ = [
     "PayoffTracker", 
-    "NPCMemoryBank", 
+    "ConsequenceManager", 
     "ConsequenceManager", 
     "ChoiceEchoSystem",
     "OpeningHookSystem",

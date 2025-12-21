@@ -36,37 +36,37 @@ export const SoundEffectsProvider = ({ children }) => {
         // Define all sound effects with fallback to simple beeps if files don't exist
         const soundDefinitions = {
             dice_roll: {
-                src: ['/sounds/dice_roll.mp3', '/sounds/dice_roll.ogg'],
+                src: ['/assets/audio/sfx/dice_roll.mp3', '/assets/audio/sfx/dice_roll.ogg'],
                 volume: 0.6,
                 fallback: () => playBeep(200, 0.1, 'sine')
             },
             dice_hit: {
-                src: ['/sounds/dice_hit.mp3', '/sounds/dice_hit.ogg'],
+                src: ['/assets/audio/sfx/dice_hit.mp3', '/assets/audio/sfx/dice_hit.ogg'],
                 volume: 0.7,
                 fallback: () => playBeep(440, 0.2, 'sine')
             },
             dice_miss: {
-                src: ['/sounds/dice_miss.mp3', '/sounds/dice_miss.ogg'],
+                src: ['/assets/audio/sfx/dice_miss.mp3', '/assets/audio/sfx/dice_miss.ogg'],
                 volume: 0.6,
                 fallback: () => playBeep(110, 0.3, 'sawtooth')
             },
             momentum_up: {
-                src: ['/sounds/momentum_up.mp3', '/sounds/momentum_up.ogg'],
+                src: ['/assets/audio/sfx/momentum_up.mp3', '/assets/audio/sfx/momentum_up.ogg'],
                 volume: 0.5,
                 fallback: () => playBeep(523, 0.15, 'sine')
             },
             momentum_down: {
-                src: ['/sounds/momentum_down.mp3', '/sounds/momentum_down.ogg'],
+                src: ['/assets/audio/sfx/momentum_down.mp3', '/assets/audio/sfx/momentum_down.ogg'],
                 volume: 0.5,
                 fallback: () => playBeep(196, 0.15, 'sine')
             },
             button_click: {
-                src: ['/sounds/button_click.mp3', '/sounds/button_click.ogg'],
+                src: ['/assets/audio/sfx/ui_click.mp3'], // Map to existing ui_click.mp3
                 volume: 0.3,
                 fallback: () => playBeep(800, 0.05, 'square')
             },
             whoosh: {
-                src: ['/sounds/whoosh.mp3', '/sounds/whoosh.ogg'],
+                src: ['/assets/audio/sfx/whoosh.mp3', '/assets/audio/sfx/whoosh.ogg'],
                 volume: 0.4,
                 fallback: () => playBeep(300, 0.2, 'sine')
             }

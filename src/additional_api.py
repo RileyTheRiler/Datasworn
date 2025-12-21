@@ -299,3 +299,26 @@ def register_audio_routes(app, SESSIONS):
         
         state = SESSIONS[session_id]
         return state.get('audio', {})
+
+    @app.get("/api/audio/state/{session_id}")
+    def get_audio_directives(session_id: str):
+        """Get audio directives (ambient/music) for AudioManager.jsx."""
+        if session_id not in SESSIONS:
+            raise HTTPException(status_code=404, detail="Session not found")
+            
+        state = SESSIONS[session_id]
+        audio = state.get('audio', {})
+        
+        # Structure as expected by AudioManager.jsx
+        return {
+            "ambient": {
+                "zone_type": audio.get('current_ambient') if isinstance(audio, dict) else audio.current_ambient,
+                "tracks": audio.get('current_tracks', []) if isinstance(audio, dict) else audio.current_tracks,
+                "volume": audio.get('ambient_volume', 0.5) if isinstance(audio, dict) else audio.ambient_volume
+            },
+            "music": {
+                "track_id": audio.get('current_music') if isinstance(audio, dict) else audio.current_music,
+                "filename": audio.get('music_filename') if isinstance(audio, dict) else audio.music_filename,
+                "volume": audio.get('music_volume', 0.6) if isinstance(audio, dict) else audio.music_volume
+            }
+        }

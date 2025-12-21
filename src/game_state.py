@@ -4,9 +4,10 @@ Uses Pydantic for validation and TypedDict for LangGraph state.
 """
 
 from __future__ import annotations
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict, Optional
 from pydantic import BaseModel, Field
 from langgraph.graph.message import add_messages
+from src.npc.schemas import CognitiveState
 
 
 # ============================================================================
@@ -102,7 +103,9 @@ class WorldState(BaseModel):
 class AudioState(BaseModel):
     """Audio playback state."""
     current_ambient: Optional[str] = None  # Zone type
+    current_tracks: list[str] = Field(default_factory=list) # Actual MP3 filenames (without .mp3)
     current_music: Optional[str] = None  # Track ID
+    music_filename: Optional[str] = None # MP3 filename
     ambient_volume: float = 0.5
     music_volume: float = 0.6
     voice_volume: float = 0.8
@@ -303,8 +306,6 @@ class NarrativeOrchestratorState(BaseModel):
     
     # Psychological Systems (Phase 3)
     attachment_system: dict[str, Any] = Field(default_factory=dict)
-    # Psychological Systems (Phase 3)
-    attachment_system: dict[str, Any] = Field(default_factory=dict)
     trust_dynamics: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -333,15 +334,6 @@ class HazardState(BaseModel):
     active_hazards: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class AudioState(BaseModel):
-    """Audio engine state."""
-    current_ambient: str | None = None
-    current_music: str | None = None
-    ambient_volume: float = 0.5
-    music_volume: float = 0.6
-    voice_volume: float = 0.8
-    master_volume: float = 1.0
-    muted: bool = False
 
 
 class PhotoEntry(BaseModel):
@@ -438,6 +430,9 @@ class GameState(TypedDict):
     # Audio State
     audio: AudioState
 
+    # Cognitive Engine (NPC Minds)
+    cognitive_npc_state: dict[str, CognitiveState] = Field(default_factory=dict)
+
     # Routing decision
     route: str
 
@@ -483,6 +478,7 @@ def create_initial_state(character_name: str) -> GameState:
         narrative_orchestrator=NarrativeOrchestratorState(),
         album=PhotoAlbumState(),
         starmap={},
+        cognitive_npc_state={},
         rumors={},
         world_sim={},
         hazards={},

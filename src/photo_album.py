@@ -4,6 +4,7 @@ Handles the capture and organization of cinematic moments.
 """
 
 from typing import List, Optional
+from datetime import datetime
 import time
 import uuid
 from src.game_state import PhotoEntry, PhotoAlbumState
@@ -22,7 +23,7 @@ class PhotoAlbumManager:
             id=str(uuid.uuid4()),
             image_url=image_url,
             caption=caption,
-            timestamp=datetime.now().isoformat(), # Use datetime.now() but need import
+            timestamp=datetime.now().isoformat(),
             tags=tags,
             scene_id=scene_id
         )
@@ -40,6 +41,3 @@ class PhotoAlbumManager:
         if not self.state.photos:
             return None
         return self.state.photos[-1]
-
-# Fix missing import
-from datetime import datetime

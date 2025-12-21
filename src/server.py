@@ -46,13 +46,16 @@ from src.additional_api import register_starmap_routes, register_rumor_routes, r
 from src.narrative_api import register_narrative_routes
 from src.psych_api import register_psychology_routes
 from src.combat_api import register_combat_routes
+from src.calibration import get_calibration_scenario
+from src.npc.schemas import CognitiveState, PersonalityProfile
+from src.npc.engine import NPCCognitiveEngine
 
 app = FastAPI(title="Starforged AI GM")
 
 # CORS Setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For dev, allow all. In prod, lock to frontend domain.
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -210,6 +213,23 @@ async def start_session(req: InitRequest):
     
     state['relationships'].crew = {k: v.to_dict() for k, v in relationships.crew.items()}
     
+    # Initialize Cognitive State for Crew
+    from src.npc.schemas import CognitiveState, PersonalityProfile
+    for crew_id, crew_member in relationships.crew.items():
+        # Map CrewMember to PersonalityProfile
+        profile = PersonalityProfile(
+            name=crew_member.name,
+            role=crew_member.role,
+            traits=[crew_member.psyche.personality_archetype] if crew_member.psyche else ["Stoic"],
+            narrative_seed=f"{crew_member.name} is the {crew_member.role} of the Aethelgard. {crew_member.description}",
+            current_mood="Neutral"
+        )
+        # Create State
+        cog_state = CognitiveState(npc_id=crew_id, profile=profile)
+        state['cognitive_npc_state'][crew_id] = cog_state
+        # Also map by name for easier lookup
+        state['cognitive_npc_state'][crew_member.name] = cog_state
+
     SESSIONS[session_id] = state
     
     # Build personalized intro context
@@ -239,11 +259,44 @@ async def start_session(req: InitRequest):
     state['narrative'].pending_narrative = intro_narrative
     state['narrative'].current_scene = "The Forge"
     
+    # Generate initial location visuals
+    import random
+    location = state['narrative'].current_scene
+    location_visuals = state['world'].location_visuals
+    
+    # Generate environmental conditions
+    time_options = [t.value for t in TimeOfDay]
+    weather_options = [w.value for w in WeatherCondition]
+    
+    new_time = random.choices(time_options, weights=[0.4, 0.2, 0.2, 0.2])[0]
+    new_weather = random.choices(weather_options, weights=[0.5, 0.15, 0.15, 0.1, 0.05, 0.05])[0]
+    
+    state['world'].current_time = new_time
+    state['world'].current_weather = new_weather
+    
+    scene_image = None
+    try:
+        scene_image = await generate_location_image(
+            location_name=location,
+            description=intro_narrative[:100],
+            time_of_day=new_time,
+            weather=new_weather
+        )
+    except Exception as e:
+        print(f"Initial scene generation failed: {e}")
+        
+    location_visuals[location] = {
+        "time": new_time,
+        "weather": new_weather,
+        "image_url": scene_image or "/assets/defaults/location_placeholder.png"
+    }
+    
     return {
         "session_id": session_id,
         "state": state,
         "assets": {
-            "portrait": portrait_url
+            "portrait": portrait_url,
+            "scene_image": scene_image or "/assets/defaults/location_placeholder.png"
         }
     }
 
@@ -291,6 +344,44 @@ def get_psyche(session_id: str):
     response["guilt"] = guilt
     
     return response
+
+@app.get("/api/identity/{session_id}")
+def get_identity(session_id: str):
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    return state['psyche'].profile.identity.to_dict()
+
+@app.get("/api/calibration/scenario")
+def get_prologue_scenario():
+    return get_calibration_scenario()
+
+class CalibrateRequest(BaseModel):
+    session_id: str
+    choice_id: str
+
+@app.post("/api/calibrate")
+async def calibrate_identity(req: CalibrateRequest):
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    state = SESSIONS[req.session_id]
+    scenario = get_calibration_scenario()
+    
+    choice = next((c for c in scenario['choices'] if c['id'] == req.choice_id), None)
+    if not choice:
+        raise HTTPException(status_code=400, detail="Invalid choice ID")
+        
+    # Apply impact
+    from src.character_identity import IdentityScore
+    impact = IdentityScore(**choice['impact'] if isinstance(choice['impact'], dict) else choice['impact'].to_dict())
+    state['psyche'].profile.identity.update_scores(impact, f"Calibration Choice: {choice['text']}")
+    
+    return {
+        "identity": state['psyche'].profile.identity.to_dict(),
+        "hint": choice['narrative_hint']
+    }
 
 @app.get("/api/state/{session_id}")
 def get_state(session_id: str):
@@ -386,6 +477,27 @@ def list_assets():
             if file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.webp', '.gif']:
                 assets.append(f"/assets/{file.name}")
     return {"assets": assets}
+
+@app.get("/api/music/manifest")
+def get_music_manifest():
+    """Get all available music tracks organized by mood."""
+    music_dir = ASSETS_DIR / "music"
+    manifest = {
+        "relaxing": [],
+        "tense": [],
+        "dramatic": [],
+        "intense": []
+    }
+    
+    if music_dir.exists():
+        for mood in manifest.keys():
+            mood_dir = music_dir / mood
+            if mood_dir.exists():
+                for file in mood_dir.glob("*"):
+                    if file.suffix.lower() in ['.mp3', '.wav', '.ogg', '.m4a']:
+                        manifest[mood].append(f"/assets/music/{mood}/{file.name}")
+    
+    return manifest
 
 class PortraitRequest(BaseModel):
     name: str
@@ -489,7 +601,7 @@ async def chat(req: ActionRequest):
     from src.narrative_orchestrator import NarrativeOrchestrator
     
     # Load Orchestrator
-    orchestrator_data = state.get("narrative_orchestrator", {}).get("orchestrator_data", {})
+    orchestrator_data = state['narrative_orchestrator'].orchestrator_data
     if orchestrator_data:
         orchestrator = NarrativeOrchestrator.from_dict(orchestrator_data)
     else:
@@ -501,9 +613,8 @@ async def chat(req: ActionRequest):
     for k, v in state['psyche'].voice_dominance.items():
         if k in director.inner_voice.aspects:
             director.inner_voice.aspects[k].dominance = v
-            
     director.relationships = RelationshipWeb.from_dict(state['relationships'].dict())
-            
+                
     # Process Combat Update BEFORE Analysis if in combat
     # This allows the Director to react to the changing tide of battle
     combat_update = None
@@ -529,8 +640,27 @@ async def chat(req: ActionRequest):
     # Inject both Director Plan and Orchestrator Guidance
     director_injection = director_plan.to_prompt_injection()
     
-    # Get active NPCs from world state (simple scan for now)
+    # Get active NPCs from world state (simple scan for now) + Crew
     active_npcs = [npc['name'] for npc in state['world'].npcs if npc.get('location') == state['world'].current_location]
+    
+    # Helper: Include crew if we are on the ship/start
+    loc_lower = str(state['world'].current_location).lower()
+    # Assume crew is accessible in main hub/ship
+    if True: # For now, always include crew for testing, or refine logic later
+         relationships = state.get('relationships')
+         if relationships and hasattr(relationships, 'crew'):
+             # If Pydantic model
+             for c in relationships.crew.values():
+                 # Handle both dict and object types
+                 name = c.get('name') if isinstance(c, dict) else c.name
+                 if name and name not in active_npcs:
+                     active_npcs.append(name)
+         elif relationships and isinstance(relationships, dict) and 'crew' in relationships:
+             # If dict
+             for c in relationships['crew'].values():
+                 name = c.get('name') if isinstance(c, dict) else c.name
+                 if name and name not in active_npcs:
+                     active_npcs.append(name)
     
     # Get Orchestrator Guidance (Bonds, Pacing, World Facts, etc.)
     orchestrator_guidance = orchestrator.get_comprehensive_guidance(
@@ -565,7 +695,8 @@ async def chat(req: ActionRequest):
         player_input=req.action,
         narrative_output=narrative,
         location=state['world'].current_location,
-        active_npcs=active_npcs
+        active_npcs=active_npcs,
+        cognitive_states=state.get("cognitive_npc_state", {})
     )
     
     # Save Orchestrator State
@@ -705,6 +836,7 @@ async def commit_roll(req: RollCommitRequest):
         "Weak Hit": "weak_hit",
         "Miss": "miss"
     }
+
     outcome_key = outcome_map[roll_result.result.value]
     
     # Construct input string for narrator
@@ -1593,6 +1725,21 @@ def end_session_with_cliffhanger(req: EndSessionRequest):
         "total_sessions": len(RECAP_ENGINE._session_history)
     }
 
+@app.get("/api/autosave/status/{session_id}")
+def get_autosave_status(session_id: str):
+    """Check auto-save status for a session."""
+    # In this implementation, we check if there's a metadata file for 'autosave'
+    from pathlib import Path
+    meta_path = Path("saves/autosave_meta.json")
+    if meta_path.exists():
+        with open(meta_path, "r", encoding="utf-8") as f:
+            import json
+            meta = json.load(f)
+            return {"last_save": meta.get("save_time")}
+    
+    return {"last_save": None}
+
+
 @app.post("/api/session/record-event")
 def record_session_event(
     session_id: str,
@@ -2023,6 +2170,155 @@ def toggle_mute(session_id: str):
 
 def run():
     uvicorn.run("src.server:app", host="0.0.0.0", port=8000, reload=True)
+
+# ============================================================================
+# Cognitive Engine Endpoints
+# ============================================================================
+
+@app.post("/api/cognitive/interact")
+async def cognitive_interact(req: ActionRequest):
+    """
+    Process a turn with the Cognitive Engine.
+    Player Input -> Perception -> Memory -> Agency -> Action (JSON)
+    """
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    state = SESSIONS[req.session_id]
+    
+    # 1. Identify Target NPC
+    # Heuristic: Check if action mentions a known NPC name or defaults to 'janus_01'
+    target_id = "janus_01" 
+    relationships = state.get('relationships', {})
+    crew = relationships.get('crew', {}) if isinstance(relationships, dict) else relationships.crew
+    
+    for npc_id, npc in crew.items():
+        name = npc.get('name', '') if isinstance(npc, dict) else npc.name
+        if name.lower() in req.action.lower():
+            target_id = npc_id
+            break
+            
+    # Check if we have this NPC in cognitive cache (fast access)
+    # The authoritative state is now in DB, but we keep a runtime cache for the session
+    if "cognitive_npc_state" not in state:
+        state["cognitive_npc_state"] = {}
+        
+    if target_id not in state["cognitive_npc_state"]:
+        # Initialize from DB or create new
+        # For now, we create a fresh runtime state which retrieves from DB on demand
+        from src.npc.schemas import CognitiveState, PersonalityProfile
+        
+        # Check if they exist in DB (via MemoryStream check usually, but here we just init)
+        # We need a profile. ideally loaded from DB entities metadata or standard game state.
+        # Fallback to default if not found in game state crew
+        role = "Unknown"
+        traits = ["Survivor"]
+        name = target_id
+        
+        if target_id in crew:
+            c = crew[target_id]
+            name = c.get('name', target_id) if isinstance(c, dict) else c.name
+            role = c.get('role', 'Unknown') if isinstance(c, dict) else c.role
+        
+        state["cognitive_npc_state"][target_id] = CognitiveState(
+            npc_id=target_id,
+            profile=PersonalityProfile(
+                name=name,
+                role=role,
+                narrative_seed=f"{name} is a {role} in the Forge.",
+                traits=traits,
+                current_mood="Neutral"
+            )
+        )
+        
+    npc_state = state["cognitive_npc_state"][target_id]
+    
+    # 2. Run Engine
+    engine = NPCCognitiveEngine()
+    
+    # Location context
+    location = state['world'].current_location
+    time = f"{state['world'].current_time}"
+    
+    output = engine.process_turn(
+        state=npc_state,
+        player_input=req.action,
+        location=location,
+        time=time
+    )
+    
+    # 3. Update Narrative Output
+    narrative_text = output["narrative"]
+    state['narrative'].pending_narrative = narrative_text
+    
+    # 4. Director Propagation of this interaction (Implicit)
+    # The event is already logged in DB by the Engine's memory stream.
+    # We might want to trigger a Director "Reaction" here?
+    # director = DirectorAgent()
+    # director.analyze(...) -> could update global tension based on this interaction
+    
+    return {
+        "narrative": narrative_text,
+        "state_updates": output["state_updates"]
+    }
+
+@app.get("/api/cognitive/debug/{npc_id}")
+async def cognitive_debug(npc_id: str, session_id: str = "default"):
+    """
+    Inspect the Mind of an NPC (Retrieves from DB + Runtime State).
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    state = SESSIONS[session_id]
+    
+    # Runtime state
+    npc_runtime = None
+    if "cognitive_npc_state" in state and npc_id in state["cognitive_npc_state"]:
+        npc_runtime = state["cognitive_npc_state"][npc_id]
+        
+    # DB State (Memories)
+    from src.database import get_db
+    db = get_db()
+    
+    # Fetch recent memories directly from DB to verify persistence
+    rows = db.query(
+        """
+        SELECT e.summary, e.importance, e.game_timestamp 
+        FROM npc_knowledge k 
+        JOIN events e ON k.event_id = e.event_id 
+        WHERE k.npc_entity_id = ? 
+        ORDER BY k.knowledge_id DESC LIMIT 10
+        """, 
+        (npc_id,)
+    )
+    
+    db_memories = [dict(r) for r in rows]
+    
+    return {
+        "profile": npc_runtime.profile.dict() if npc_runtime else "Not in active cache",
+        "recent_memories_db": db_memories,
+        "current_plan": npc_runtime.current_plan.dict() if (npc_runtime and npc_runtime.current_plan) else None
+    }
+
+class DirectorEventRequest(BaseModel):
+    summary: str
+    importance: int = 5
+    location_id: Optional[str] = None
+    
+@app.post("/api/director/event")
+async def trigger_director_event(req: DirectorEventRequest):
+    """
+    Manually trigger a global World Event via the Director.
+    """
+    director = DirectorAgent()
+    director.publish_global_event(
+        summary=req.summary,
+        importance=req.importance,
+        location_id=req.location_id
+    )
+    return {"status": "Event published", "summary": req.summary}
+
 
 if __name__ == "__main__":
     run()

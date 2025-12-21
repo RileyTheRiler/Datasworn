@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pydantic import BaseModel, Field
 import random
 from datetime import datetime
+from .character_identity import CharacterIdentity
 
 
 @dataclass
@@ -176,6 +177,7 @@ class PsychologicalProfile(BaseModel):
     active_conflicts: list[ValueConflict] = Field(default_factory=list)
     compulsions: list[Compulsion] = Field(default_factory=list)
     corrupted_memory_indices: list[int] = Field(default_factory=list)  # Indices of corrupted memories
+    identity: CharacterIdentity = Field(default_factory=CharacterIdentity)
 
     def get_dominant_values(self, count: int = 3) -> List[tuple[ValueSystem, float]]:
         """Return the top N values."""
@@ -197,6 +199,7 @@ class PsychologicalProfile(BaseModel):
             "suppressed_memories": [m.model_dump() for m in self.suppressed_memories],
             "beliefs": self.beliefs[-5:],
             "dominant_trait": self.get_dominant_traits(1)[0][0] if self.traits else "none",
+            "identity": self.identity.to_dict()
         }
 
     def get_primary_fear(self) -> str:
@@ -486,6 +489,10 @@ class PsychologicalEngine:
                 intensity = "deeply" if abs(score) > 0.7 else "somewhat"
                 opinion_strs.append(f"{desc} {entity} {intensity}")
         opinions_str = ", ".join(opinion_strs) if opinion_strs else "Neutral towards known entities."
+        
+        identity_info = f"{profile.identity.archetype.value.upper()}"
+        if profile.identity.dissonance_score > 0.3:
+            identity_info += f" (Dissonant: {profile.identity.dissonance_score:.1f})"
 
         return f"""<psychological_profile>
 CURRENT STATE:
@@ -495,16 +502,17 @@ CORE DRIVERS:
   Values: {values_str}
   Traits: {traits_str}
 
-BELIEFS:
-  - {beliefs_str}
-
 RELATIONSHIPS:
   {opinions_str}
 
+IDENTITY:
+  Archetype: {identity_info}
+  Recent Path: {', '.join([c.description for c in profile.identity.choice_history[-3:]]) if profile.identity.choice_history else "None"}
+
 INNER MONOLOGUE GUIDANCE:
-  Filter all perceptions through this psychological state. 
   If Stress is high, focus on threats and failure.
   If Sanity is low, hallucinate or misinterpret details.
+  If Dissonance is high, the voices should express confusion or self-loathing about recent choices.
   If {profile.get_dominant_values()[0][0].value} is high, frame choices through that lens.
 </psychological_profile>"""
 
@@ -537,6 +545,21 @@ INNER MONOLOGUE GUIDANCE:
             
         if "help" in lower_desc or "saved" in lower_desc:
             profile.values[ValueSystem.COMMUNITY] = min(1.0, profile.values.get(ValueSystem.COMMUNITY, 0.0) + 0.05)
+            
+        # Identity Evolution
+        from .character_identity import IdentityScore
+        impact = IdentityScore()
+        if any(w in lower_desc for w in ["violence", "kill", "strike", "attack", "brutal", "hit"]):
+            impact.violence = 0.1
+        if any(w in lower_desc for w in ["stealth", "hide", "sneak", "hid", "snuck", "shadow"]):
+            impact.stealth = 0.1
+        if any(w in lower_desc for w in ["help", "save", "mercy", "spare", "empathy"]):
+            impact.empathy = 0.1
+        if any(w in lower_desc for w in ["hack", "logic", "calculate", "analyze", "data"]):
+            impact.logic = 0.1
+            
+        if any([impact.violence, impact.stealth, impact.empathy, impact.logic, impact.greed]):
+            profile.identity.update_scores(impact, event_desc)
 
     def evolve_soul_searching(self, profile: PsychologicalProfile, narrative_context: str) -> str:
         """

@@ -25,10 +25,9 @@ from src.emotional_storytelling import BondManager, BondEvent
 from src.world_coherence import WorldStateCoherence, WorldFactType
 from src.moral_dilemma import DilemmaGenerator, DilemmaType
 from src.narrative import (
-    PayoffTracker, NPCMemoryBank, ConsequenceManager, ChoiceEchoSystem,
+    PayoffTracker, ConsequenceManager, ChoiceEchoSystem,
     OpeningHookSystem, NPCEmotionalStateMachine, MoralReputationSystem, DramaticIronyTracker,
     StoryBeatGenerator, PlotManager, BranchingNarrativeSystem, NPCGoalPursuitSystem,
-    EndingPreparationSystem, ImpossibleChoiceGenerator, FlashbackSystem,
     EndingPreparationSystem, ImpossibleChoiceGenerator, FlashbackSystem,
     UnreliableNarratorSystem, MetaNarrativeSystem, NPCSkillSystem, NarrativeMultiplayerSystem
 )
@@ -37,6 +36,7 @@ from src.combat_orchestrator import CombatOrchestrator, create_combat_orchestrat
 from src.utility_ai import evaluate_tactical_decision
 from src.goap import plan_npc_action
 from src.psychology import DreamSequenceEngine, PhobiaSystem, AddictionSystem, MoralInjurySystem, AttachmentSystem, TrustDynamicsSystem
+from src.npc.engine import NPCCognitiveEngine, CognitiveState
 
 
 
@@ -349,7 +349,8 @@ class NarrativeOrchestrator:
         narrative_output: str,
         location: str,
         active_npcs: list[str] = None,
-        roll_outcome: str = None
+        roll_outcome: str = None,
+        cognitive_states: Dict[str, CognitiveState] = None
     ):
         """
         Process a complete interaction to update all tracking systems.
@@ -493,6 +494,54 @@ class NarrativeOrchestrator:
         # Simple heuristic: if action implies violence, update combat
         if any(w in player_input.lower() for w in ["attack", "shoot", "hit", "fire", "fight"]):
              self.combat_system.update(player_health=1.0) # Placeholder health
+
+        # 11. Run Cognitive Engine (Phase 4)
+        # React to the turn and update deep memory/relationships
+        # 11. Run Cognitive Engine (Phase 4)
+        # React to the turn and update deep memory/relationships
+        if cognitive_states:
+            try:
+                engine = NPCCognitiveEngine()
+                for npc_name in active_npcs:
+                    # Heuristic: Match name to ID or use name as ID 
+                    # (In a real app, active_npcs should be IDs, but here they are names like "Janus")
+                    # We try to find a matching state key
+                    target_state = None
+                    
+                    # Direct lookup
+                    if npc_name in cognitive_states:
+                        target_state = cognitive_states[npc_name]
+                    else:
+                        # Fuzzy / Lowercase lookup
+                        for cid, cstate in cognitive_states.items():
+                            if cstate.profile.name.lower() == npc_name.lower():
+                                target_state = cstate
+                                break
+                    
+                    if target_state:
+                        # Run the cycle
+                        # We combine input and result so they observe the full scene
+                        observation = f"Player Action: {player_input} | Outcome: {narrative_output[:200]}..."
+                        
+                        try:
+                            # Process turn (Perceive -> Remember -> Act/Update)
+                            cog_output = engine.process_turn(
+                                state=target_state,
+                                player_input=observation,
+                                location=location,
+                                time="Current Time" # Todo: pass time
+                            )
+                            # The 'state_updates' are applied in-place to 'target_state' by the engine
+                            # The 'narrative' output (NPC's reaction) is currently discarded or could be logged
+                            print(f"[Cognitive Reaction - {npc_name}]: {cog_output.get('narrative', 'Silent')}")
+                        except Exception as inner_e:
+                            print(f"Cognitive Engine failed for {npc_name} (Inner): {inner_e}")
+                            import traceback
+                            traceback.print_exc()
+            except Exception as e:
+                print(f"Cognitive Engine failed (Outer Initialization): {e}")
+                import traceback
+                traceback.print_exc()
                 
     def to_dict(self) -> dict:
         """Serialize all systems."""

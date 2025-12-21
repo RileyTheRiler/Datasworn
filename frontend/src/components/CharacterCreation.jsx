@@ -4,8 +4,42 @@ const API_URL = 'http://localhost:8000/api';
 
 /**
  * CharacterCreation - Multi-step wizard for new character creation
- * Steps: 1) Name & Background 2) Stats 3) Assets 4) Vow 5) Review
+ * Steps: 1) Identity (Name, Archetype, Look) 2) Stats 3) Assets 4) Vow 5) Review
  */
+
+const ARCHETYPES = {
+    "Bounty Hunter": {
+        description: "A relentless pursuer of targets across the sector.",
+        visual: "Scarred armor, tactical visor, heavy weapons, determined gaze.",
+        stats: { edge: 2, heart: 1, iron: 3, shadow: 1, wits: 2 },
+        assets: ["Slayer", "Ironclad", "Combat Bot"]
+    },
+    "Courier": {
+        description: "Delivering cargo and data to the most dangerous corners of the Forge.",
+        visual: "Flight jacket, worn leather equipment, confident smirk, goggles.",
+        stats: { edge: 3, heart: 1, iron: 1, shadow: 2, wits: 2 },
+        assets: ["Navigator", "Overdrive", "Starship"]
+    },
+    "Mystic": {
+        description: "Wielding strange powers and unearthing ancient secrets.",
+        visual: "Robes or tattered cloaks, glowing artifacts, haunted eyes, mysterious symbols.",
+        stats: { edge: 1, heart: 2, iron: 1, shadow: 2, wits: 3 },
+        assets: ["Sighted", "Communion", "Sprite"]
+    },
+    "Mercenary": {
+        description: "Fighting for coin, honor, or the thrill of battle.",
+        visual: "Battle-worn power armor, scars, military haircut, imposing stance.",
+        stats: { edge: 1, heart: 2, iron: 3, shadow: 1, wits: 2 },
+        assets: ["Blade-Bound", "Skirmisher", "Hound"]
+    },
+    "Scavenger": {
+        description: "Finding value in the refuse of the precursors and the lost.",
+        visual: "Patchwork tech gear, multi-tool belt, grease stains, wary expression.",
+        stats: { edge: 2, heart: 1, iron: 1, shadow: 3, wits: 2 },
+        assets: ["Scavenger", "Grappler", "Drone"]
+    }
+};
+
 const CharacterCreation = ({ onComplete, onCancel }) => {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
@@ -13,7 +47,9 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
 
     // Character data
     const [name, setName] = useState('');
-    const [background, setBackground] = useState('');
+    const [archetype, setArchetype] = useState('');
+    const [visualDescription, setVisualDescription] = useState('');
+    const [history, setHistory] = useState(''); // Narrative background
     const [stats, setStats] = useState({
         edge: 1,
         heart: 2,
@@ -36,6 +72,21 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
             .then(data => setAvailableAssets(data.assets || {}))
             .catch(console.error);
     }, []);
+
+    const handleArchetypeSelect = (role) => {
+        setArchetype(role);
+        const data = ARCHETYPES[role];
+        if (data) {
+            setVisualDescription(data.visual);
+            setStats(data.stats);
+            // Pre-select assets if we can match them to IDs? 
+            // For now, we'll just set them as strings, assuming the backend can handle loose matching or we'll filter later
+            // The backend expects IDs, but the current UI just sends names.
+            // We should ideally verify these against availableAssets, but for MVP just setting them is fine.
+            // The user can modify them in step 3.
+            setSelectedAssets(data.assets);
+        }
+    };
 
     const handleStatChange = (stat, delta) => {
         const newVal = stats[stat] + delta;
@@ -65,8 +116,8 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                     character_name: name,
                     background_vow: vow || "Find my place among the stars",
                     stats: stats,
-                    asset_ids: selectedAssets,
-                    background: background
+                    asset_ids: selectedAssets, // These might need to be resolved to actual IDs if they aren't exact
+                    background: visualDescription // Map visual description to background for image gen
                 })
             });
             const data = await res.json();
@@ -82,7 +133,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
 
     const canProceed = () => {
         switch (step) {
-            case 1: return name.trim().length >= 2;
+            case 1: return name.trim().length >= 2 && archetype;
             case 2: return remaining === 0;
             case 3: return true; // Assets optional
             case 4: return true; // Vow optional (has default)
@@ -95,30 +146,53 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
             case 1:
                 return (
                     <div className="space-y-6">
-                        <h3 className="text-xl text-disco-cyan font-mono">Who are you?</h3>
+                        <h3 className="text-xl text-disco-cyan font-mono">Identity & Archetype</h3>
 
-                        <div>
-                            <label className="block text-sm text-disco-muted mb-2">Character Name</label>
-                            <input
-                                type="text"
-                                value={name}
-                                onChange={e => setName(e.target.value)}
-                                placeholder="Enter your name..."
-                                className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper 
-                                         text-xl font-serif focus:border-disco-cyan focus:outline-none"
-                                autoFocus
-                            />
-                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm text-disco-muted mb-2">Character Name</label>
+                                    <input
+                                        type="text"
+                                        value={name}
+                                        onChange={e => setName(e.target.value)}
+                                        placeholder="Enter your name..."
+                                        className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper 
+                                                 text-xl font-serif focus:border-disco-cyan focus:outline-none"
+                                        autoFocus
+                                    />
+                                </div>
 
-                        <div>
-                            <label className="block text-sm text-disco-muted mb-2">Background (optional)</label>
-                            <textarea
-                                value={background}
-                                onChange={e => setBackground(e.target.value)}
-                                placeholder="Describe your character... (e.g., 'A former soldier haunted by past failures')"
-                                className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper 
-                                         font-serif focus:border-disco-cyan focus:outline-none h-24 resize-none"
-                            />
+                                <div>
+                                    <label className="block text-sm text-disco-muted mb-2">Visual Description (for Portrait)</label>
+                                    <textarea
+                                        value={visualDescription}
+                                        onChange={e => setVisualDescription(e.target.value)}
+                                        placeholder="Describe your appearance (e.g., weathered face, cybernetic eye, pilot gear)..."
+                                        className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper 
+                                                 font-serif focus:border-disco-cyan focus:outline-none h-32 resize-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="block text-sm text-disco-muted">Choose Archetype</label>
+                                <div className="grid grid-cols-1 gap-2 max-h-[400px] overflow-y-auto pr-2">
+                                    {Object.entries(ARCHETYPES).map(([role, data]) => (
+                                        <button
+                                            key={role}
+                                            onClick={() => handleArchetypeSelect(role)}
+                                            className={`p-3 text-left border rounded transition-all
+                                                ${archetype === role
+                                                    ? 'border-disco-cyan bg-disco-cyan/10 text-disco-paper'
+                                                    : 'border-disco-muted/30 hover:border-disco-muted text-disco-muted hover:text-disco-paper'}`}
+                                        >
+                                            <div className="font-mono font-bold">{role}</div>
+                                            <div className="text-xs opacity-70 mt-1">{data.description}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 );
@@ -168,6 +242,11 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                                 </div>
                             ))}
                         </div>
+                        {archetype && (
+                            <div className="text-xs text-disco-muted mt-2 text-center">
+                                Suggested stats for {archetype} applied. Adjust as needed.
+                            </div>
+                        )}
                     </div>
                 );
 
@@ -180,6 +259,12 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                                 {selectedAssets.length}/3 selected
                             </span>
                         </div>
+
+                        {archetype && selectedAssets.length > 0 && (
+                            <div className="text-xs bg-disco-cyan/10 p-2 border border-disco-cyan/30 text-disco-cyan mb-2">
+                                Pre-selected assets for {archetype}. Click to remove or add others.
+                            </div>
+                        )}
 
                         <div className="max-h-64 overflow-y-auto space-y-4 pr-2">
                             {Object.entries(availableAssets).map(([type, assets]) => (
@@ -259,11 +344,15 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                                 <span className="text-disco-muted">Name</span>
                                 <span className="text-disco-paper font-serif text-lg">{name}</span>
                             </div>
+                            <div className="flex justify-between border-b border-disco-muted/20 pb-2">
+                                <span className="text-disco-muted">Archetype</span>
+                                <span className="text-disco-cyan font-mono">{archetype}</span>
+                            </div>
 
-                            {background && (
+                            {visualDescription && (
                                 <div className="border-b border-disco-muted/20 pb-2">
-                                    <span className="text-disco-muted">Background</span>
-                                    <p className="text-disco-paper mt-1">{background}</p>
+                                    <span className="text-disco-muted">Visual Description</span>
+                                    <p className="text-disco-paper mt-1 italic text-xs">{visualDescription}</p>
                                 </div>
                             )}
 
@@ -276,7 +365,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
 
                             <div className="flex justify-between border-b border-disco-muted/20 pb-2">
                                 <span className="text-disco-muted">Assets</span>
-                                <span className="text-disco-accent">
+                                <span className="text-disco-accent text-right">
                                     {selectedAssets.length > 0 ? selectedAssets.join(', ') : 'None selected'}
                                 </span>
                             </div>

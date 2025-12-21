@@ -11,6 +11,7 @@ import RuleTooltip, { QuickReferencePanel } from './components/RuleTooltip';
 import { useKeyboardShortcuts, KeyboardHelpOverlay } from './components/KeyboardShortcuts';
 import { useAccessibility } from './contexts/AccessibilityContext';
 import { useSoundEffects } from './contexts/SoundEffectsContext';
+import MusicPlayer from './components/MusicPlayer';
 import { useVoice } from './contexts/VoiceContext';
 import VoiceInput from './components/VoiceInput';
 import TacticalBlueprint from './components/TacticalBlueprint';
@@ -24,6 +25,7 @@ import CombatDashboard from './components/CombatDashboard';
 import StoryThreads from './components/StoryThreads';
 import PsycheDashboard from './components/PsycheDashboard';
 import WorldEvents from './components/WorldEvents';
+import NPCDebugger from './components/NPCDebugger';
 
 
 const API_URL = 'http://localhost:8000/api';
@@ -51,6 +53,7 @@ const MarkdownText = ({ text }) => {
 const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     const { character, narrative, world, session } = gameState;
     const scrollRef = useRef(null);
+    const [conversationMode, setConversationMode] = useState(false);
     const [input, setInput] = React.useState("");
     const [showSkillCheck, setShowSkillCheck] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
@@ -68,6 +71,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     const [showCombatDashboard, setShowCombatDashboard] = useState(false);
     const [showStoryThreads, setShowStoryThreads] = useState(false);
     const [showWorldEvents, setShowWorldEvents] = useState(false);
+    const [showDebugger, setShowDebugger] = useState(false);
     const [activeStat, setActiveStat] = useState({ name: 'Iron', value: character.stats.iron });
 
     // Accessibility and sound contexts
@@ -117,7 +121,9 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             setShowBlueprint(false);
             setShowAlbum(false);
             setShowShipBlueprint(false);
+            setShowShipBlueprint(false);
             setShowCombatDashboard(false);
+            setShowDebugger(false);
         }, []),
         onShowHelp: useCallback(() => setShowHelp(true), []),
         onToggleMute: toggleMute,
@@ -174,7 +180,8 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             return;
         }
 
-        onAction(input);
+        // Pass conversation mode type
+        onAction(input, conversationMode ? 'cognitive' : 'narrative');
         setInput("");
         setTranscript("");
     };
@@ -306,8 +313,21 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                 </div>
 
                 {/* Input Area - Sticky to Bottom */}
-                <div className="sticky bottom-0 p-8 pb-12 bg-disco-bg border-t border-disco-muted/30 backdrop-blur-sm">
+                <div className={`sticky bottom-0 p-8 pb-12 bg-disco-bg border-t backdrop-blur-sm transition-colors duration-500 ${conversationMode ? 'border-disco-cyan/60 bg-disco-cyan/5' : 'border-disco-muted/30'}`}>
                     <form onSubmit={handleSubmit} className="max-w-3xl mx-auto relative group flex gap-2">
+                        {/* Conversation Mode Toggle */}
+                        <button
+                            type="button"
+                            onClick={() => setConversationMode(prev => !prev)}
+                            className={`px-4 py-2 border font-serif transition-all duration-300 flex items-center gap-2 ${conversationMode
+                                ? 'bg-disco-cyan text-black border-disco-cyan font-bold shadow-[0_0_15px_rgba(34,211,238,0.4)]'
+                                : 'border-disco-muted text-disco-paper hover:bg-disco-accent hover:text-black'
+                                }`}
+                            title={conversationMode ? "Switch to Narrative Mode" : "Switch to Conversation Mode"}
+                        >
+                            {conversationMode ? "💬 NPC" : "📜 Story"}
+                        </button>
+
                         {/* Skill Check Toggle */}
                         <button
                             type="button"
@@ -322,8 +342,11 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
 
                         <input
                             type="text"
-                            className="flex-1 bg-black/40 border-b-2 border-disco-muted text-disco-paper font-serif text-xl p-4 focus:outline-none focus:border-disco-accent focus:ring-2 focus:ring-disco-accent/50 focus:animate-[inputPulse_2s_ease-in-out_infinite] transition-all placeholder:text-disco-muted/30"
-                            placeholder="What do you do?"
+                            className={`flex-1 bg-black/40 border-b-2 font-serif text-xl p-4 focus:outline-none transition-all placeholder:text-disco-muted/30 ${conversationMode
+                                ? 'border-disco-cyan text-disco-cyan focus:border-disco-cyan focus:ring-2 focus:ring-disco-cyan/50'
+                                : 'border-disco-muted text-disco-paper focus:border-disco-accent focus:ring-2 focus:ring-disco-accent/50 focus:animate-[inputPulse_2s_ease-in-out_infinite]'
+                                }`}
+                            placeholder={conversationMode ? "Say something to the NPC..." : "What do you do?"}
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             disabled={isLoading}
@@ -341,6 +364,14 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                             className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 transition-opacity text-disco-accent font-serif font-bold tracking-wider uppercase"
                         >
                             Execute
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleManualCapture}
+                            className="absolute right-24 top-1/2 -translate-y-1/2 text-disco-purple hover:text-disco-paper transition-colors opacity-60 hover:opacity-100"
+                            title="Capture Cinematic Moment"
+                        >
+                            📷
                         </button>
                     </form>
 
@@ -409,6 +440,8 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                         >
                             📸 Album
                         </button>
+                        <div className="w-px h-4 bg-disco-muted/30 mx-2"></div>
+                        <MusicPlayer />
                         <button
                             onClick={() => setShowStarMap(true)}
                             className="text-disco-cyan hover:text-disco-paper transition-colors"
@@ -443,6 +476,13 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                             title="Narrative Threads & Tension"
                         >
                             🧶 Story
+                        </button>
+                        <button
+                            onClick={() => setShowDebugger(true)}
+                            className="text-pink-500 hover:text-white transition-colors"
+                            title="NPC Cognitive Debugger"
+                        >
+                            🧠 Brain
                         </button>
                     </div>
 
@@ -554,6 +594,27 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                         </div>
                     )}
 
+                    {/* Photo Album Modal */}
+                    <PhotoAlbum
+                        sessionId="default"
+                        visible={showAlbum}
+                        onClose={() => setShowAlbum(false)}
+                    />
+
+                    {/* Star Map Modal */}
+                    <StarMap
+                        sessionId="default"
+                        visible={showStarMap}
+                        onClose={() => setShowStarMap(false)}
+                    />
+
+                    {/* Rumor Board Modal */}
+                    <RumorBoard
+                        sessionId="default"
+                        visible={showRumorBoard}
+                        onClose={() => setShowRumorBoard(false)}
+                    />
+
                     {/* Psyche Dashboard (Always On Widget) */}
                     <PsycheDashboard />
                 </div>
@@ -570,6 +631,13 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             <AutoSaveIndicator
                 sessionId="default"
                 saveInterval={120000}
+            />
+
+            {/* NPC Debugger Modal */}
+            <NPCDebugger
+                sessionId="default"
+                visible={showDebugger}
+                onClose={() => setShowDebugger(false)}
             />
         </div>
     )

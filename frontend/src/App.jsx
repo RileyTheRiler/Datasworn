@@ -6,13 +6,14 @@ import { ToastProvider } from './components/ToastProvider'
 import { TensionVignette, AmbientParticles, HijackOverlay } from './components/UXEffects'
 import AudioManager from './components/AudioManager'
 import { SoundEffectsProvider } from './contexts/SoundEffectsContext'
+import { MusicProvider, useMusic } from './contexts/MusicContext'
 import { AccessibilityProvider } from './contexts/AccessibilityContext'
-import { NPCCacheProvider } from './contexts/NPCCacheContext'
+import { NPCCacheProvider, useNPCCache } from './contexts/NPCCacheContext'
 import { AudioProvider } from './contexts/AudioContext'
 import { VoiceProvider } from './contexts/VoiceContext'
 import api from './utils/api'
 
-function App() {
+function GameContent() {
   const [session, setSession] = useState(null)
   const [gameState, setGameState] = useState(null)
   const [assets, setAssets] = useState({ scene_image: null, portrait: null })
@@ -22,6 +23,8 @@ function App() {
   const [hijackAspect, setHijackAspect] = useState(null)
   const [isOnline, setIsOnline] = useState(true)
   const [showCharacterCreation, setShowCharacterCreation] = useState(true) // Start with creation
+
+  const { populateFromGameState } = useNPCCache();
 
   // Monitor online status
   useEffect(() => {
@@ -36,6 +39,13 @@ function App() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Sync NPC Cache when GameState updates
+  useEffect(() => {
+    if (gameState?.relationships?.crew) {
+      populateFromGameState(gameState.relationships.crew);
+    }
+  }, [gameState, populateFromGameState]);
 
   // Poll for psyche state to update tension
   useEffect(() => {
@@ -88,22 +98,36 @@ function App() {
     }
   };
 
-  const handleAction = async (actionText) => {
+  const handleAction = async (actionText, type = 'narrative') => {
     if (!session) return;
 
     setLoading(true)
     try {
-      const data = await api.post('/chat', {
-        session_id: session,
-        action: actionText
-      });
+      let endpoint = '/chat';
+      let payload = { session_id: session, action: actionText };
+
+      if (type === 'cognitive') {
+        endpoint = '/cognitive/interact';
+        // Cognitive endpoint uses same payload structure for now
+      }
+
+      const data = await api.post(endpoint, payload);
       setGameState(data.state)
+
       if (data.assets) {
         setAssets(prev => ({ ...prev, ...data.assets }))
         if (data.assets.voice_audio && window.playVoice) {
           window.playVoice(data.assets.voice_audio);
         }
       }
+
+      // Handle specific Cognitive Engine feedback (e.g. mood updates)
+      if (type === 'cognitive' && data.state_updates) {
+        // Could dispatch a toast here if ToastProvider context was accessible, 
+        // but for now relying on state update to reflect changes in UI.
+        console.log("Cognitive State Updates:", data.state_updates);
+      }
+
       setIsOnline(true)
     } catch (err) {
       console.error("Action failed:", err)
@@ -169,44 +193,66 @@ function App() {
       <AudioProvider>
         <VoiceProvider>
           <SoundEffectsProvider>
-            <NPCCacheProvider>
-              <ToastProvider>
-                {/* Connection Status Indicator */}
-                {!isOnline && (
-                  <div className="fixed top-4 right-4 z-[200] bg-disco-red/90 text-white px-4 py-2 rounded-lg font-mono text-sm border border-disco-red shadow-lg">
-                    ⚠ Offline Mode
-                  </div>
-                )}
+            <MusicProvider>
+              <NPCCacheProvider>
+                <ToastProvider>
+                  {/* Connection Status Indicator */}
+                  {!isOnline && (
+                    <div className="fixed top-4 right-4 z-[200] bg-disco-red/90 text-white px-4 py-2 rounded-lg font-mono text-sm border border-disco-red shadow-lg">
+                      ⚠ Offline Mode
+                    </div>
+                  )}
 
-                {/* Ambient Particles - subtle floating dust */}
-                <AmbientParticles type="dust" count={15} />
+                  {/* Ambient Particles - subtle floating dust */}
+                  <AmbientParticles type="dust" count={15} />
 
-                {/* Tension Vignette - intensifies with stress */}
-                <TensionVignette tension={tension} isActive={true} />
+                  {/* Tension Vignette - intensifies with stress */}
+                  <TensionVignette tension={tension} isActive={true} />
 
-                {/* Hijack Overlay - full takeover on psychological hijack */}
-                <HijackOverlay
-                  isActive={hijackActive}
-                  aspect={hijackAspect}
-                  onComplete={handleHijackComplete}
-                />
+                  {/* Hijack Overlay - full takeover on psychological hijack */}
+                  <HijackOverlay
+                    isActive={hijackActive}
+                    aspect={hijackAspect}
+                    onComplete={handleHijackComplete}
+                  />
 
-                {/* Main Game Layout */}
-                <Layout
-                  gameState={gameState}
-                  assets={assets}
-                  onAssetsUpdate={setAssets}
-                  onAction={handleAction}
-                  isLoading={loading}
-                />
+                  {/* Main Game Layout */}
+                  <Layout
+                    gameState={gameState}
+                    assets={assets}
+                    onAssetsUpdate={setAssets}
+                    onAction={handleAction}
+                    isLoading={loading}
+                  />
 
-                {/* Psyche Dashboard - shows psychological state */}
-                <PsycheDashboard />
+                  {/* Psyche Dashboard - shows psychological state */}
+                  <PsycheDashboard />
 
-                {/* Audio Manager - handles all audio playback */}
-                <AudioManager sessionId={session} />
-              </ToastProvider>
-            </NPCCacheProvider>
+                  {/* Audio Manager - handles all audio playback */}
+                  <AudioManager sessionId={session} />
+                </ToastProvider>
+              </NPCCacheProvider>
+            </MusicProvider>
+          </SoundEffectsProvider>
+        </VoiceProvider>
+      </AudioProvider>
+    </AccessibilityProvider>
+  )
+}
+
+function App() {
+  return (
+    <AccessibilityProvider>
+      <AudioProvider>
+        <VoiceProvider>
+          <SoundEffectsProvider>
+            <MusicProvider>
+              <NPCCacheProvider>
+                <ToastProvider>
+                  <GameContent />
+                </ToastProvider>
+              </NPCCacheProvider>
+            </MusicProvider>
           </SoundEffectsProvider>
         </VoiceProvider>
       </AudioProvider>

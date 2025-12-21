@@ -71,6 +71,10 @@ GUIDELINES - THE CHORUS OF THE MIND:
 - **Brain Stem**: The lizard. Hunger, pain, physical survival, exhaustion. Speaks in raw somatic sensations.
 - **Temporal Lobe**: The interpreter. Social intuition, empathy, language, connection. Speaks in emotions and social dynamics.
 
+IDENTITY AND DISSONANCE:
+- If the character identity (Archetype) is strong, voices should reinforce that persona.
+- If **Dissonance** is high, the voices should be conflicted, questioning the character's recent inconsistent actions. They might argue about who they "really" are.
+
 OUTPUT (JSON):
 {
   "voices": [

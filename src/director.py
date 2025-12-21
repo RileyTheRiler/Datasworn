@@ -250,6 +250,77 @@ class DirectorAgent:
     dream_engine: DreamEngine = field(default_factory=DreamEngine)
     _client: ollama.Client = field(default_factory=ollama.Client, repr=False)
     
+    def __post_init__(self):
+        """Load state from DB if available."""
+        self._load_state()
+
+    def _get_db(self):
+        from src.database import get_db
+        return get_db()
+
+    def _load_state(self):
+        """Load DirectorState from SQLite entities table."""
+        try:
+            db = self._get_db()
+            rows = db.query("SELECT metadata FROM entities WHERE entity_id = ?", ("global_director",))
+            if rows:
+                data = json.loads(rows[0]['metadata'])
+                self.state = DirectorState.from_dict(data)
+        except Exception as e:
+            print(f"[Director Load Error] {e}")
+
+    def _save_state(self):
+        """Persist DirectorState to SQLite entities table."""
+        try:
+            db = self._get_db()
+            json_str = json.dumps(self.state.to_dict())
+            # Upsert logic
+            db.execute("""
+                INSERT INTO entities (entity_id, entity_type, name, created_at, metadata)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(entity_id) DO UPDATE SET metadata=excluded.metadata
+            """, ("global_director", "system", "Director AI", 0, json_str))
+        except Exception as e:
+            print(f"[Director Save Error] {e}")
+
+    def publish_global_event(self, summary: str, importance: int = 5, location_id: str = None, event_type: str = "world_event"):
+        """
+        Log a world event and propagate it to NPCs.
+        """
+        db = self._get_db()
+        try:
+            # 1. Create Event
+            cursor = db.execute(
+                """
+                INSERT INTO events (event_type, game_timestamp, summary, importance, location_entity_id)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (event_type, "Now", summary, importance, location_id)
+            )
+            event_id = cursor.lastrowid
+            
+            # 2. Propagate to Witnesses (NPCs in same location)
+            # For this MVP, we fetch all NPCs who are 'in' this location (if we had location tracking in DB)
+            # Since location tracking is currently loosely defined in python structs, we'll assume ALL NPCs get 'public' news
+            # if importance > 8, otherwise we'd need a location lookup.
+            
+            # Simulated Propagation: If global/high importance, everyone knows eventually.
+            if importance >= 8:
+                # Everyone hears the news
+                all_npcs = db.query("SELECT entity_id FROM entities WHERE entity_type='npc'")
+                for npc in all_npcs:
+                    db.execute(
+                        "INSERT OR IGNORE INTO npc_knowledge (npc_entity_id, event_id, learned_at, confidence, source_type) VALUES (?, ?, ?, ?, ?)",
+                        (npc['entity_id'], event_id, "Now", 0.9, 'public_news')
+                    )
+            elif location_id:
+                # Only local NPCs (stub logic as we don't have location column in entities table yet, 
+                # strictly strictly speaking, location is in aspects or memory)
+                pass 
+                
+        except Exception as e:
+            print(f"[Event Publish Error] {e}")
+    
     def analyze(
         self,
         world_state: dict[str, Any],
@@ -371,6 +442,7 @@ class DirectorAgent:
         # Update state
         self.state.record_pacing(plan.pacing.value)
         self.state.increment_scene(plan.pacing == Pacing.FAST)
+        self._save_state()
         
         return plan
     
