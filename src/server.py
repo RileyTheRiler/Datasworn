@@ -45,6 +45,7 @@ from src.psychology_api_models import *
 from src.additional_api import register_starmap_routes, register_rumor_routes, register_audio_routes  # Added import
 from src.quickstart_characters import get_quickstart_characters, get_quickstart_character_by_id
 from src.narrative_templates import get_all_templates, get_suggested_vows_for_path
+from src.story_templates import get_story_templates, get_story_template_by_id
 
 app = FastAPI(title="Starforged AI GM")
 
@@ -99,6 +100,8 @@ class InitRequest(BaseModel):
     portrait_style: str = "realistic"
     # Quick-start character support
     quickstart_id: Optional[str] = None  # If provided, use a pre-built character
+    # Story template support
+    story_template_id: Optional[str] = None  # If provided, use a pre-built story setting
 
 class ActionRequest(BaseModel):
     session_id: str
@@ -141,6 +144,11 @@ def get_vows_for_path(path_name: str):
     """Get suggested vows for a specific character path."""
     vows = get_suggested_vows_for_path(path_name)
     return {"path": path_name, "suggested_vows": vows}
+
+@app.get("/api/story/templates")
+def get_story_template_list():
+    """Get all available story templates/settings."""
+    return {"templates": get_story_templates()}
 
 @app.post("/api/session/start")
 async def start_session(req: InitRequest):
@@ -211,7 +219,45 @@ async def start_session(req: InitRequest):
     # Apply custom background vow (unless quick-start already set it)
     if req.background_vow and not req.quickstart_id:
         state['character'].vows[0].name = req.background_vow
-    
+
+    # Handle story template selection
+    if req.story_template_id:
+        story_template = get_story_template_by_id(req.story_template_id)
+        if not story_template:
+            raise HTTPException(status_code=404, detail=f"Story template '{req.story_template_id}' not found")
+
+        # Set starting location
+        state['world'].current_location = story_template.starting_location
+        state['world'].location_type = story_template.setting_type
+
+        # Set opening scene in narrative state
+        state['narrative'].current_scene = story_template.opening_scene
+
+        # Store story template info in campaign summary
+        story_context = (
+            f"Story Setting: {story_template.name}\n"
+            f"{story_template.tagline}\n\n"
+            f"Setting Type: {story_template.setting_type}\n"
+            f"Starting Location: {story_template.starting_location}\n\n"
+            f"Initial Scenario: {story_template.initial_scenario}\n\n"
+            f"Tone: {story_template.tone}\n"
+            f"Difficulty: {story_template.difficulty}\n\n"
+            f"Themes: {', '.join(story_template.suggested_themes)}\n\n"
+            f"Environmental Conditions:\n"
+        )
+        for condition, value in story_template.environmental_conditions.items():
+            story_context += f"  - {condition.title()}: {value}\n"
+
+        # Append to existing campaign summary or create new one
+        if state['narrative'].campaign_summary:
+            state['narrative'].campaign_summary += "\n\n" + story_context
+        else:
+            state['narrative'].campaign_summary = story_context
+
+        # Set environmental visuals if available
+        state['world'].current_time = story_template.environmental_conditions.get("lighting", "Day")
+        state['world'].current_weather = story_template.environmental_conditions.get("atmosphere", "Clear")
+
     # Generate initial assets
     try:
         background_hint = req.background or "A gritty sci-fi survivor, determined expression"

@@ -7,11 +7,13 @@ const API_URL = 'http://localhost:8000/api';
  * Steps: 1) Name & Background 2) Stats 3) Assets 4) Vow 5) Review
  */
 const CharacterCreation = ({ onComplete, onCancel }) => {
-    const [step, setStep] = useState(0);  // Start at 0 for quick-start selection
+    const [step, setStep] = useState(0);  // Start at 0 for story template selection
     const [loading, setLoading] = useState(false);
     const [availableAssets, setAvailableAssets] = useState({});
     const [quickstartCharacters, setQuickstartCharacters] = useState([]);
+    const [storyTemplates, setStoryTemplates] = useState([]);
     const [selectedQuickstart, setSelectedQuickstart] = useState(null);
+    const [selectedStoryTemplate, setSelectedStoryTemplate] = useState(null);
 
     // Character data
     const [name, setName] = useState('');
@@ -31,7 +33,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
     const usedPoints = Object.values(stats).reduce((a, b) => a + b, 0);
     const remaining = totalPoints - usedPoints;
 
-    // Load available assets and quick-start characters on mount
+    // Load available assets, quick-start characters, and story templates on mount
     useEffect(() => {
         fetch(`${API_URL}/assets/available`)
             .then(res => res.json())
@@ -41,6 +43,11 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
         fetch(`${API_URL}/quickstart/characters`)
             .then(res => res.json())
             .then(data => setQuickstartCharacters(data.characters || []))
+            .catch(console.error);
+
+        fetch(`${API_URL}/story/templates`)
+            .then(res => res.json())
+            .then(data => setStoryTemplates(data.templates || []))
             .catch(console.error);
     }, []);
 
@@ -66,13 +73,17 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
         setLoading(true);
         try {
             const payload = selectedQuickstart
-                ? { quickstart_id: selectedQuickstart.id }
+                ? {
+                    quickstart_id: selectedQuickstart.id,
+                    story_template_id: selectedStoryTemplate?.id
+                }
                 : {
                     character_name: name,
                     background_vow: vow || "Find my place among the stars",
                     stats: stats,
                     asset_ids: selectedAssets,
-                    background: background
+                    background: background,
+                    story_template_id: selectedStoryTemplate?.id
                 };
 
             const res = await fetch(`${API_URL}/session/start`, {
@@ -93,18 +104,20 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
 
     const canProceed = () => {
         switch (step) {
-            case 0: return true; // Quick-start selection is optional
-            case 1: return selectedQuickstart || name.trim().length >= 2;
-            case 2: return selectedQuickstart || remaining === 0;
-            case 3: return true; // Assets optional
-            case 4: return true; // Vow optional (has default)
+            case 0: return true; // Story template selection is optional
+            case 1: return true; // Character selection is optional
+            case 2: return selectedQuickstart || name.trim().length >= 2;
+            case 3: return selectedQuickstart || remaining === 0;
+            case 4: return true; // Assets optional
+            case 5: return true; // Vow optional (has default)
+            case 6: return true; // Review
             default: return true;
         }
     };
 
     const renderStep = () => {
         // If quick-start selected, skip to review
-        if (selectedQuickstart && step > 0 && step < 5) {
+        if (selectedQuickstart && step > 1 && step < 6) {
             return (
                 <div className="space-y-6">
                     <h3 className="text-xl text-disco-cyan font-mono">{selectedQuickstart.title}</h3>
@@ -152,7 +165,50 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
             case 0:
                 return (
                     <div className="space-y-6">
-                        <h3 className="text-xl text-disco-cyan font-mono">Choose Your Path</h3>
+                        <h3 className="text-xl text-disco-cyan font-mono">Choose Your Story</h3>
+                        <p className="text-sm text-disco-muted">
+                            Select a story template to set the scene for your adventure, or skip to create your own setting.
+                        </p>
+
+                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                            {storyTemplates.map(template => (
+                                <button
+                                    key={template.id}
+                                    onClick={() => setSelectedStoryTemplate(template)}
+                                    className={`w-full p-4 text-left border transition-all ${
+                                        selectedStoryTemplate?.id === template.id
+                                            ? 'border-disco-cyan bg-disco-cyan/10'
+                                            : 'border-disco-muted/30 hover:border-disco-muted bg-disco-bg/50'
+                                    }`}
+                                >
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <div className="font-mono text-disco-paper">{template.name}</div>
+                                            <div className="text-xs text-disco-accent">{template.tagline}</div>
+                                        </div>
+                                        {selectedStoryTemplate?.id === template.id && (
+                                            <span className="text-disco-cyan text-xs">✓ Selected</span>
+                                        )}
+                                    </div>
+                                    <div className="text-xs text-disco-muted line-clamp-2">{template.description}</div>
+                                    <div className="flex gap-2 mt-2">
+                                        <span className="text-xs px-2 py-0.5 border border-disco-muted/30 text-disco-muted">
+                                            {template.tone}
+                                        </span>
+                                        <span className="text-xs px-2 py-0.5 border border-disco-muted/30 text-disco-muted">
+                                            {template.difficulty}
+                                        </span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                );
+
+            case 1:
+                return (
+                    <div className="space-y-6">
+                        <h3 className="text-xl text-disco-cyan font-mono">Choose Your Character</h3>
                         <p className="text-sm text-disco-muted">
                             Select a quick-start character to jump into the action, or create a custom character from scratch.
                         </p>
@@ -184,7 +240,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                             <button
                                 onClick={() => {
                                     setSelectedQuickstart(null);
-                                    setStep(1);
+                                    setStep(2);
                                 }}
                                 className="w-full p-4 text-left border border-disco-muted/30 hover:border-disco-cyan
                                          bg-disco-bg/50 transition-all"
@@ -196,7 +252,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                     </div>
                 );
 
-            case 1:
+            case 2:
                 return (
                     <div className="space-y-6">
                         <h3 className="text-xl text-disco-cyan font-mono">Who are you?</h3>
@@ -208,7 +264,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                                 value={name}
                                 onChange={e => setName(e.target.value)}
                                 placeholder="Enter your name..."
-                                className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper 
+                                className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper
                                          text-xl font-serif focus:border-disco-cyan focus:outline-none"
                                 autoFocus
                             />
@@ -220,14 +276,14 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                                 value={background}
                                 onChange={e => setBackground(e.target.value)}
                                 placeholder="Describe your character... (e.g., 'A former soldier haunted by past failures')"
-                                className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper 
+                                className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper
                                          font-serif focus:border-disco-cyan focus:outline-none h-24 resize-none"
                             />
                         </div>
                     </div>
                 );
 
-            case 2:
+            case 3:
                 return (
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
@@ -275,7 +331,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                     </div>
                 );
 
-            case 3:
+            case 4:
                 return (
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
@@ -319,7 +375,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                     </div>
                 );
 
-            case 4:
+            case 5:
                 return (
                     <div className="space-y-6">
                         <h3 className="text-xl text-disco-cyan font-mono">Swear Your Vow</h3>
@@ -370,7 +426,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                     </div>
                 );
 
-            case 5:
+            case 6:
                 return (
                     <div className="space-y-6">
                         <h3 className="text-xl text-disco-cyan font-mono">Ready to Begin?</h3>
@@ -423,7 +479,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                         Create Your Character
                     </h2>
                     <div className="text-sm text-disco-muted font-mono">
-                        {selectedQuickstart && step > 0 ? 'Review' : `Step ${step} of ${selectedQuickstart ? '1' : '5'}`}
+                        {selectedQuickstart && step > 1 ? 'Review' : `Step ${step} of ${selectedQuickstart ? '2' : '6'}`}
                     </div>
                 </div>
 
@@ -431,7 +487,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                 <div className="h-1 bg-disco-bg/50">
                     <div
                         className="h-full bg-disco-cyan transition-all duration-300"
-                        style={{ width: `${selectedQuickstart && step > 0 ? 100 : (step / 5) * 100}%` }}
+                        style={{ width: `${selectedQuickstart && step > 1 ? 100 : (step / 6) * 100}%` }}
                     />
                 </div>
 
@@ -445,8 +501,8 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                     <button
                         onClick={() => {
                             if (step > 0) {
-                                if (selectedQuickstart && step === 1) {
-                                    setStep(0);
+                                if (selectedQuickstart && step === 2) {
+                                    setStep(1);
                                     setSelectedQuickstart(null);
                                 } else {
                                     setStep(step - 1);
@@ -460,7 +516,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                         {step > 0 ? '← Back' : 'Cancel'}
                     </button>
 
-                    {(selectedQuickstart && step > 0) || step >= 5 ? (
+                    {(selectedQuickstart && step > 1) || step >= 6 ? (
                         <button
                             onClick={handleCreate}
                             disabled={loading}
@@ -471,8 +527,8 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                     ) : (
                         <button
                             onClick={() => {
-                                if (selectedQuickstart && step === 0) {
-                                    setStep(1);  // Jump to review for quick-start
+                                if (selectedQuickstart && step === 1) {
+                                    setStep(2);  // Jump to review for quick-start
                                 } else {
                                     setStep(step + 1);
                                 }
