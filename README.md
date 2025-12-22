@@ -46,6 +46,9 @@ pip install -r requirements.txt
 - Python 3.10+
 - **Either** Ollama (local) **or** a Gemini API key
 
+> **Note on Gemini SDK:**
+> The legacy `google-generativeai` package now emits a deprecation warning during the test suite. Google recommends migrating to `google.genai`; this repository will switch once downstream tooling finishes validating the new SDK. In the meantime the warning is harmless and tests still pass.
+
 ## LLM Configuration
 
 ### Option 1: Ollama (Local, Free)
