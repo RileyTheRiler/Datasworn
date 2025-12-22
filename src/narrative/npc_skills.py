@@ -7,6 +7,7 @@ in core competencies (Combat, Tech, Social).
 
 from dataclasses import dataclass, field
 from typing import Dict, Optional
+import random
 
 @dataclass
 class NPCSkills:
@@ -34,21 +35,26 @@ class NPCSkillSystem:
         """
         skills = self.get_skills(npc_id)
         skills.xp += amount
-        
-        # Simple Level Up Logic: 10 XP per level
-        if skills.xp >= skills.level * 10:
+
+        leveled_up = False
+
+        # Simple Level Up Logic: 10 XP per level with rollover XP
+        while skills.xp >= skills.level * 10:
+            threshold = skills.level * 10
+            skills.xp -= threshold
             skills.level += 1
-            skills.xp = 0 # Reset for next level (simple approach)
-            
+            leveled_up = True
+
             # Boost a random stat
-            import random
             roll = random.random()
-            if roll < 0.33: skills.combat += 1
-            elif roll < 0.66: skills.tech += 1
-            else: skills.social += 1
-            
-            return True
-        return False
+            if roll < 0.33:
+                skills.combat += 1
+            elif roll < 0.66:
+                skills.tech += 1
+            else:
+                skills.social += 1
+
+        return leveled_up
 
     def to_dict(self) -> dict:
         return {
