@@ -35,7 +35,9 @@ def roll_disco_check(
     Critical results override normal resolution:
     - Double sixes are an automatic success.
     - Double ones are an automatic failure.
-    deterministic dice for tests. Values must be between 1 and 6 if provided.
+
+    `fixed_dice` can be used to inject deterministic dice for tests or scripted
+    events. Values must be between 1 and 6 if provided.
     """
 
     if fixed_dice is not None:

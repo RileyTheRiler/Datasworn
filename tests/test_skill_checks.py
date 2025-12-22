@@ -70,3 +70,14 @@ def test_fixed_dice_validation():
         roll_baldurs_gate_check(modifier=0, dc=10, advantage=True, fixed_rolls=(0, 20))
     with pytest.raises(ValueError):
         roll_baldurs_gate_check(modifier=0, dc=10, disadvantage=True, fixed_rolls=(1,))
+
+
+def test_fixed_rolls_require_single_value_when_advantage_cancels():
+    with pytest.raises(ValueError):
+        roll_baldurs_gate_check(modifier=0, dc=10, advantage=True, disadvantage=True, fixed_rolls=(5, 15))
+
+    result = roll_baldurs_gate_check(modifier=2, dc=12, advantage=True, disadvantage=True, fixed_rolls=(10,))
+    assert result.dice == (10,)
+    assert result.applied_advantage is False
+    assert result.applied_disadvantage is False
+    assert result.success is True
