@@ -113,6 +113,11 @@ Running `--onboard` saves your LLM provider, model, and audio preferences so fut
 
 During CLI play, the Director and autosave systems stay in sync: `!status` reports the current tension/pacing heartbeat, and each turn is automatically saved so you can safely exit and resume later without losing your rhythm.
 
+### Test warnings to expect
+- The legacy `google-generativeai` SDK currently emits a deprecation warning; migration to `google.genai` is planned once tooling stabilizes.
+- A Pydantic v2 notice surfaces in `src/server.py` when invoking director psyche APIs; the warning is harmless and slated for cleanup during the SDK migration.
+- Some integration paths may log a coroutine-not-awaited runtime warning when exercising hazard generation fixtures; current behavior does not impact results and will be addressed with upcoming async refactors.
+
 ### Commands
 | Command | Action |
 |---------|--------|
