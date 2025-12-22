@@ -263,7 +263,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
                 <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-disco-cyan/40 z-50" />
                 <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-disco-cyan/40 z-50" />
                 {/* Isometric Viewport */}
-                <div className="flex-1 bg-black/80 relative overflow-hidden group">
+                <div className="viewport-container flex-1 bg-black/80 relative overflow-hidden group">
                     {/* Scene Display */}
                     <div className="absolute inset-0 z-0 group-hover:shadow-glow transition-shadow duration-300">
                         <SceneDisplay
@@ -289,7 +289,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
                 </div>
 
                 {/* Character HUD */}
-                <div className="h-1/3 bg-disco-panel p-6 border-t border-disco-muted/20 flex flex-col relative overflow-hidden">
+                <div className="stats-panel h-1/3 bg-disco-panel p-6 border-t border-disco-muted/20 flex flex-col relative overflow-hidden">
                     {/* Grunge Overlay for Panel */}
                     <div className="absolute inset-0 bg-grunge opacity-20 pointer-events-none"></div>
 
@@ -339,7 +339,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
                     animation: 'gridScroll 20s linear infinite'
                 }} />
                 {/* Log */}
-                <div className="flex-1 overflow-y-auto p-12 scroll-smooth" ref={scrollRef}>
+                <div className="narrative-scroll flex-1 overflow-y-auto p-12 scroll-smooth" ref={scrollRef}>
                     <div className="max-w-3xl mx-auto space-y-12">
                         <div className="prose prose-invert prose-lg text-disco-paper/90 fade-in leading-loose">
                             <TypewriterText
@@ -385,7 +385,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
 
                         <input
                             type="text"
-                            className="flex-1 bg-black/40 border-b-2 border-disco-muted text-disco-paper font-serif text-xl p-4 focus:outline-none focus:border-disco-accent focus:ring-2 focus:ring-disco-accent/50 focus:animate-[inputPulse_2s_ease-in-out_infinite] transition-all placeholder:text-disco-muted/30"
+                            className="action-input flex-1 bg-black/40 border-b-2 border-disco-muted text-disco-paper font-serif text-xl p-4 focus:outline-none focus:border-disco-accent focus:ring-2 focus:ring-disco-accent/50 focus:animate-[inputPulse_2s_ease-in-out_infinite] transition-all placeholder:text-disco-muted/30"
                             placeholder="What do you do?"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
