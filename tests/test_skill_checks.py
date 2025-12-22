@@ -131,3 +131,15 @@ def test_baldurs_gate_natural_twenty_overrides_high_dc():
     assert result.total == 18
     assert result.is_critical_success is True
     assert result.success is True
+
+
+def test_disco_probability_supports_negative_modifiers():
+    # Skill 3 with -2 modifiers rolls as +1 and needs 11+ on 2d6.
+    probability = disco_success_probability(skill=3, difficulty=12, modifiers=-2)
+    assert probability == round(3 / 36, 4)
+
+
+def test_baldurs_gate_probability_has_natural_twenty_floor():
+    # With an extreme DC, only a natural 20 should succeed.
+    probability = baldurs_gate_success_probability(modifier=-5, dc=30)
+    assert probability == 0.05
