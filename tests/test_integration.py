@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import os
 from pprint import pprint
@@ -42,7 +43,7 @@ def test_integration():
     
     print("\nRunning Director Node...")
     try:
-        director_out = director_node(state)
+        director_out = asyncio.run(director_node(state))
         print("Director Output Keys:", director_out.keys())
         # Apply updates
         if "director" in director_out:
