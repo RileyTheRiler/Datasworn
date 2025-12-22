@@ -4,13 +4,15 @@ import PsycheDashboard from './components/PsycheDashboard'
 import CharacterCreation from './components/CharacterCreation'
 import { ToastProvider } from './components/ToastProvider'
 import { TensionVignette, AmbientParticles, HijackOverlay } from './components/UXEffects'
-import { TensionVignette, AmbientParticles, HijackOverlay } from './components/UXEffects'
 import AudioManager from './components/AudioManager'
 import { SoundEffectsProvider } from './contexts/SoundEffectsContext'
 import { AccessibilityProvider } from './contexts/AccessibilityContext'
 import { NPCCacheProvider } from './contexts/NPCCacheContext'
 import { AudioProvider } from './contexts/AudioContext'
+import { VoiceProvider } from './contexts/VoiceContext'
 import api from './utils/api'
+import { ErrorBoundary } from './components/ErrorStates'
+import { LoadingText, LoadingDots } from './components/LoadingStates'
 
 function App() {
   const [session, setSession] = useState(null)
@@ -146,18 +148,18 @@ function App() {
 
   if (!gameState) return (
     <div className="h-screen flex flex-col items-center justify-center text-disco-paper bg-disco-bg">
-      <div className="text-4xl font-serif italic mb-4">Loading the Forge...</div>
-      <div className="flex gap-2">
-        {[0, 1, 2].map(i => (
-          <div
-            key={i}
-            className="w-3 h-3 bg-disco-accent rounded-full animate-pulse"
-            style={{ animationDelay: `${i * 0.15}s` }}
-          />
-        ))}
-      </div>
+      <LoadingText
+        messages={[
+          'Loading the Forge...',
+          'Consulting the Oracle...',
+          'Aligning the stars...',
+          'Weaving threads of destiny...'
+        ]}
+        interval={2000}
+      />
+      <LoadingDots className="mt-4" />
       {!isOnline && (
-        <div className="mt-4 text-disco-red text-sm font-mono">
+        <div className="mt-6 text-disco-red text-sm font-mono border border-disco-red/50 bg-disco-red/10 px-4 py-2 rounded">
           ⚠ Offline - Waiting for connection...
         </div>
       )}
@@ -165,11 +167,13 @@ function App() {
   )
 
   return (
-    <AccessibilityProvider>
-      <AudioProvider>
-        <SoundEffectsProvider>
-          <NPCCacheProvider>
-            <ToastProvider>
+    <ErrorBoundary>
+      <AccessibilityProvider>
+        <AudioProvider>
+          <SoundEffectsProvider>
+            <VoiceProvider>
+              <NPCCacheProvider>
+                <ToastProvider>
               {/* Connection Status Indicator */}
               {!isOnline && (
                 <div className="fixed top-4 right-4 z-[200] bg-disco-red/90 text-white px-4 py-2 rounded-lg font-mono text-sm border border-disco-red shadow-lg">
@@ -196,6 +200,7 @@ function App() {
                 assets={assets}
                 onAssetsUpdate={setAssets}
                 onAction={handleAction}
+                onGameStateUpdate={setGameState}
                 isLoading={loading}
               />
 
@@ -204,11 +209,13 @@ function App() {
 
               {/* Audio Manager - handles all audio playback */}
               <AudioManager sessionId={session} />
-            </ToastProvider>
-          </NPCCacheProvider>
-        </SoundEffectsProvider>
-      </AudioProvider>
-    </AccessibilityProvider>
+                </ToastProvider>
+              </NPCCacheProvider>
+            </VoiceProvider>
+          </SoundEffectsProvider>
+        </AudioProvider>
+      </AccessibilityProvider>
+    </ErrorBoundary>
   )
 }
 

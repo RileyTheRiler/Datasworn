@@ -1,6 +1,6 @@
 /**
  * API Utility - Centralized API client with retry logic and offline handling
- * 
+ *
  * Features:
  * - Exponential backoff for failed requests
  * - Request timeout handling
@@ -8,10 +8,12 @@
  * - Loading state management
  */
 
-const API_BASE_URL = 'http://localhost:8000/api';
-const DEFAULT_TIMEOUT = 30000; // 30 seconds
-const MAX_RETRIES = 3;
-const INITIAL_RETRY_DELAY = 1000; // 1 second
+import { API_CONFIG } from '../config';
+
+const API_BASE_URL = API_CONFIG.baseUrl;
+const DEFAULT_TIMEOUT = API_CONFIG.timeout;
+const MAX_RETRIES = API_CONFIG.maxRetries;
+const INITIAL_RETRY_DELAY = API_CONFIG.retryDelay;
 
 class APIClient {
     constructor() {
