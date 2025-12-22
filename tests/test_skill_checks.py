@@ -54,6 +54,12 @@ def test_baldurs_gate_probability_handles_cancelled_advantage():
     assert straight == cancelled
 
 
+def test_baldurs_gate_probability_advantage_still_respects_natural_one():
+    # Even with a huge modifier, double ones under advantage should still fail.
+    probability = baldurs_gate_success_probability(modifier=30, dc=10, advantage=True)
+    assert probability == 0.9975
+
+
 def test_roll_helpers_return_structured_results():
     disco = roll_disco_check(skill=2, difficulty=10, modifiers=1, fixed_dice=(5, 4))
     assert disco.dice == (5, 4)
