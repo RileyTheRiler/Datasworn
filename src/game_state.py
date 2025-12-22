@@ -313,6 +313,16 @@ class NarrativeOrchestratorState(BaseModel):
     attachment_system: dict[str, Any] = Field(default_factory=dict)
     trust_dynamics: dict[str, Any] = Field(default_factory=dict)
 
+    def get(self, key: str, default: Any = None) -> Any:
+        """Provide dict-like access for compatibility with call sites/tests."""
+        if hasattr(self, key):
+            return getattr(self, key)
+
+        extra = getattr(self, "__pydantic_extra__", None)
+        if extra and key in extra:
+            return extra[key]
+        return default
+
 
 class StarmapState(BaseModel):
     """Starmap and exploration state."""

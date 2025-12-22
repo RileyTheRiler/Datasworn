@@ -477,25 +477,6 @@ def extract_ship_metadata(game_state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def calculate_movement_range(character_speed: int = 30) -> int:
-    """
-    Calculate movement range in pixels for tactical display.
-    
-    Args:
-        character_speed: Character movement speed in feet (default 30ft)
-    
-    Returns:
-        Movement range radius in pixels
-    """
-    # Convert feet to grid squares (5ft per square)
-    squares = character_speed // 5
-    
-    # Convert squares to pixels (40px per square)
-    pixels = squares * 40
-    
-    return pixels
-
-
 def generate_cache_key(game_state: dict[str, Any]) -> str:
     """
     Generate a unique cache key for the current tactical situation.

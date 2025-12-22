@@ -23,6 +23,7 @@ from enum import Enum
 from pathlib import Path
 import hashlib
 import re
+from uuid import uuid4
 from collections import defaultdict, Counter
 
 
@@ -776,8 +777,8 @@ class FeedbackLearningEngine:
     ) -> str:
         """Record player feedback on a generated paragraph."""
         
-        # Generate ID from text hash
-        para_id = hashlib.md5(text.encode()).hexdigest()[:12]
+        # Generate unique ID to preserve all samples, even repeated text
+        para_id = uuid4().hex
         
         paragraph = GeneratedParagraph(
             paragraph_id=para_id,
@@ -803,6 +804,10 @@ class FeedbackLearningEngine:
         self.current_profile = self.analyzer.analyze_all_preferences()
         self.db.save_preferences(self.current_profile)
         return self.current_profile
+
+    # Backwards-compatible alias expected by tests/legacy callers
+    def analyze_preferences(self) -> PreferenceProfile:
+        return self.run_preference_analysis()
     
     def get_learning_guidance(self, context: Dict[str, Any]) -> str:
         """Get all learning-based guidance for narrator prompt."""

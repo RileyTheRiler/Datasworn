@@ -82,6 +82,7 @@ class Quest:
 
 
 @dataclass
+@dataclass
 class QuestTracker:
     """
     Tracks goals, sub-goals, and narrative progress.
