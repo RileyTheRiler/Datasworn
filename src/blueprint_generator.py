@@ -161,11 +161,11 @@ def calculate_npc_grid_position(
 def calculate_movement_range(character_speed: int = 30, grid_size: int = 40) -> int:
     """
     Calculate movement range in pixels.
-    
+
     Args:
         character_speed: Character movement speed in feet (default 30ft)
         grid_size: Size of one grid square in pixels (default 40px = 5ft)
-        
+
     Returns:
         Movement range radius in pixels
     """
@@ -477,40 +477,5 @@ def extract_ship_metadata(game_state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def calculate_movement_range(character_speed: int = 30) -> int:
-    """
-    Calculate movement range in pixels for tactical display.
-    
-    Args:
-        character_speed: Character movement speed in feet (default 30ft)
-    
-    Returns:
-        Movement range radius in pixels
-    """
-    # Convert feet to grid squares (5ft per square)
-    squares = character_speed // 5
-    
-    # Convert squares to pixels (40px per square)
-    pixels = squares * 40
-    
-    return pixels
-
-
-def generate_cache_key(game_state: dict[str, Any]) -> str:
-    """
-    Generate a unique cache key for the current tactical situation.
-    """
-    world_state = game_state.get("world", {})
-    if not isinstance(world_state, dict) and hasattr(world_state, "dict"):
-        world_state = world_state.dict()
-        
-    location = world_state.get("current_location", "unknown")
-    npcs = world_state.get("npcs", [])
-    
-    # Hash of location and NPC dispositions
-    npc_fingerprint = "|".join([f"{n.get('name')}:{n.get('disposition')}" for n in npcs])
-    
-    import hashlib
-    combined = f"{location}_{npc_fingerprint}"
-    return f"tactical_{hashlib.md5(combined.encode()).hexdigest()}"
+# Remove legacy duplicate definitions (kept earlier versions with grid size support)
 

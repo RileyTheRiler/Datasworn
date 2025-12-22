@@ -46,7 +46,7 @@ from src.narrative.choice_crystallized import ChoiceCrystallizedSystem
 from src.narrative.mirror_moment import MirrorMomentSystem
 from src.character_identity import WoundType
 from src.narrative.reyes_journal import ReyesJournalSystem
-from src.additional_api import register_starmap_routes, register_rumor_routes
+from src.additional_api import register_starmap_routes, register_rumor_routes, register_audio_routes
 from src.narrative_api import register_narrative_routes
 from src.psych_api import register_psychology_routes
 from src.combat_api import register_combat_routes
@@ -54,6 +54,9 @@ from src.practice_api import register_practice_routes
 from src.calibration import get_calibration_scenario
 from src.npc.schemas import CognitiveState, PersonalityProfile
 from src.npc.engine import NPCCognitiveEngine
+from src.quickstart_characters import get_quickstart_characters, get_quickstart_character_by_id
+from src.narrative_templates import get_all_templates, get_suggested_vows_for_path
+from src.story_templates import get_story_templates, get_story_template_by_id
 
 app = FastAPI(title="Starforged AI GM")
 
@@ -127,13 +130,17 @@ class CharacterStatsInput(BaseModel):
     wits: int = 2
 
 class InitRequest(BaseModel):
-    character_name: str
+    character_name: str = ""
     background_vow: str = "Find my place among the stars"
     # Optional full character creation fields
     stats: Optional[CharacterStatsInput] = None
     asset_ids: Optional[list] = None  # List of asset names to equip
     background: Optional[str] = None  # Character background/description
     portrait_style: str = "realistic"
+    # Quick-start character support
+    quickstart_id: Optional[str] = None  # If provided, use a pre-built character
+    # Story template support
+    story_template_id: Optional[str] = None  # If provided, use a pre-built story setting
 
 class ActionRequest(BaseModel):
     session_id: str
@@ -148,7 +155,7 @@ def get_available_assets():
     """Get all available assets for character creation."""
     if not DATASWORN:
         return {"assets": [], "error": "Datasworn not loaded"}
-    
+
     assets_by_type = {}
     for asset in DATASWORN.get_all_assets():
         if asset.asset_type not in assets_by_type:
@@ -158,24 +165,86 @@ def get_available_assets():
             "type": asset.asset_type,
             "abilities": asset.abilities[:2]  # First 2 abilities for preview
         })
-    
+
     return {"assets": assets_by_type}
+
+@app.get("/api/quickstart/characters")
+def get_quickstart_character_list():
+    """Get all available quick-start character presets."""
+    return {"characters": get_quickstart_characters()}
+
+@app.get("/api/narrative/templates")
+def get_narrative_templates():
+    """Get all narrative templates organized by category."""
+    return {"templates": get_all_templates()}
+
+@app.get("/api/narrative/vows/{path_name}")
+def get_vows_for_path(path_name: str):
+    """Get suggested vows for a specific character path."""
+    vows = get_suggested_vows_for_path(path_name)
+    return {"path": path_name, "suggested_vows": vows}
+
+@app.get("/api/story/templates")
+def get_story_template_list():
+    """Get all available story templates/settings."""
+    return {"templates": get_story_templates()}
 
 @app.post("/api/session/start")
 async def start_session(req: InitRequest):
     session_id = "default"  # Single session for MVP
-    state = create_initial_state(req.character_name)
-    
-    # Apply custom stats if provided
-    if req.stats:
+
+    # Handle quick-start character
+    if req.quickstart_id:
+        quickstart_char = get_quickstart_character_by_id(req.quickstart_id)
+        if not quickstart_char:
+            raise HTTPException(status_code=404, detail=f"Quick-start character '{req.quickstart_id}' not found")
+
+        # Use quick-start character data
+        state = create_initial_state(quickstart_char.name)
+
+        # Apply quick-start stats
+        state['character'].stats.edge = quickstart_char.stats.edge
+        state['character'].stats.heart = quickstart_char.stats.heart
+        state['character'].stats.iron = quickstart_char.stats.iron
+        state['character'].stats.shadow = quickstart_char.stats.shadow
+        state['character'].stats.wits = quickstart_char.stats.wits
+
+        # Apply quick-start assets
+        if DATASWORN:
+            from src.game_state import AssetState
+            for asset_name in quickstart_char.asset_ids[:3]:
+                asset = DATASWORN.get_asset(asset_name)
+                if asset:
+                    state['character'].assets.append(AssetState(
+                        id=asset.id,
+                        name=asset.name,
+                        abilities_enabled=[True, False, False]
+                    ))
+
+        # Apply quick-start vow and background
+        state['character'].vows[0].name = quickstart_char.vow
+        req.background = quickstart_char.background_story
+        req.background_vow = quickstart_char.vow
+        req.character_name = quickstart_char.name
+
+        # Store special mechanics in narrative state
+        if quickstart_char.special_mechanics:
+            state['narrative'].campaign_summary = f"Special Character Mechanics: {quickstart_char.special_mechanics}\n\n"
+            state['narrative'].session_summary = quickstart_char.starting_scene
+    else:
+        # Regular character creation
+        state = create_initial_state(req.character_name)
+
+    # Apply custom stats if provided (and not using quick-start)
+    if req.stats and not req.quickstart_id:
         state['character'].stats.edge = max(1, min(3, req.stats.edge))
         state['character'].stats.heart = max(1, min(3, req.stats.heart))
         state['character'].stats.iron = max(1, min(3, req.stats.iron))
         state['character'].stats.shadow = max(1, min(3, req.stats.shadow))
         state['character'].stats.wits = max(1, min(3, req.stats.wits))
     
-    # Apply custom assets if provided
-    if req.asset_ids and DATASWORN:
+    # Apply custom assets if provided (and not using quick-start)
+    if req.asset_ids and DATASWORN and not req.quickstart_id:
         from src.game_state import AssetState
         for asset_name in req.asset_ids[:3]:  # Max 3 starting assets
             asset = DATASWORN.get_asset(asset_name)
@@ -185,11 +254,49 @@ async def start_session(req: InitRequest):
                     name=asset.name,
                     abilities_enabled=[True, False, False]
                 ))
-    
-    # Apply custom background vow
-    if req.background_vow:
+
+    # Apply custom background vow (unless quick-start already set it)
+    if req.background_vow and not req.quickstart_id:
         state['character'].vows[0].name = req.background_vow
-    
+
+    # Handle story template selection
+    if req.story_template_id:
+        story_template = get_story_template_by_id(req.story_template_id)
+        if not story_template:
+            raise HTTPException(status_code=404, detail=f"Story template '{req.story_template_id}' not found")
+
+        # Set starting location
+        state['world'].current_location = story_template.starting_location
+        state['world'].location_type = story_template.setting_type
+
+        # Set opening scene in narrative state
+        state['narrative'].current_scene = story_template.opening_scene
+
+        # Store story template info in campaign summary
+        story_context = (
+            f"Story Setting: {story_template.name}\n"
+            f"{story_template.tagline}\n\n"
+            f"Setting Type: {story_template.setting_type}\n"
+            f"Starting Location: {story_template.starting_location}\n\n"
+            f"Initial Scenario: {story_template.initial_scenario}\n\n"
+            f"Tone: {story_template.tone}\n"
+            f"Difficulty: {story_template.difficulty}\n\n"
+            f"Themes: {', '.join(story_template.suggested_themes)}\n\n"
+            f"Environmental Conditions:\n"
+        )
+        for condition, value in story_template.environmental_conditions.items():
+            story_context += f"  - {condition.title()}: {value}\n"
+
+        # Append to existing campaign summary or create new one
+        if state['narrative'].campaign_summary:
+            state['narrative'].campaign_summary += "\n\n" + story_context
+        else:
+            state['narrative'].campaign_summary = story_context
+
+        # Set environmental visuals if available
+        state['world'].current_time = story_template.environmental_conditions.get("lighting", "Day")
+        state['world'].current_weather = story_template.environmental_conditions.get("atmosphere", "Clear")
+
     # Generate initial assets
     try:
         background_hint = req.background or "A gritty sci-fi survivor, determined expression"
@@ -389,7 +496,15 @@ def get_psyche(session_id: str):
     guilt = orchestrator.moral_injury_system.total_guilt
     
     # Merge into response
-    response = dict(psyche) if isinstance(psyche, dict) else psyche.dict() if hasattr(psyche, 'dict') else {}
+    if isinstance(psyche, dict):
+        response = dict(psyche)
+    elif hasattr(psyche, "model_dump"):
+        response = psyche.model_dump()
+    elif hasattr(psyche, "dict"):
+        # Backward compatibility for Pydantic v1-style models
+        response = psyche.dict()
+    else:
+        response = {}
     
     # Explicitly serialize archetype_profile using its to_dict method which has computed props
     if hasattr(psyche, 'archetype_profile') and psyche.archetype_profile:

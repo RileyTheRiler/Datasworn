@@ -42,16 +42,20 @@ const ARCHETYPES = {
 };
 
 const CharacterCreation = ({ onComplete, onCancel }) => {
-    const [step, setStep] = useState(1);
+    const [step, setStep] = useState(0);  // Start at 0 for story template selection
     const [loading, setLoading] = useState(false);
     const [availableAssets, setAvailableAssets] = useState({});
     const [createdSessionId, setCreatedSessionId] = useState(null); // For calibration step
+    const [quickstartCharacters, setQuickstartCharacters] = useState([]);
+    const [storyTemplates, setStoryTemplates] = useState([]);
+    const [selectedQuickstart, setSelectedQuickstart] = useState(null);
+    const [selectedStoryTemplate, setSelectedStoryTemplate] = useState(null);
 
     // Character data
     const [name, setName] = useState('');
     const [archetype, setArchetype] = useState('');
     const [visualDescription, setVisualDescription] = useState('');
-    const [history, setHistory] = useState(''); // Narrative background
+    const [background, setBackground] = useState(''); // Narrative background
     const [stats, setStats] = useState({
         edge: 1,
         heart: 2,
@@ -67,11 +71,21 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
     const usedPoints = Object.values(stats).reduce((a, b) => a + b, 0);
     const remaining = totalPoints - usedPoints;
 
-    // Load available assets on mount
+    // Load available assets, quick-start characters, and story templates on mount
     useEffect(() => {
         fetch(`${API_URL}/assets/available`)
             .then(res => res.json())
             .then(data => setAvailableAssets(data.assets || {}))
+            .catch(console.error);
+
+        fetch(`${API_URL}/quickstart/characters`)
+            .then(res => res.json())
+            .then(data => setQuickstartCharacters(data.characters || []))
+            .catch(console.error);
+
+        fetch(`${API_URL}/story/templates`)
+            .then(res => res.json())
+            .then(data => setStoryTemplates(data.templates || []))
             .catch(console.error);
     }, []);
 
@@ -111,16 +125,24 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
     const handleCreate = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${API_URL}/session/start`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+            const payload = selectedQuickstart
+                ? {
+                    quickstart_id: selectedQuickstart.id,
+                    story_template_id: selectedStoryTemplate?.id
+                }
+                : {
                     character_name: name,
                     background_vow: vow || "Find my place among the stars",
                     stats: stats,
                     asset_ids: selectedAssets,
-                    background: visualDescription
-                })
+                    background: background || visualDescription,
+                    story_template_id: selectedStoryTemplate?.id
+                };
+
+            const res = await fetch(`${API_URL}/session/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
             if (data.session_id) {
@@ -136,71 +158,184 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
 
     const canProceed = () => {
         switch (step) {
-            case 1: return name.trim().length >= 2 && archetype;
-            case 2: return remaining === 0;
-            case 3: return true; // Assets optional
-            case 4: return true; // Vow optional (has default)
+            case 0: return true; // Story template selection is optional
+            case 1: return true; // Character selection is optional
+            case 2: return selectedQuickstart || name.trim().length >= 2;
+            case 3: return selectedQuickstart || remaining === 0;
+            case 4: return true; // Assets optional
+            case 5: return true; // Vow optional (has default)
+            case 6: return true; // Review
             default: return true;
         }
     };
 
     const renderStep = () => {
+        // If quick-start selected, skip to review
+        if (selectedQuickstart && step > 1 && step < 6) {
+            return (
+                <div className="space-y-6">
+                    <h3 className="text-xl text-disco-cyan font-mono">{selectedQuickstart.title}</h3>
+
+                    <div className="space-y-4">
+                        <div>
+                            <div className="text-sm text-disco-muted mb-2">Character</div>
+                            <div className="text-disco-paper font-serif text-lg">{selectedQuickstart.name}</div>
+                        </div>
+
+                        <div>
+                            <div className="text-sm text-disco-muted mb-2">Description</div>
+                            <div className="text-disco-paper text-sm">{selectedQuickstart.description}</div>
+                        </div>
+
+                        <div>
+                            <div className="text-sm text-disco-muted mb-2">Background</div>
+                            <div className="text-disco-paper text-sm whitespace-pre-line max-h-48 overflow-y-auto">
+                                {selectedQuickstart.background_story}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="text-sm text-disco-muted mb-2">Stats</div>
+                            <div className="text-disco-cyan font-mono">
+                                Edge {selectedQuickstart.stats.edge} | Heart {selectedQuickstart.stats.heart} | Iron {selectedQuickstart.stats.iron} | Shadow {selectedQuickstart.stats.shadow} | Wits {selectedQuickstart.stats.wits}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="text-sm text-disco-muted mb-2">Starting Assets</div>
+                            <div className="text-disco-accent">{selectedQuickstart.asset_ids.join(', ')}</div>
+                        </div>
+
+                        <div>
+                            <div className="text-sm text-disco-muted mb-2">Starting Vow</div>
+                            <div className="text-disco-paper italic text-sm">"{selectedQuickstart.vow}"</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         switch (step) {
+            case 0:
+                return (
+                    <div className="space-y-6">
+                        <h3 className="text-xl text-disco-cyan font-mono">Choose Your Story</h3>
+                        <p className="text-sm text-disco-muted">
+                            Select a story template to set the scene for your adventure, or skip to create your own setting.
+                        </p>
+
+                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                            {storyTemplates.map(template => (
+                                <button
+                                    key={template.id}
+                                    onClick={() => setSelectedStoryTemplate(template)}
+                                    className={`w-full p-4 text-left border transition-all ${selectedStoryTemplate?.id === template.id
+                                            ? 'border-disco-cyan bg-disco-cyan/10'
+                                            : 'border-disco-muted/30 hover:border-disco-muted bg-disco-bg/50'
+                                        }`}
+                                >
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <div className="font-mono text-disco-paper">{template.name}</div>
+                                            <div className="text-xs text-disco-accent">{template.tagline}</div>
+                                        </div>
+                                        {selectedStoryTemplate?.id === template.id && (
+                                            <span className="text-disco-cyan text-xs">✓ Selected</span>
+                                        )}
+                                    </div>
+                                    <div className="text-xs text-disco-muted line-clamp-2">{template.description}</div>
+                                    <div className="flex gap-2 mt-2">
+                                        <span className="text-xs px-2 py-0.5 border border-disco-muted/30 text-disco-muted">
+                                            {template.tone}
+                                        </span>
+                                        <span className="text-xs px-2 py-0.5 border border-disco-muted/30 text-disco-muted">
+                                            {template.difficulty}
+                                        </span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                );
+
             case 1:
                 return (
                     <div className="space-y-6">
-                        <h3 className="text-xl text-disco-cyan font-mono">Identity & Archetype</h3>
+                        <h3 className="text-xl text-disco-cyan font-mono">Choose Your Character</h3>
+                        <p className="text-sm text-disco-muted">
+                            Select a quick-start character to jump into the action, or create a custom character from scratch.
+                        </p>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm text-disco-muted mb-2">Character Name</label>
-                                    <input
-                                        type="text"
-                                        value={name}
-                                        onChange={e => setName(e.target.value)}
-                                        placeholder="Enter your name..."
-                                        className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper 
-                                                 text-xl font-serif focus:border-disco-cyan focus:outline-none"
-                                        autoFocus
-                                    />
-                                </div>
+                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                            {quickstartCharacters.map(char => (
+                                <button
+                                    key={char.id}
+                                    onClick={() => setSelectedQuickstart(char)}
+                                    className={`w-full p-4 text-left border transition-all ${selectedQuickstart?.id === char.id
+                                            ? 'border-disco-cyan bg-disco-cyan/10'
+                                            : 'border-disco-muted/30 hover:border-disco-muted bg-disco-bg/50'
+                                        }`}
+                                >
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <div className="font-mono text-disco-paper">{char.name}</div>
+                                            <div className="text-xs text-disco-accent">{char.title}</div>
+                                        </div>
+                                        {selectedQuickstart?.id === char.id && (
+                                            <span className="text-disco-cyan text-xs">✓ Selected</span>
+                                        )}
+                                    </div>
+                                    <div className="text-xs text-disco-muted line-clamp-2">{char.description}</div>
+                                </button>
+                            ))}
 
-                                <div>
-                                    <label className="block text-sm text-disco-muted mb-2">Visual Description (for Portrait)</label>
-                                    <textarea
-                                        value={visualDescription}
-                                        onChange={e => setVisualDescription(e.target.value)}
-                                        placeholder="Describe your appearance (e.g., weathered face, cybernetic eye, pilot gear)..."
-                                        className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper 
-                                                 font-serif focus:border-disco-cyan focus:outline-none h-32 resize-none"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-3">
-                                <label className="block text-sm text-disco-muted">Choose Archetype</label>
-                                <div className="grid grid-cols-1 gap-2 max-h-[400px] overflow-y-auto pr-2">
-                                    {Object.entries(ARCHETYPES).map(([role, data]) => (
-                                        <button
-                                            key={role}
-                                            onClick={() => handleArchetypeSelect(role)}
-                                            className={`p-3 text-left border rounded transition-all
-                                                ${archetype === role
-                                                    ? 'border-disco-cyan bg-disco-cyan/10 text-disco-paper'
-                                                    : 'border-disco-muted/30 hover:border-disco-muted text-disco-muted hover:text-disco-paper'}`}
-                                        >
-                                            <div className="font-mono font-bold">{role}</div>
-                                            <div className="text-xs opacity-70 mt-1">{data.description}</div>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                            <button
+                                onClick={() => {
+                                    setSelectedQuickstart(null);
+                                    setStep(2);
+                                }}
+                                className="w-full p-4 text-left border border-disco-muted/30 hover:border-disco-cyan
+                                         bg-disco-bg/50 transition-all"
+                            >
+                                <div className="font-mono text-disco-paper mb-1">Custom Character</div>
+                                <div className="text-xs text-disco-muted">Create your own unique character from scratch</div>
+                            </button>
                         </div>
                     </div>
                 );
 
             case 2:
+                return (
+                    <div className="space-y-6">
+                        <h3 className="text-xl text-disco-cyan font-mono">Who are you?</h3>
+
+                        <div>
+                            <label className="block text-sm text-disco-muted mb-2">Character Name</label>
+                            <input
+                                type="text"
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                                placeholder="Enter your name..."
+                                className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper
+                                         text-xl font-serif focus:border-disco-cyan focus:outline-none"
+                                autoFocus
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-disco-muted mb-2">Background (optional)</label>
+                            <textarea
+                                value={background}
+                                onChange={e => setBackground(e.target.value)}
+                                placeholder="Describe your character... (e.g., 'A former soldier haunted by past failures')"
+                                className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper
+                                         font-serif focus:border-disco-cyan focus:outline-none h-24 resize-none"
+                            />
+                        </div>
+                    </div>
+                );
+
+            case 3:
                 return (
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
@@ -253,7 +388,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                     </div>
                 );
 
-            case 3:
+            case 4:
                 return (
                     <div className="space-y-4">
                         <div className="flex justify-between items-center">
@@ -263,35 +398,12 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                             </span>
                         </div>
 
-                        {/* Help Section */}
-                        <details className="bg-disco-bg/50 border border-disco-muted/30 p-3">
-                            <summary className="cursor-pointer text-sm text-disco-accent font-mono hover:text-disco-cyan transition-colors">
-                                ℹ️ What are Assets?
-                            </summary>
-                            <div className="mt-3 text-xs text-disco-muted space-y-2">
-                                <p>
-                                    <strong className="text-disco-paper">Assets</strong> are special abilities, equipment, companions, or traits that make your character unique.
-                                    You can choose up to <strong className="text-disco-cyan">3 assets</strong> to start with.
-                                </p>
-                                <div className="space-y-1">
-                                    <p><strong className="text-disco-accent">Path:</strong> Your training/profession (combat skills, navigation, etc.)</p>
-                                    <p><strong className="text-disco-accent">Companion:</strong> Allies that travel with you (robots, animals, etc.)</p>
-                                    <p><strong className="text-disco-accent">Module:</strong> Ship upgrades or special equipment</p>
-                                    <p><strong className="text-disco-accent">Deed:</strong> Special abilities earned through experience</p>
-                                </div>
-                                <p className="text-disco-cyan">
-                                    💡 Tip: Your archetype suggests assets that fit your playstyle, but you can swap them for others!
-                                </p>
-                            </div>
-                        </details>
+                        <p className="text-sm text-disco-muted">
+                            Assets represent your character's skills, equipment, and relationships. Choose paths that
+                            define your playstyle and create your unique identity in the Forge.
+                        </p>
 
-                        {archetype && selectedAssets.length > 0 && (
-                            <div className="text-xs bg-disco-cyan/10 p-2 border border-disco-cyan/30 text-disco-cyan">
-                                Pre-selected assets for {archetype}. Click to remove or add others.
-                            </div>
-                        )}
-
-                        <div className="max-h-80 overflow-y-auto space-y-4 pr-2">
+                        <div className="max-h-64 overflow-y-auto space-y-4 pr-2">
                             {Object.entries(availableAssets).map(([type, assets]) => (
                                 <div key={type}>
                                     <div className="text-xs text-disco-accent uppercase tracking-wider mb-2 font-bold">{type}</div>
@@ -346,7 +458,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                     </div>
                 );
 
-            case 4:
+            case 5:
                 return (
                     <div className="space-y-6">
                         <h3 className="text-xl text-disco-cyan font-mono">Swear Your Vow</h3>
@@ -358,34 +470,46 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                             value={vow}
                             onChange={e => setVow(e.target.value)}
                             placeholder="I swear to find my place among the stars..."
-                            className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper 
+                            className="w-full bg-disco-bg border border-disco-muted/50 px-4 py-3 text-disco-paper
                                      font-serif focus:border-disco-cyan focus:outline-none h-32 resize-none"
                         />
 
                         <div className="text-xs text-disco-muted">
-                            Suggested vows:
-                            <div className="flex flex-wrap gap-2 mt-2">
-                                {[
-                                    "Discover the truth about my past",
-                                    "Protect those who cannot protect themselves",
-                                    "Find redemption for my failures",
-                                    "Uncover ancient secrets of the Forge"
-                                ].map(v => (
-                                    <button
-                                        key={v}
-                                        onClick={() => setVow(v)}
-                                        className="px-2 py-1 text-xs border border-disco-muted/30 hover:border-disco-cyan 
-                                                 hover:text-disco-cyan transition-colors"
-                                    >
-                                        {v}
-                                    </button>
-                                ))}
-                            </div>
+                            {selectedAssets.length > 0 ? (
+                                <>
+                                    <div className="mb-1">Suggested vows for your character type:</div>
+                                    <VowSuggestions
+                                        selectedAssets={selectedAssets}
+                                        onSelect={setVow}
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    <div className="mb-1">Suggested vows:</div>
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                        {[
+                                            "Discover the truth about my past",
+                                            "Protect those who cannot protect themselves",
+                                            "Find redemption for my failures",
+                                            "Uncover ancient secrets of the Forge"
+                                        ].map(v => (
+                                            <button
+                                                key={v}
+                                                onClick={() => setVow(v)}
+                                                className="px-2 py-1 text-xs border border-disco-muted/30 hover:border-disco-cyan
+                                                         hover:text-disco-cyan transition-colors"
+                                            >
+                                                {v}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 );
 
-            case 5:
+            case 6:
                 return (
                     <div className="space-y-6">
                         <h3 className="text-xl text-disco-cyan font-mono">Ready to Begin?</h3>
@@ -442,7 +566,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                         Create Your Character
                     </h2>
                     <div className="text-sm text-disco-muted font-mono">
-                        Step {step} of 5
+                        {selectedQuickstart && step > 1 ? 'Review' : `Step ${step} of ${selectedQuickstart ? '2' : '6'}`}
                     </div>
                 </div>
 
@@ -450,7 +574,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                 <div className="h-1 bg-disco-bg/50">
                     <div
                         className="h-full bg-disco-cyan transition-all duration-300"
-                        style={{ width: `${(step / 5) * 100}%` }}
+                        style={{ width: `${selectedQuickstart && step > 1 ? 100 : (step / 6) * 100}%` }}
                     />
                 </div>
 
@@ -469,21 +593,24 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                 {/* Footer */}
                 <div className="p-4 border-t border-disco-muted/30 flex justify-between">
                     <button
-                        onClick={() => step > 1 ? setStep(step - 1) : onCancel?.()}
+                        onClick={() => {
+                            if (step > 0) {
+                                if (selectedQuickstart && step === 2) {
+                                    setStep(1);
+                                    setSelectedQuickstart(null);
+                                } else {
+                                    setStep(step - 1);
+                                }
+                            } else {
+                                onCancel?.();
+                            }
+                        }}
                         className="px-4 py-2 text-disco-muted hover:text-disco-paper transition-colors"
                     >
-                        {step > 1 ? '← Back' : 'Cancel'}
+                        {step > 0 ? '← Back' : 'Cancel'}
                     </button>
 
-                    {step < 5 ? (
-                        <button
-                            onClick={() => setStep(step + 1)}
-                            disabled={!canProceed()}
-                            className="btn-disco disabled:opacity-50"
-                        >
-                            Next →
-                        </button>
-                    ) : (
+                    {(selectedQuickstart && step > 1) || step >= 6 ? (
                         <button
                             onClick={handleCreate}
                             disabled={loading}
@@ -491,9 +618,80 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                         >
                             {loading ? 'Creating...' : '🚀 Begin Adventure'}
                         </button>
+                    ) : (
+                        <button
+                            onClick={() => {
+                                if (selectedQuickstart && step === 1) {
+                                    setStep(2);  // Jump to review for quick-start
+                                } else {
+                                    setStep(step + 1);
+                                }
+                            }}
+                            disabled={!canProceed()}
+                            className="btn-disco disabled:opacity-50"
+                        >
+                            Next →
+                        </button>
                     )}
                 </div>
             </div>
+        </div>
+    );
+};
+
+/**
+ * VowSuggestions - Fetches and displays context-aware vow suggestions based on selected assets
+ */
+const VowSuggestions = ({ selectedAssets, onSelect }) => {
+    const [vows, setVows] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchVows = async () => {
+            if (selectedAssets.length === 0) {
+                setVows([]);
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
+            try {
+                // Fetch vows for the first selected asset (primary path)
+                const primaryAsset = selectedAssets[0];
+                const res = await fetch(`${API_URL}/narrative/vows/${primaryAsset}`);
+                const data = await res.json();
+                setVows(data.suggested_vows || []);
+            } catch (err) {
+                console.error('Failed to fetch vow suggestions:', err);
+                setVows([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchVows();
+    }, [selectedAssets]);
+
+    if (loading) {
+        return <div className="text-disco-muted text-xs">Loading suggestions...</div>;
+    }
+
+    if (vows.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="flex flex-wrap gap-2 mt-2">
+            {vows.map((v, idx) => (
+                <button
+                    key={idx}
+                    onClick={() => onSelect(v)}
+                    className="px-2 py-1 text-xs border border-disco-muted/30 hover:border-disco-cyan
+                             hover:text-disco-cyan transition-colors text-left"
+                >
+                    {v}
+                </button>
+            ))}
         </div>
     );
 };

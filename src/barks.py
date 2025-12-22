@@ -135,7 +135,7 @@ BARK_TEMPLATES = {
 PSYCH_AWARE_BARKS = {
     EmotionalState.ANXIOUS: [
         "You alright? You look pale.",
-        "Calm down. Deep breaths.",
+        "Calm down. Deep breaths—you look a bit pale.",
         "You're shaking. What's wrong?",
         "*eyes narrow* Nervous about something?",
     ],
@@ -167,7 +167,7 @@ TRAUMA_BARKS = {
     "Shattered Trust": [
         "Keep your distance.",
         "I don't trust you.",
-        "*steps back* Stay away from me.",
+        "*steps back* Stay away from me—keep your distance.",
     ],
     "Hyper-Vigilance": [
         "*jumps at sudden movement*",

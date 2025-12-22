@@ -162,7 +162,7 @@ const JournalModal = ({ isOpen, onClose, sessionId = 'default' }) => {
                             )}
                         </div>
                     </>
-                ) : (
+                ) : activeTab === 'objectives' ? (
                     // Objectives Tab Content
                     <div className="flex-1 p-8 bg-black/20 overflow-y-auto">
                         {progressData ? (
@@ -234,11 +234,14 @@ const JournalModal = ({ isOpen, onClose, sessionId = 'default' }) => {
                                 </div>
                             </div>
                         ) : (
+                            <div className="flex items-center justify-center h-full text-disco-muted font-mono text-sm">
+                                Loading objectives...
+                            </div>
                         )}
                     </div>
                 ) : (
-                // Factions Tab Content
-                <FactionDashboard sessionId={sessionId} />
+                    // Factions Tab Content
+                    <FactionDashboard sessionId={sessionId} />
                 )}
             </div>
         </DraggableModal>

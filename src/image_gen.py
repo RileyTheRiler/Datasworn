@@ -323,7 +323,7 @@ NPC_COLOR_MAP = {
 }
 
 
-async def generate_tactical_blueprint(
+def generate_tactical_blueprint(
     game_state: dict[str, Any],
     width: int = 600,
     height: int = 500,
@@ -365,11 +365,20 @@ async def generate_tactical_blueprint(
     
     # AI Generation Path
     if use_ai_background and provider != ImageProvider.PLACEHOLDER:
+        import asyncio
+
         prompt = generate_tactical_prompt(metadata)
-        ai_base = await _generate_ai_background(prompt, provider)
+        ai_coro = _generate_ai_background(prompt, provider)
+
+        try:
+            loop = asyncio.get_running_loop()
+            ai_base = loop.run_until_complete(ai_coro) if not loop.is_running() else None
+        except RuntimeError:
+            ai_base = asyncio.run(ai_coro)
+
         if ai_base:
             image_base64 = _add_tactical_overlay(
-                ai_base, 
+                ai_base,
                 _draw_placeholder_content, # Externalized draw func
                 metadata, width, height, show_movement, show_vision, True # True means skip clear background
             )
@@ -406,36 +415,15 @@ def _draw_placeholder_content(draw, metadata, width, height, show_movement, show
 
     # Draw cover positions
     _draw_cover_indicators(draw, metadata.get("cover_spots", []), width, height)
-    
+
     # Draw entry points
     _draw_entry_points(draw, metadata.get("entry_points", []), width, height)
-    
+
     # Draw NPC markers
     _draw_npc_markers(draw, metadata.get("npcs", []), width, height, show_vision)
-    
-    # Draw Player marker
-    player_pos = _draw_player_marker(draw, width, height)
-    
 
-    """Refactored drawing logic that can work on top of AI backgrounds."""
-    if not skip_bg:
-        draw.rectangle([0, 0, width, height], fill=COLORS["background"])
-        # Draw grid
-        _draw_grid(draw, width, height, grid_size=40)
-        # Draw zone structure outline
-        _draw_zone_structure(draw, metadata.get("zone_type", "residential"), width, height)
-
-    # Draw cover positions
-    _draw_cover_indicators(draw, metadata.get("cover_spots", []), width, height)
-    
-    # Draw entry points
-    _draw_entry_points(draw, metadata.get("entry_points", []), width, height)
-    
-    # Draw NPC markers
-    _draw_npc_markers(draw, metadata.get("npcs", []), width, height, show_vision)
-    
     # Draw Player marker
-    player_pos = _draw_player_marker(draw, width, height)
+    player_pos = _draw_player_marker(draw, (width // 2, int(height * 0.75)))
     
     # Draw movement range
     if show_movement:
@@ -561,8 +549,8 @@ def _draw_entry_points(draw, entry_points: list[str], width: int, height: int):
         )
 
 
-def _draw_npc_markers(draw, npcs: list[dict], width: int, height: int):
-    """Draw NPC position markers."""
+def _draw_npc_markers(draw, npcs: list[dict], width: int, height: int, show_vision: bool = False):
+    """Draw NPC position markers (optionally with simple vision rays)."""
     from src.blueprint_generator import calculate_npc_grid_position
     
     for npc in npcs:
@@ -576,6 +564,10 @@ def _draw_npc_markers(draw, npcs: list[dict], width: int, height: int):
         # Inner fill
         draw.ellipse([x - 12, y - 12, x + 12, y + 12], fill=color)
 
+        if show_vision:
+            # Draw a minimal forward-facing indicator to visualize awareness
+            draw.line([x, y, x + 30, y], fill=color, width=2)
+
 
 def _draw_player_marker(draw, pos: tuple[int, int]):
     """Draw player position marker."""
@@ -586,6 +578,7 @@ def _draw_player_marker(draw, pos: tuple[int, int]):
     draw.ellipse([x - 16, y - 16, x + 16, y + 16], fill=COLORS["player"])
     # "YOU" label
     draw.text((x - 12, y - 6), "YOU", fill=COLORS["text"])
+    return pos
 
 
 
