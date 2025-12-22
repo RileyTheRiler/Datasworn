@@ -99,6 +99,9 @@ python main.py --cli
 python main.py
 ```
 
+### Gameplay improvement ideas
+Looking for ways to tune pacing, onboarding, and move clarity? See [Gameplay Improvement Recommendations](docs/gameplay_improvements.md) for actionable tweaks to sharpen session flow.
+
 ### Commands
 | Command | Action |
 |---------|--------|
