@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Layout from './Layout'
 import PsycheDashboard from './components/PsycheDashboard'
 import CharacterCreation from './components/CharacterCreation'
+import Tutorial from './components/Tutorial'
 import { ToastProvider } from './components/ToastProvider'
 import { TensionVignette, AmbientParticles, HijackOverlay } from './components/UXEffects'
 import AudioManager from './components/AudioManager'
@@ -209,6 +210,9 @@ function App() {
 
               {/* Audio Manager - handles all audio playback */}
               <AudioManager sessionId={session} />
+
+              {/* Tutorial - interactive onboarding */}
+              <Tutorial />
                 </ToastProvider>
               </NPCCacheProvider>
             </VoiceProvider>
