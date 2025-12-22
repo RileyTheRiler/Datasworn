@@ -14,6 +14,12 @@ def test_disco_probability_matches_expected_mid_difficulty():
     assert probability == round(26 / 36, 4)
 
 
+def test_disco_probability_includes_modifiers():
+    # Skill 2 with +3 modifiers effectively rolls at +5 and needs an 8+ on 2d6.
+    probability = disco_success_probability(skill=2, difficulty=13, modifiers=3)
+    assert probability == round(15 / 36, 4)
+
+
 def test_disco_probability_handles_impossible_checks_with_crits():
     # Only double six should succeed here.
     probability = disco_success_probability(skill=0, difficulty=20)
@@ -40,6 +46,12 @@ def test_baldurs_gate_probability_with_advantage_matches_bruteforce():
             if is_success:
                 success += 1
     assert probability == round(success / total, 4)
+
+
+def test_baldurs_gate_probability_handles_cancelled_advantage():
+    straight = baldurs_gate_success_probability(modifier=5, dc=12)
+    cancelled = baldurs_gate_success_probability(modifier=5, dc=12, advantage=True, disadvantage=True)
+    assert straight == cancelled
 
 
 def test_roll_helpers_return_structured_results():
@@ -105,3 +117,17 @@ def test_baldurs_gate_fixed_rolls_use_advantage_and_disadvantage_rules():
     assert disadvantaged.applied_disadvantage is True
     assert disadvantaged.total == 4
     assert disadvantaged.success is False
+
+
+def test_baldurs_gate_natural_one_still_fails_with_large_bonus():
+    result = roll_baldurs_gate_check(modifier=15, dc=16, fixed_rolls=(1,))
+    assert result.total == 16
+    assert result.is_critical_failure is True
+    assert result.success is False
+
+
+def test_baldurs_gate_natural_twenty_overrides_high_dc():
+    result = roll_baldurs_gate_check(modifier=-2, dc=25, fixed_rolls=(20,))
+    assert result.total == 18
+    assert result.is_critical_success is True
+    assert result.success is True
