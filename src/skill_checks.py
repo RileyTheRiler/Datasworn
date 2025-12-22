@@ -27,15 +27,25 @@ class DiscoElysiumResult:
     is_critical_failure: bool
 
 
-def roll_disco_check(skill: int, difficulty: int, modifiers: int = 0) -> DiscoElysiumResult:
+def roll_disco_check(
+    skill: int, difficulty: int, modifiers: int = 0, fixed_dice: tuple[int, int] | None = None
+) -> DiscoElysiumResult:
     """Roll a Disco Elysium-inspired 2d6 skill check.
 
     Critical results override normal resolution:
     - Double sixes are an automatic success.
     - Double ones are an automatic failure.
+    deterministic dice for tests. Values must be between 1 and 6 if provided.
     """
 
-    d1, d2 = _roll_die(6), _roll_die(6)
+    if fixed_dice is not None:
+        if len(fixed_dice) != 2:
+            raise ValueError("fixed_dice must contain exactly two values")
+        d1, d2 = fixed_dice
+        if not (1 <= d1 <= 6 and 1 <= d2 <= 6):
+            raise ValueError("fixed_dice values must be between 1 and 6")
+    else:
+        d1, d2 = _roll_die(6), _roll_die(6)
     total = d1 + d2 + skill + modifiers
 
     is_double_six = d1 == d2 == 6
@@ -104,6 +114,7 @@ def roll_baldurs_gate_check(
     dc: int,
     advantage: bool = False,
     disadvantage: bool = False,
+    fixed_rolls: tuple[int, ...] | None = None,
 ) -> BaldursGateResult:
     """Roll a Baldur's Gate 3-style check with optional advantage.
 
@@ -111,14 +122,25 @@ def roll_baldurs_gate_check(
     """
 
     dice: tuple[int, ...]
-    if advantage and disadvantage:
-        dice = (_roll_die(20),)
-    elif advantage:
-        dice = (_roll_die(20), _roll_die(20))
-    elif disadvantage:
-        dice = (_roll_die(20), _roll_die(20))
+    if fixed_rolls is not None:
+        dice = fixed_rolls
+        expected_length = 1 if (advantage and disadvantage) or (not advantage and not disadvantage) else 2
+        if len(dice) != expected_length:
+            raise ValueError(
+                "fixed_rolls length must be 1 for straight rolls or cancelled advantage/disadvantage, "
+                "and 2 when advantage or disadvantage is active"
+            )
+        if not all(1 <= roll <= 20 for roll in dice):
+            raise ValueError("fixed_rolls values must be between 1 and 20")
     else:
-        dice = (_roll_die(20),)
+        if advantage and disadvantage:
+            dice = (_roll_die(20),)
+        elif advantage:
+            dice = (_roll_die(20), _roll_die(20))
+        elif disadvantage:
+            dice = (_roll_die(20), _roll_die(20))
+        else:
+            dice = (_roll_die(20),)
 
     if advantage and not disadvantage:
         roll_value = max(dice)

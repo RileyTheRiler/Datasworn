@@ -1,4 +1,4 @@
-import random
+import pytest
 
 from src.skill_checks import (
     baldurs_gate_success_probability,
@@ -43,17 +43,30 @@ def test_baldurs_gate_probability_with_advantage_matches_bruteforce():
 
 
 def test_roll_helpers_return_structured_results():
-    random.seed(42)
-    disco = roll_disco_check(skill=2, difficulty=10, modifiers=1)
-    assert disco.dice == (6, 1)
-    assert disco.total == 10
+    disco = roll_disco_check(skill=2, difficulty=10, modifiers=1, fixed_dice=(5, 4))
+    assert disco.dice == (5, 4)
+    assert disco.total == 12
     assert disco.success is True
     assert disco.is_critical_success is False
     assert disco.is_critical_failure is False
 
-    bg3 = roll_baldurs_gate_check(modifier=3, dc=12, advantage=True)
-    assert bg3.dice == (1, 9)
+    bg3 = roll_baldurs_gate_check(modifier=3, dc=12, advantage=True, fixed_rolls=(7, 9))
+    assert bg3.dice == (7, 9)
     assert bg3.total == 12
     assert bg3.success is True
     assert bg3.applied_advantage is True
     assert bg3.applied_disadvantage is False
+
+
+def test_fixed_dice_validation():
+    with pytest.raises(ValueError):
+        roll_disco_check(skill=1, difficulty=5, fixed_dice=(1,))
+    with pytest.raises(ValueError):
+        roll_disco_check(skill=1, difficulty=5, fixed_dice=(7, 2))
+
+    with pytest.raises(ValueError):
+        roll_baldurs_gate_check(modifier=0, dc=10, fixed_rolls=(1, 2, 3))
+    with pytest.raises(ValueError):
+        roll_baldurs_gate_check(modifier=0, dc=10, advantage=True, fixed_rolls=(0, 20))
+    with pytest.raises(ValueError):
+        roll_baldurs_gate_check(modifier=0, dc=10, disadvantage=True, fixed_rolls=(1,))

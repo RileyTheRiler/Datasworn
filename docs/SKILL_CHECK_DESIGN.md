@@ -30,6 +30,7 @@ This playbook translates the best parts of **Disco Elysium** (2d6 bell curve) an
 - **Code helpers:** `src/skill_checks.py` implements both systems:
   - `roll_disco_check` and `disco_success_probability` for bell‑curve checks with critical overrides.
   - `roll_baldurs_gate_check` and `baldurs_gate_success_probability` for d20 checks, including advantage/disadvantage.
+- **Deterministic runs:** Pass `fixed_dice`/`fixed_rolls` to the roll helpers for reproducible outcomes in tests and scripted events.
 - **UI feedback:** Surface the probability helpers in chat/CLI before a roll and include a breakdown of modifiers used.
 - **Encounter design:** Pair red/white retry logic with Starforged moves—e.g., red = one shot with narrative fallout; white = retry after spending momentum or learning a clue.
 
