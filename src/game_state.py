@@ -300,12 +300,16 @@ class NarrativeOrchestratorState(BaseModel):
     # Psychological Systems (Phase 2)
     addiction_system: dict[str, Any] = Field(default_factory=dict)
     moral_injury_system: dict[str, Any] = Field(default_factory=dict)
-    
+
     # Psychological Systems (Phase 3)
     attachment_system: dict[str, Any] = Field(default_factory=dict)
     # Psychological Systems (Phase 3)
     attachment_system: dict[str, Any] = Field(default_factory=dict)
     trust_dynamics: dict[str, Any] = Field(default_factory=dict)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Dict-style accessor used by server helpers."""
+        return getattr(self, key, default)
 
 
 class StarmapState(BaseModel):

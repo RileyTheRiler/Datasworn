@@ -317,7 +317,8 @@ def format_quests(quest_lore_state) -> str:
             if quest.status.value != "completed":
                 lines.append(f"**{quest.title}**")
                 for obj in quest.objectives:
-                    status = "☑️" if obj.completed else "⬜"
+                    completed = getattr(obj, "is_completed", getattr(obj, "completed", False))
+                    status = "☑️" if completed else "⬜"
                     lines.append(f"{status} {obj.description}")
         
         return "\n".join(lines) if lines else "*No active quests*"
