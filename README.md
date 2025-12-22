@@ -95,9 +95,20 @@ Your API key should **ONLY** be stored in the `.env` file, which is already in `
 # CLI Mode (recommended for testing)
 python main.py --cli
 
+# Run the onboarding wizard and save defaults
+python main.py --onboard
+
+# Launch a ready-to-play demo session
+python main.py --demo
+
+# Resume with web UI (default)
 # Web UI
 python main.py
 ```
+
+Running `--onboard` saves your LLM provider, model, and audio preferences so future `--cli` sessions start with your defaults. If an autosave is found, the CLI will offer a one-step resume before you begin a new scene, keeping pacing and vows intact.
+
+During CLI play, the Director and autosave systems stay in sync: `!status` reports the current tension/pacing heartbeat, and each turn is automatically saved so you can safely exit and resume later without losing your rhythm.
 
 ### Commands
 | Command | Action |
@@ -106,6 +117,7 @@ python main.py
 | `!vows` | View active vows with progress |
 | `!save` | Save current game |
 | `!load` | Load saved game |
+| `resume` | Automatically offered if autosaves are present |
 
 ## Architecture
 

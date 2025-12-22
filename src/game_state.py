@@ -4,9 +4,11 @@ Uses Pydantic for validation and TypedDict for LangGraph state.
 """
 
 from __future__ import annotations
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, Optional, TypedDict
 from pydantic import BaseModel, Field
 from langgraph.graph.message import add_messages
+
+from src.ship_campaign_template import get_ship_campaign_state
 
 
 # ============================================================================
@@ -80,12 +82,14 @@ class VowState(BaseModel):
 class WorldState(BaseModel):
     """World information."""
     current_location: str = "Unknown Sector"
+    current_region: str = ""
     location_type: str = "neutral"
     discovered_locations: list[str] = Field(default_factory=list)
     truths: dict[str, str] = Field(default_factory=dict)
     npcs: list[dict[str, Any]] = Field(default_factory=list)
     factions: list[dict[str, Any]] = Field(default_factory=list)
     ship: ShipState = Field(default_factory=lambda: ShipState())
+    atmosphere: str = ""
     
     # Combat State
     combat_active: bool = False
@@ -159,6 +163,7 @@ class DirectorStateModel(BaseModel):
     recent_pacing: list[str] = Field(default_factory=list)
     active_beats: list[str] = Field(default_factory=list)
     tension_level: float = 0.2
+    pacing_mode: str = "standard"
     scenes_since_breather: int = 0
     foreshadowing: list[str] = Field(default_factory=list)
     moral_patterns: list[str] = Field(default_factory=list)
@@ -212,6 +217,7 @@ class QuestLoreState(BaseModel):
     lore: dict[str, Any] = Field(default_factory=dict)
     schedules: dict[str, Any] = Field(default_factory=dict)
     rumors: dict[str, Any] = Field(default_factory=dict)
+    region_truths: list[Any] = Field(default_factory=list)
 
 
 class CompanionManagerState(BaseModel):
@@ -489,4 +495,29 @@ def create_initial_state(character_name: str) -> GameState:
         audio=AudioState(),
         route="",
     )
+
+
+def create_demo_state() -> GameState:
+    """Create a ready-to-play demo state using the ship campaign template."""
+
+    template = get_ship_campaign_state()
+    state = create_initial_state("Demo Captain")
+
+    # Populate key fields from the template without requiring full conversion of the
+    # nested structures. This keeps the demo lightweight while still grounding the
+    # session in the Exile's Gambit setup.
+    state.world.current_location = "The Exile's Gambit"
+    state.world.current_region = "Deep Forge"
+    state.world.atmosphere = template.get("faction_environment", {}).get("environment", {}).get(
+        "current_conditions", {}
+    ).get("atmosphere_notes", "")
+
+    state.quest_lore.region_truths = template.get("campaign_truths", [])
+    state.companions.companions = template.get("final_systems", {}).get("voice", {})
+
+    # Seed director pacing so UI/CLI can surface an initial heartbeat.
+    state.director.pacing_mode = "standard"
+    state.director.tension_level = 0.35
+
+    return state
 
