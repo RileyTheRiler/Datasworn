@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal, TypedDict, Optional
 from pydantic import BaseModel, Field
 from langgraph.graph.message import add_messages
 from src.npc.schemas import CognitiveState
+import time
 
 
 # ============================================================================
@@ -127,6 +128,18 @@ class Character(BaseModel):
         "bonds": 0,
         "discoveries": 0,
     })
+    
+    # World Simulation Integration
+    # Crime & Reputation
+    crimes_committed: list[dict[str, Any]] = Field(default_factory=list)
+    reputation: dict[str, float] = Field(default_factory=dict)  # faction_id -> rep (-1.0 to 1.0)
+    honor: float = Field(default=0.5, ge=0.0, le=1.0)
+    
+    # Posture & State
+    current_posture: str = "normal"  # normal, sneaking, combat_ready
+    weapon_readied: bool = False
+    intoxication_level: float = Field(default=0.0, ge=0.0, le=1.0)
+    disguise_active: Optional[str] = None  # disguise_id or None
 
 
 
@@ -138,6 +151,22 @@ class NarrativeState(BaseModel):
     pending_narrative: str = ""
     campaign_summary: str = ""
     session_summary: str = ""
+    
+    # Interrogation Manager (stored loosely as it's not a Pydantic model yet)
+    interrogation_manager: Optional[Any] = None
+    
+    # Ending System State
+    ending_triggered: bool = False
+    ending_choice: Optional[str] = None  # "accept" or "reject"
+    ending_type: Optional[str] = None  # "hero" or "tragedy"
+    ending_stage: str = "not_started"  # decision/test/resolution/wisdom/final_scene/complete
+    
+    # Investigation Flags (for Port Arrival docking scenarios)
+    murder_reported: bool = False  # Did player report murder to authorities?
+    yuki_past_revealed: bool = False  # Was Yuki's Helix Dynamics past exposed?
+    kai_debts_unresolved: bool = True  # Are Kai's debts still outstanding?
+
+ 
 
 
 class RollState(BaseModel):
@@ -248,6 +277,14 @@ class PsycheState(BaseModel):
     active_hijack: dict[str, str] | None = None
     # Track which stress/sanity events have already fired
     events_triggered: list[str] = Field(default_factory=list)
+    
+    # Archetype System Fields
+    archetype_profile: Any = None  # ArchetypeProfile instance
+    behavior_history: list[Any] = Field(default_factory=list)  # List of BehaviorInstance
+    revelation_progress: Any = None  # RevelationProgress instance
+    
+    class Config:
+        arbitrary_types_allowed = True  # Allow non-Pydantic types
 
 
 class RelationshipState(BaseModel):
@@ -327,6 +364,7 @@ class WorldSimState(BaseModel):
     """State for the living world simulation."""
     events: list[dict[str, Any]] = Field(default_factory=list)
     event_counter: int = 0
+    serialized_state: dict[str, Any] = Field(default_factory=dict)
 
 
 class HazardState(BaseModel):
@@ -422,7 +460,7 @@ class GameState(TypedDict):
     rumors: dict[str, Any] = Field(default_factory=dict)
 
     # World Simulation (stored as dict)
-    world_sim: dict[str, Any] = Field(default_factory=dict)
+    world_sim: WorldSimState = Field(default_factory=WorldSimState)
 
     # Hazards (stored as dict)
     hazards: dict[str, Any] = Field(default_factory=dict)
@@ -480,7 +518,7 @@ def create_initial_state(character_name: str) -> GameState:
         starmap={},
         cognitive_npc_state={},
         rumors={},
-        world_sim={},
+        world_sim=WorldSimState(),
         hazards={},
         audio=AudioState(),
         route="",

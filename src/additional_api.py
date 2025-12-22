@@ -100,15 +100,26 @@ def register_starmap_routes(app, SESSIONS):
             
         # Run World Simulation
         sim_data = state.get('world_sim', {})
+        if not isinstance(sim_data, dict):
+            # Convert Pydantic model to dict for legacy simulator
+            sim_data = sim_data.dict() if hasattr(sim_data, 'dict') else {}
+            
         sim = WorldSimulator.from_dict(sim_data)
         new_events = sim.simulate_turn(state, days_passed=random.randint(1, 4))
+        
+        # Update state (keep as dict for legacy compatibility if needed, or object)
+        # Note: If we assign a dict, world_api.py handles it.
         state['world_sim'] = sim.to_dict()
         
         # Perform Travel
         result = starmap.travel_to(destination_id)
         
         # Update world location
-        state['world'].current_location = system.name
+        world = state['world']
+        if isinstance(world, dict):
+            world['current_location'] = system.name
+        else:
+            world.current_location = system.name
         
         # Save updated state
         state['starmap'] = starmap.to_dict()
@@ -119,7 +130,7 @@ def register_starmap_routes(app, SESSIONS):
         
         arrival_text = generate_narrative(
             player_input=f"Travel to {system.name}",
-            character_name=state['character'].name,
+            character_name=state['character'].name if hasattr(state['character'], 'name') else state['character'].get('name', 'Unknown'),
             location=system.name,
             context=f"You arrived at {system.name}.{hazard_context}",
             config=NarratorConfig(backend="gemini")
@@ -147,7 +158,7 @@ def register_starmap_routes(app, SESSIONS):
         
         starmap = StarMap.from_dict(starmap_data)
         return {"systems": starmap.get_nearby_systems(count)}
-
+ 
     @app.get("/api/world/events/{session_id}")
     def get_world_events(session_id: str):
         """Get history of world events."""
@@ -156,9 +167,17 @@ def register_starmap_routes(app, SESSIONS):
         
         state = SESSIONS[session_id]
         sim_state = state.get('world_sim', {})
+        
+        if isinstance(sim_state, dict):
+            events = sim_state.get('events', [])
+            counter = sim_state.get('event_counter', 0)
+        else:
+            events = getattr(sim_state, 'events', [])
+            counter = getattr(sim_state, 'event_counter', 0)
+            
         return {
-            "events": sim_state.get('events', []),
-            "event_counter": sim_state.get('event_counter', 0)
+            "events": events,
+            "event_counter": counter
         }
 
     @app.get("/api/world/hazards/{session_id}")
@@ -244,81 +263,4 @@ def register_rumor_routes(app, SESSIONS):
         return {"rumors": network.get_active_rumors()}
 
 
-# ============================================================================
-# Audio State API Endpoints
-# ============================================================================
-
-class AudioUpdateRequest(BaseModel):
-    session_id: str
-    ambient_volume: Optional[float] = None
-    music_volume: Optional[float] = None
-    voice_volume: Optional[float] = None
-    master_volume: Optional[float] = None
-    muted: Optional[bool] = None
-    current_ambient: Optional[str] = None
-    current_music: Optional[str] = None
-
-
-def register_audio_routes(app, SESSIONS):
-    """Register audio state API routes."""
-    
-    @app.post("/api/audio/update")
-    def update_audio_state(req: AudioUpdateRequest):
-        """Update audio state."""
-        if req.session_id not in SESSIONS:
-            raise HTTPException(status_code=404, detail="Session not found")
-        
-        state = SESSIONS[req.session_id]
-        audio = state.get('audio', {})
-        
-        # Update provided fields
-        if req.ambient_volume is not None:
-            audio['ambient_volume'] = req.ambient_volume
-        if req.music_volume is not None:
-            audio['music_volume'] = req.music_volume
-        if req.voice_volume is not None:
-            audio['voice_volume'] = req.voice_volume
-        if req.master_volume is not None:
-            audio['master_volume'] = req.master_volume
-        if req.muted is not None:
-            audio['muted'] = req.muted
-        if req.current_ambient is not None:
-            audio['current_ambient'] = req.current_ambient
-        if req.current_music is not None:
-            audio['current_music'] = req.current_music
-        
-        state['audio'] = audio
-        
-        return {"success": True, "audio": audio}
-    
-    @app.get("/api/audio/{session_id}")
-    def get_audio_state(session_id: str):
-        """Get current audio state."""
-        if session_id not in SESSIONS:
-            raise HTTPException(status_code=404, detail="Session not found")
-        
-        state = SESSIONS[session_id]
-        return state.get('audio', {})
-
-    @app.get("/api/audio/state/{session_id}")
-    def get_audio_directives(session_id: str):
-        """Get audio directives (ambient/music) for AudioManager.jsx."""
-        if session_id not in SESSIONS:
-            raise HTTPException(status_code=404, detail="Session not found")
-            
-        state = SESSIONS[session_id]
-        audio = state.get('audio', {})
-        
-        # Structure as expected by AudioManager.jsx
-        return {
-            "ambient": {
-                "zone_type": audio.get('current_ambient') if isinstance(audio, dict) else audio.current_ambient,
-                "tracks": audio.get('current_tracks', []) if isinstance(audio, dict) else audio.current_tracks,
-                "volume": audio.get('ambient_volume', 0.5) if isinstance(audio, dict) else audio.ambient_volume
-            },
-            "music": {
-                "track_id": audio.get('current_music') if isinstance(audio, dict) else audio.current_music,
-                "filename": audio.get('music_filename') if isinstance(audio, dict) else audio.music_filename,
-                "volume": audio.get('music_volume', 0.6) if isinstance(audio, dict) else audio.music_volume
-            }
-        }
+        return {"rumors": network.get_active_rumors()}

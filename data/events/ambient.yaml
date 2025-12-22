@@ -1,0 +1,371 @@
+# Ambient Vignette Templates
+# Event-driven narrative encounters that emerge from simulation systems
+
+vignettes:
+  # ==========================================================================
+  # Traffic + Weather Vignettes
+  # ==========================================================================
+  - id: convoy_breakdown_storm
+    name: "Stranded Convoy"
+    category: traffic_weather
+    
+    triggers:
+      - event_type: weather_hazard
+        weather_state: [ion_storm, solar_flare]
+      - event_type: traffic_congestion
+        congestion_level: high
+    
+    requirements:
+      min_traffic_density: 0.4
+      weather_severity: medium
+    
+    description: "A trade convoy has suffered engine failure during the storm. They're drifting helplessly, broadcasting distress signals."
+    
+    variants:
+      - condition: player_reputation_positive
+        description: "The convoy captain recognizes your ship. 'Thank the Forge! Can you help us with repairs?'"
+        outcomes:
+          help: "Gain reputation, possible reward"
+          ignore: "Lose reputation, convoy may be destroyed"
+      
+      - condition: player_reputation_negative
+        description: "The convoy is wary. 'Keep your distance! We don't need your kind of help.'"
+        outcomes:
+          approach: "Triggers suspicion, possible combat"
+          ignore: "No consequence"
+      
+      - condition: player_has_repair_skill
+        description: "Your engineer spots the problem immediately - a simple plasma relay failure."
+        outcomes:
+          repair: "Quick fix, major reputation gain"
+          salvage: "Loot disabled ships, major reputation loss"
+    
+    npc_involvement:
+      required: false
+      roles: [trader, engineer]
+      count: 2-4
+
+  - id: debris_field_navigation
+    name: "Debris Field Challenge"
+    category: traffic_weather
+    
+    triggers:
+      - event_type: weather_change
+        new_state: debris_field
+      - event_type: traffic_event
+        traffic_type: patrol
+    
+    description: "A sudden debris field has appeared on your route. Patrol ships are directing traffic through a narrow safe corridor."
+    
+    variants:
+      - condition: player_wanted
+        description: "The patrol is scanning every ship. Your wanted status makes this dangerous."
+        outcomes:
+          submit_scan: "Risk of detection based on suspicion level"
+          evade: "Triggers pursuit, navigate debris manually"
+          bribe: "Clear suspicion if successful"
+      
+      - condition: player_smuggling
+        description: "Your cargo hold contains contraband. The patrol's scanners are active."
+        outcomes:
+          hide_cargo: "Skill check to conceal"
+          jettison: "Lose cargo, avoid detection"
+          run: "Triggers pursuit in hazardous debris"
+
+  # ==========================================================================
+  # Wildlife + Player Vignettes
+  # ==========================================================================
+  - id: predator_stalking
+    name: "Apex Predator"
+    category: wildlife_danger
+    
+    triggers:
+      - event_type: wildlife_spawn
+        species: [void_leviathan, plasma_eel]
+      - event_type: player_location
+        biome: [dense_nebula, asteroid_field]
+    
+    requirements:
+      player_alone: true
+      wildlife_density: medium
+    
+    description: "Your sensors detect something massive shadowing your ship. It's hunting you."
+    
+    variants:
+      - condition: player_ship_damaged
+        description: "The predator senses weakness. It's closing in fast, attracted by your leaking plasma."
+        outcomes:
+          flee: "Skill check, damaged ship is slower"
+          fight: "Combat encounter, predator is aggressive"
+          hide: "Power down and drift, hope it loses interest"
+      
+      - condition: player_has_bait
+        description: "You have cargo that might distract it - organic matter from your last stop."
+        outcomes:
+          use_bait: "Jettison cargo, predator investigates"
+          save_cargo: "Keep cargo, predator continues stalking"
+      
+      - condition: weather_low_visibility
+        description: "The nebula hides you, but also blinds your sensors. You can't see it coming."
+        outcomes:
+          sensor_pulse: "Reveal position but see predator"
+          stay_dark: "Remain hidden but vulnerable to ambush"
+
+  - id: herd_migration
+    name: "The Great Migration"
+    category: wildlife_spectacle
+    
+    triggers:
+      - event_type: wildlife_migration
+        species: [nebula_drifter, crystal_swarm]
+    
+    description: "Thousands of creatures are migrating through this sector, a breathtaking sight."
+    
+    variants:
+      - condition: player_has_camera
+        description: "This is a rare phenomenon. Archivists would pay well for documentation."
+        outcomes:
+          photograph: "Gain credits, reputation with Archivists"
+          ignore: "Miss opportunity"
+      
+      - condition: player_hungry
+        description: "Some of these creatures are edible. You could hunt for supplies."
+        outcomes:
+          hunt: "Gain supplies, possible wildlife aggression"
+          respect: "Let them pass, gain nothing"
+
+  # ==========================================================================
+  # Law + Crime Vignettes
+  # ==========================================================================
+  - id: witness_confrontation
+    name: "Witness to Murder"
+    category: law_crime
+    
+    triggers:
+      - event_type: crime_committed
+        crime_type: murder
+      - event_type: npc_witnessed
+        witness_count: 1+
+    
+    requirements:
+      law_presence: any
+      witness_alive: true
+    
+    description: "Someone saw what you did. They're backing away, hand moving toward their comm device."
+    
+    variants:
+      - condition: player_intimidating
+        description: "Your reputation precedes you. The witness is terrified."
+        outcomes:
+          threaten: "Silence witness, gain heat if failed"
+          let_go: "Witness reports, suspicion increases"
+      
+      - condition: player_charismatic
+        description: "You might be able to talk your way out of this."
+        outcomes:
+          persuade: "Convince witness it was self-defense"
+          bribe: "Pay for silence"
+          threaten: "Intimidate into silence"
+      
+      - condition: witness_is_child
+        description: "It's just a kid. They're frozen in shock, staring at you."
+        outcomes:
+          spare: "Let them run, guaranteed report"
+          silence: "Unthinkable, massive honor loss"
+          comfort: "Try to explain, uncertain outcome"
+
+  - id: patrol_intercept
+    name: "Routine Inspection"
+    category: law_encounter
+    
+    triggers:
+      - event_type: patrol_scan
+        suspicion_level: low
+      - event_type: traffic_event
+        traffic_type: patrol
+    
+    description: "A patrol ship is hailing you for a routine inspection."
+    
+    variants:
+      - condition: player_clean_record
+        description: "Your record is spotless. This should be quick."
+        outcomes:
+          comply: "Quick scan, no issues"
+          refuse: "Raises suspicion unnecessarily"
+      
+      - condition: player_has_contraband
+        description: "Your cargo hold has illegal goods. The scanner will find them."
+        outcomes:
+          dump_cargo: "Jettison before scan, lose goods"
+          hide_cargo: "Skill check to conceal"
+          bribe: "Offer payment to skip scan"
+          run: "Triggers pursuit"
+      
+      - condition: player_wanted
+        description: "Your face is on their wanted list. They're running your ID now."
+        outcomes:
+          disguise: "Use fake credentials"
+          fight: "Attack before they call backup"
+          surrender: "Accept arrest"
+
+  # ==========================================================================
+  # Multi-System Complex Vignettes
+  # ==========================================================================
+  - id: bounty_hunter_ambush
+    name: "Hunter Becomes Hunted"
+    category: law_traffic_wildlife
+    
+    triggers:
+      - event_type: bounty_active
+        bounty_level: high
+      - event_type: player_location
+        region_type: [lawless_expanse, deep_nebula]
+    
+    requirements:
+      player_bounty: 5000+
+      law_presence: low
+    
+    description: "A bounty hunter has been tracking you. They've chosen this lawless sector for the ambush."
+    
+    variants:
+      - condition: weather_hazardous
+        description: "The storm masks their approach, but also limits their sensors."
+        outcomes:
+          use_weather: "Hide in the storm, skill check"
+          fight: "Combat in hazardous conditions"
+      
+      - condition: wildlife_present
+        description: "A predator is in the area. You could use it as a distraction."
+        outcomes:
+          lure_predator: "Draw predator to hunter"
+          ignore_wildlife: "Focus on hunter, risk predator"
+      
+      - condition: traffic_nearby
+        description: "A trade convoy is passing through. Witnesses complicate things."
+        outcomes:
+          use_convoy: "Hide among traders"
+          avoid_convoy: "Keep fight isolated"
+
+  - id: station_lockdown
+    name: "Emergency Lockdown"
+    category: law_traffic_weather
+    
+    triggers:
+      - event_type: crime_committed
+        location_type: station
+      - event_type: law_escalation
+        level: high
+    
+    requirements:
+      settlement_density: 0.5+
+      law_presence: medium+
+    
+    description: "The station has gone into lockdown. All ships are grounded, and security is sweeping the docks."
+    
+    variants:
+      - condition: player_is_suspect
+        description: "You're the reason for the lockdown. Security is looking for you."
+        outcomes:
+          hide: "Find a hiding spot, wait it out"
+          disguise: "Blend in with station crew"
+          escape: "Fight through security to your ship"
+          surrender: "Turn yourself in"
+      
+      - condition: player_is_bystander
+        description: "You're caught in someone else's mess. Just bad timing."
+        outcomes:
+          wait: "Comply with lockdown, lose time"
+          help_security: "Assist in search, gain reputation"
+          exploit_chaos: "Use distraction to steal/explore"
+
+  - id: distress_signal_trap
+    name: "False Distress"
+    category: traffic_law
+    
+    triggers:
+      - event_type: distress_signal
+        source: unknown
+      - event_type: player_location
+        region_type: lawless_expanse
+    
+    requirements:
+      law_presence: low
+      player_reputation: any
+    
+    description: "A distress signal from a civilian ship. But in lawless space, it could be a pirate trap."
+    
+    variants:
+      - condition: player_cautious
+        description: "Your instincts say this is suspicious. The signal is too clean, too desperate."
+        outcomes:
+          investigate_carefully: "Approach with shields up"
+          ignore: "Avoid potential trap"
+          scan_first: "Deep scan before approach"
+      
+      - condition: player_heroic
+        description: "Someone needs help. That's all that matters."
+        outcomes:
+          rush_in: "Immediate response, high risk"
+          call_backup: "Contact nearby ships first"
+      
+      - condition: player_cynical
+        description: "Probably pirates. But what if it's real?"
+        outcomes:
+          spring_trap: "Engage pirates on your terms"
+          ignore: "Not your problem"
+          counter_trap: "Set your own ambush"
+
+# =============================================================================
+# Vignette Metadata
+# =============================================================================
+metadata:
+  total_vignettes: 11
+  categories:
+    - traffic_weather
+    - wildlife_danger
+    - wildlife_spectacle
+    - law_crime
+    - law_encounter
+    - law_traffic_wildlife
+    - law_traffic_weather
+    - traffic_law
+  
+  trigger_types:
+    - weather_hazard
+    - weather_change
+    - traffic_congestion
+    - traffic_event
+    - wildlife_spawn
+    - wildlife_migration
+    - crime_committed
+    - npc_witnessed
+    - patrol_scan
+    - bounty_active
+    - distress_signal
+    - law_escalation
+  
+  condition_types:
+    - player_reputation_positive
+    - player_reputation_negative
+    - player_has_repair_skill
+    - player_wanted
+    - player_smuggling
+    - player_ship_damaged
+    - player_has_bait
+    - weather_low_visibility
+    - player_has_camera
+    - player_hungry
+    - player_intimidating
+    - player_charismatic
+    - witness_is_child
+    - player_clean_record
+    - player_has_contraband
+    - player_bounty
+    - weather_hazardous
+    - wildlife_present
+    - traffic_nearby
+    - player_is_suspect
+    - player_is_bystander
+    - player_cautious
+    - player_heroic
+    - player_cynical

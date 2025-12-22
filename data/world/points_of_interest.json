@@ -1,0 +1,83 @@
+{
+    "pois": [
+        {
+            "id": "engine_room_clue",
+            "name": "Engine Room Damage",
+            "location": [
+                100,
+                50
+            ],
+            "poi_type": "quest_start",
+            "phase": 1,
+            "quest_hooks": [
+                "help_engineer"
+            ],
+            "biome": "ship_interior",
+            "faction": "",
+            "discovered": false,
+            "description": "Scorch marks and damaged panels suggest sabotage, not accident."
+        },
+        {
+            "id": "medical_bay_records",
+            "name": "Medical Records Terminal",
+            "location": [
+                150,
+                75
+            ],
+            "poi_type": "lore",
+            "phase": 1,
+            "quest_hooks": [],
+            "biome": "ship_interior",
+            "faction": "",
+            "discovered": false,
+            "description": "Dr. Okonkwo's terminal contains encrypted medical records."
+        },
+        {
+            "id": "captains_quarters",
+            "name": "Captain's Quarters",
+            "location": [
+                200,
+                100
+            ],
+            "poi_type": "quest_start",
+            "phase": 1,
+            "quest_hooks": [
+                "discover_truth"
+            ],
+            "biome": "ship_interior",
+            "faction": "",
+            "discovered": false,
+            "description": "The scene of the crime. Blood stains tell a story."
+        },
+        {
+            "id": "cargo_bay_secret",
+            "name": "Hidden Cargo Compartment",
+            "location": [
+                80,
+                120
+            ],
+            "poi_type": "discovery",
+            "phase": 2,
+            "quest_hooks": [],
+            "biome": "ship_interior",
+            "faction": "",
+            "discovered": false,
+            "description": "A concealed compartment contains contraband."
+        },
+        {
+            "id": "station_black_market",
+            "name": "Black Market Contact",
+            "location": [
+                300,
+                200
+            ],
+            "poi_type": "npc",
+            "phase": 2,
+            "quest_hooks": [],
+            "biome": "station",
+            "faction": "smugglers",
+            "discovered": false,
+            "description": "A shady dealer who might have information... for a price."
+        }
+    ]
+}

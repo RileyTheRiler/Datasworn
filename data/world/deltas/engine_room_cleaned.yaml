@@ -1,0 +1,21 @@
+# World Delta: Engine Room Cleaned
+# Applied when engineer_helped flag is set
+
+id: engine_room_cleaned
+trigger_flag: engineer_repaired
+
+changes:
+  - type: location_description
+    location: engine_room
+    new_description: "The engine room hums with renewed efficiency. Torres's repairs have restored full power."
+  
+  - type: npc_dialogue
+    npc: torres
+    dialogue_set: grateful
+    new_lines:
+      - "Thanks for the help. I couldn't have done it without you."
+      - "The engine's running better than ever now."
+  
+  - type: world_state
+    key: ship_power_level
+    value: 100

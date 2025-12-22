@@ -1,0 +1,204 @@
+# Guard Archetype Schedule
+# Patrol and security duty with shift rotations
+
+archetype: guard
+description: "Security personnel with patrol routes and alert states"
+
+# Shift rotations
+shifts:
+  day_shift:
+    start: "06:00"
+    end: "18:00"
+    
+  night_shift:
+    start: "18:00"
+    end: "06:00"
+
+regions:
+  default:
+    tasks:
+      # Day Shift
+      - time: "06:00"
+        duration: 30
+        location: "barracks"
+        behavior: "shift_change"
+        description: "Report for duty, receive briefing"
+        animation: "salute"
+        
+      - time: "06:30"
+        duration: 120
+        location: "north_gate"
+        behavior: "patrol"
+        description: "Patrol northern perimeter"
+        animation: "walking_alert"
+        waypoints: ["north_gate", "watchtower_1", "wall_section_a", "north_gate"]
+        
+      - time: "08:30"
+        duration: 120
+        location: "market_district"
+        behavior: "patrol"
+        description: "Monitor marketplace activity"
+        animation: "walking_alert"
+        waypoints: ["market_entrance", "market_center", "merchant_row", "market_exit"]
+        
+      - time: "10:30"
+        duration: 30
+        location: "barracks"
+        behavior: "break"
+        description: "Short rest and meal"
+        animation: "eating"
+        
+      - time: "11:00"
+        duration: 120
+        location: "south_gate"
+        behavior: "gate_duty"
+        description: "Check travelers entering/leaving"
+        animation: "standing_guard"
+        reservation: "south_gate_post"
+        
+      - time: "13:00"
+        duration: 120
+        location: "residential_district"
+        behavior: "patrol"
+        description: "Patrol residential areas"
+        animation: "walking_alert"
+        
+      - time: "15:00"
+        duration: 60
+        location: "training_yard"
+        behavior: "training"
+        description: "Combat drills and practice"
+        animation: "combat_training"
+        
+      - time: "16:00"
+        duration: 120
+        location: "east_wall"
+        behavior: "patrol"
+        description: "Final patrol before shift end"
+        animation: "walking_alert"
+        
+      - time: "18:00"
+        duration: 30
+        location: "barracks"
+        behavior: "shift_change"
+        description: "End of shift, report to commander"
+        animation: "salute"
+        
+      - time: "18:30"
+        duration: 90
+        location: "tavern"
+        behavior: "off_duty"
+        description: "Relax after shift"
+        animation: "drinking"
+        
+      - time: "20:00"
+        duration: 600
+        location: "home"
+        behavior: "sleep"
+        description: "Rest for next shift"
+        animation: "sleeping"
+
+# Alert states (override normal schedule)
+alert_states:
+  crime_reported:
+    priority: 10
+    behavior: "investigate"
+    description: "Respond to crime report"
+    tasks:
+      - behavior: "rush_to_scene"
+        animation: "running"
+        duration: 5
+      - behavior: "investigate"
+        animation: "searching"
+        duration: 15
+      - behavior: "question_witnesses"
+        animation: "talking_stern"
+        duration: 10
+    resume_after: true
+    
+  intruder_alert:
+    priority: 10
+    behavior: "combat_ready"
+    description: "Hostile detected, engage"
+    tasks:
+      - behavior: "draw_weapon"
+        animation: "weapon_draw"
+        duration: 2
+      - behavior: "pursue"
+        animation: "running_weapon_drawn"
+        duration: 30
+    resume_after: false  # Stay alert after
+    
+  fire_alarm:
+    priority: 9
+    behavior: "evacuate_civilians"
+    description: "Emergency evacuation protocol"
+    tasks:
+      - behavior: "sound_alarm"
+        duration: 3
+      - behavior: "guide_civilians"
+        duration: 60
+    resume_after: true
+
+# Weather behavior
+weather_overrides:
+  rain:
+    - behavior: "seek_covered_patrol"
+      description: "Patrol under awnings and covered areas"
+      
+  storm:
+    - behavior: "indoor_watch"
+      location: "gatehouse"
+      description: "Monitor from shelter"
+
+# Interruptions
+interruptions:
+  player_crime_witnessed:
+    priority: 10
+    behavior: "confront_player"
+    dialogue_context: "crime_witness"
+    duration: 20
+    
+  player_greeting:
+    priority: 2
+    behavior: "acknowledge"
+    duration: 3
+    resume_after: true
+    
+  superior_orders:
+    priority: 10
+    behavior: "follow_orders"
+    resume_after: false
+
+# Rare events
+rare_variants:
+  - name: "double_shift"
+    probability: 0.1
+    description: "Covering for sick colleague"
+    override_tasks:
+      - time: "06:00"
+        duration: 720  # 12 hours
+        location: "various"
+        behavior: "extended_patrol"
+        
+  - name: "inspection_day"
+    probability: 0.05
+    description: "Commander inspection"
+    override_tasks:
+      - time: "08:00"
+        duration: 120
+        location: "barracks"
+        behavior: "formal_inspection"
+        animation: "standing_attention"
+
+# Fallback behaviors
+fallback_behaviors:
+  - condition: "patrol_blocked"
+    behavior: "alternate_route"
+    
+  - condition: "gate_occupied"
+    behavior: "patrol_nearby"
+    
+  - condition: "combat_initiated"
+    behavior: "engage_threat"
+    priority: 10

@@ -90,6 +90,47 @@ class CognitiveState(BaseModel):
     relationships: Dict[str, RelationshipState] = Field(default_factory=dict)
     current_plan: Optional[DailyPlan] = None
     last_reflection_time: str = ""
+    
+    # World Simulation Integration - Crime Memory
+    witnessed_crimes: List[Dict[str, Any]] = Field(default_factory=list)
+    disturbance_memory: List[Dict[str, Any]] = Field(default_factory=list)
+    memory_decay_rate: float = 0.1  # per hour
+    
+    def decay_memories(self, time_passed: float):
+        """Decay crime and disturbance memories over time."""
+        # Decay witnessed crimes
+        for crime in self.witnessed_crimes:
+            crime['decay_progress'] = crime.get('decay_progress', 0.0) + (self.memory_decay_rate * time_passed)
+        
+        # Remove fully decayed crimes
+        self.witnessed_crimes = [c for c in self.witnessed_crimes if c.get('decay_progress', 0.0) < 1.0]
+        
+        # Decay disturbances
+        for disturbance in self.disturbance_memory:
+            disturbance['decay_progress'] = disturbance.get('decay_progress', 0.0) + (self.memory_decay_rate * time_passed)
+        
+        # Remove fully decayed disturbances
+        self.disturbance_memory = [d for d in self.disturbance_memory if d.get('decay_progress', 0.0) < 1.0]
+    
+    def clear_memories_by_disguise(self):
+        """Clear memories when player uses disguise."""
+        self.witnessed_crimes = []
+        self.disturbance_memory = []
+    
+    def clear_memories_by_bribe(self, amount: float):
+        """Clear memories based on bribe amount (0.0-1.0)."""
+        # Higher bribe = more memories cleared
+        clear_threshold = amount
+        
+        self.witnessed_crimes = [
+            c for c in self.witnessed_crimes 
+            if c.get('severity', 1) > (clear_threshold * 5)
+        ]
+        
+        self.disturbance_memory = [
+            d for d in self.disturbance_memory
+            if d.get('severity', 1) > (clear_threshold * 5)
+        ]
 
 class NPCOutput(TypedDict):
     """Structured output from the engine."""

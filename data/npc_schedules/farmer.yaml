@@ -1,0 +1,189 @@
+# Farmer Archetype Schedule
+# Daily routine for agricultural workers in settlements
+
+archetype: farmer
+description: "Agricultural worker with dawn-to-dusk routine"
+
+# Regional variants
+regions:
+  default: &default_schedule
+    tasks:
+      - time: "05:00"
+        duration: 60
+        location: "home"
+        behavior: "wake_up"
+        description: "Wake before dawn, prepare for the day"
+        animation: "stretch"
+        
+      - time: "06:00"
+        duration: 180
+        location: "fields"
+        behavior: "work_fields"
+        description: "Tend crops, check irrigation, weed"
+        animation: "farming"
+        props_required: ["hoe", "water_bucket"]
+        
+      - time: "09:00"
+        duration: 30
+        location: "well"
+        behavior: "fetch_water"
+        description: "Collect water for the day"
+        animation: "carry_bucket"
+        reservation: "well_1"
+        
+      - time: "09:30"
+        duration: 150
+        location: "fields"
+        behavior: "work_fields"
+        description: "Continue field work"
+        animation: "farming"
+        
+      - time: "12:00"
+        duration: 60
+        location: "home"
+        behavior: "lunch_break"
+        description: "Midday meal and rest"
+        animation: "eating"
+        
+      - time: "13:00"
+        duration: 180
+        location: "fields"
+        behavior: "work_fields"
+        description: "Afternoon field work"
+        animation: "farming"
+        
+      - time: "16:00"
+        duration: 60
+        location: "market"
+        behavior: "sell_goods"
+        description: "Bring produce to market"
+        animation: "trading"
+        reservation: "market_stall_3"
+        
+      - time: "17:00"
+        duration: 60
+        location: "tavern"
+        behavior: "socialize"
+        description: "Evening drink with neighbors"
+        animation: "drinking"
+        reservation: "tavern_table_2"
+        cooldown: 300  # 5 minute cooldown before reusing same table
+        
+      - time: "18:00"
+        duration: 120
+        location: "home"
+        behavior: "dinner_rest"
+        description: "Evening meal and family time"
+        animation: "eating"
+        
+      - time: "20:00"
+        duration: 540
+        location: "home"
+        behavior: "sleep"
+        description: "Sleep until dawn"
+        animation: "sleeping"
+
+  # Arid regions have different schedules
+  arid:
+    <<: *default_schedule
+    tasks:
+      - time: "04:00"
+        duration: 60
+        location: "home"
+        behavior: "wake_up"
+        description: "Wake earlier to avoid heat"
+        
+      - time: "05:00"
+        duration: 240
+        location: "fields"
+        behavior: "work_fields"
+        description: "Work during cool morning hours"
+        
+      - time: "09:00"
+        duration: 180
+        location: "home"
+        behavior: "midday_rest"
+        description: "Rest during peak heat"
+        
+      - time: "12:00"
+        duration: 240
+        location: "fields"
+        behavior: "work_fields"
+        description: "Resume work as temperature drops"
+
+# Weather overrides
+weather_overrides:
+  rain:
+    - time: "06:00"
+      location: "barn"
+      behavior: "repair_tools"
+      description: "Maintain equipment during rain"
+      
+  storm:
+    - time: "all_day"
+      location: "home"
+      behavior: "seek_shelter"
+      description: "Stay indoors during dangerous weather"
+      priority: 10  # High priority interrupt
+      
+  extreme_heat:
+    - time: "10:00-14:00"
+      location: "shade"
+      behavior: "rest"
+      description: "Avoid heatstroke"
+
+# Interruption handlers
+interruptions:
+  crime_alarm:
+    priority: 8
+    behavior: "flee_to_safety"
+    location: "home"
+    duration: 30
+    resume_after: true
+    
+  player_proximity:
+    priority: 3
+    behavior: "acknowledge"
+    duration: 5
+    resume_after: true
+    
+  predator_threat:
+    priority: 9
+    behavior: "flee"
+    location: "settlement_center"
+    duration: 20
+    resume_after: true
+
+# Rare variants (5% chance per day)
+rare_variants:
+  - name: "market_day"
+    probability: 0.15
+    override_tasks:
+      - time: "08:00"
+        duration: 480
+        location: "market"
+        behavior: "full_day_trading"
+        description: "Special market day, selling entire harvest"
+        
+  - name: "festival"
+    probability: 0.05
+    override_tasks:
+      - time: "10:00"
+        duration: 420
+        location: "town_square"
+        behavior: "celebrate"
+        description: "Participate in harvest festival"
+
+# Fallback behaviors when blocked
+fallback_behaviors:
+  - condition: "location_blocked"
+    behavior: "wait_nearby"
+    max_wait: 10
+    
+  - condition: "prop_reserved"
+    behavior: "find_alternative"
+    alternatives: ["market_stall_4", "market_stall_5"]
+    
+  - condition: "path_blocked"
+    behavior: "recalculate_path"
+    max_attempts: 3

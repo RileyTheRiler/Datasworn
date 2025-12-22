@@ -1,0 +1,28 @@
+# Example Quest Definition
+# This demonstrates the quest data format
+
+id: discover_truth
+phase: 1
+title: "Discover the Truth"
+description: "Investigate the mysterious signal that led to your ship being boarded."
+quest_type: main
+recommended_order: 1
+
+prerequisites:
+  quests: []  # No prerequisites for first quest
+  flags: []
+  reputation: {}
+
+converges_to: null  # This is a starting quest
+expires_on_phase: null  # Main quests don't expire
+
+side_effects:
+  flags_to_set:
+    - signal_investigated
+    - truth_discovered
+  world_deltas:
+    - signal_source_revealed
+
+unlock_dialogue_options:
+  - captain_truth_dialogue
+  - crew_suspicion_dialogue

@@ -42,10 +42,15 @@ from src.mystery_generator import MysteryConfig
 from src.auto_save import AutoSaveSystem
 from src.photo_album import PhotoAlbumManager
 from src.psychology_api_models import *
-from src.additional_api import register_starmap_routes, register_rumor_routes, register_audio_routes  # Added import
+from src.narrative.choice_crystallized import ChoiceCrystallizedSystem
+from src.narrative.mirror_moment import MirrorMomentSystem
+from src.character_identity import WoundType
+from src.narrative.reyes_journal import ReyesJournalSystem
+from src.additional_api import register_starmap_routes, register_rumor_routes
 from src.narrative_api import register_narrative_routes
 from src.psych_api import register_psychology_routes
 from src.combat_api import register_combat_routes
+from src.practice_api import register_practice_routes
 from src.calibration import get_calibration_scenario
 from src.npc.schemas import CognitiveState, PersonalityProfile
 from src.npc.engine import NPCCognitiveEngine
@@ -73,10 +78,35 @@ app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 # Register additional API routes
 register_starmap_routes(app, SESSIONS)
 register_rumor_routes(app, SESSIONS)
-register_audio_routes(app, SESSIONS)
 register_narrative_routes(app, SESSIONS)
 register_psychology_routes(app, SESSIONS)
 register_combat_routes(app, SESSIONS)
+register_practice_routes(app)
+
+# Register archetype system routes
+from src.archetype_api import register_archetype_routes
+register_archetype_routes(app, SESSIONS)
+
+# Register NPC scheduling routes
+from src.npc_scheduling_api import register_npc_scheduling_routes
+register_npc_scheduling_routes(app, SESSIONS)
+
+# Register quest system routes
+from src.quest_api import register_quest_routes
+register_quest_routes(app, SESSIONS)
+
+# Register camp system routes
+from src.camp_api import register_camp_routes
+register_camp_routes(app, SESSIONS)
+
+# Register world simulation routes
+from src.world_api import register_world_routes
+register_world_routes(app, SESSIONS)
+
+# Register faction routes
+from src.faction_api import register_faction_routes
+register_faction_routes(app, SESSIONS)
+
 
 
 # Global save system instance
@@ -191,19 +221,29 @@ async def start_session(req: InitRequest):
     if mystery.threat_id in relationships.crew:
         relationships.crew[mystery.threat_id].is_threat = True
     
-    # Generate portraits for crew members
-    crew_descriptions = {
-        "captain": "Stern, weathered captain in their 50s. Gray at the temples, piercing eyes. Military bearing.",
-        "engineer": "Asian engineer in grease-stained jumpsuit. Practical, focused expression. Mid-30s.",
-        "medic": "African doctor in white coat. Calm, compassionate demeanor. Professional appearance.",
-        "scientist": "Eastern European researcher with glasses. Intense, curious expression. Lab coat.",
-        "security": "Hispanic security chief with buzz cut. Muscular build, alert stance. Tactical vest.",
-        "pilot": "Androgynous pilot with short hair. Youthful, confident smirk. Flight suit.",
-    }
-    
     for crew_id, crew_member in relationships.crew.items():
         try:
-            desc = crew_descriptions.get(crew_id, "Spacer in utilitarian clothing")
+            # Use description from psyche if available, otherwise fallback
+            desc = None
+            if hasattr(crew_member, 'psyche') and crew_member.psyche:
+                if isinstance(crew_member.psyche, dict):
+                    desc = crew_member.psyche.get('description')
+                else:
+                    desc = getattr(crew_member.psyche, 'description', None)
+            
+            if not desc:
+                crew_descriptions = {
+                    "captain": "Stern, weathered captain in their 50s. Gray at the temples, piercing eyes. Military bearing.",
+                    "engineer": "Chief Engineer. Addiction issues; Reyes hoped the ship's structure would help him recover.",
+                    "medic": "The Medic. Past medical scandal; Reyes offered her a second chance. She knew he was dying.",
+                    "scientist": "Security Officer (37). Professional, quiet, and reliable. Formerly a Corporate Enforcer for Helix Dynamics.",
+                    "security": "Security Officer (37). Professional, quiet, and reliable. Formerly a Corporate Enforcer for Helix Dynamics.",
+                    "pilot": "The Pilot. Former military, court-martialed for disobeying orders to save lives. Reyes saw himself in her.",
+                    "apprentice": "The Apprentice. Stowaway runaway; Reyes would have mentored her if he'd lived.",
+                    "cargo": "The Cargo Master. Criminal past; needed to disappear. Reyes believed in redemption for everyone.",
+                }
+                desc = crew_descriptions.get(crew_id, "Spacer in utilitarian clothing")
+            
             crew_member.description = desc
             portrait_path = await generate_portrait(crew_member.name, f"{desc}. Gritty sci-fi portrait.")
             if portrait_path:
@@ -217,18 +257,29 @@ async def start_session(req: InitRequest):
     from src.npc.schemas import CognitiveState, PersonalityProfile
     for crew_id, crew_member in relationships.crew.items():
         # Map CrewMember to PersonalityProfile
-        profile = PersonalityProfile(
-            name=crew_member.name,
-            role=crew_member.role,
-            traits=[crew_member.psyche.personality_archetype] if crew_member.psyche else ["Stoic"],
-            narrative_seed=f"{crew_member.name} is the {crew_member.role} of the Aethelgard. {crew_member.description}",
-            current_mood="Neutral"
-        )
-        # Create State
-        cog_state = CognitiveState(npc_id=crew_id, profile=profile)
-        state['cognitive_npc_state'][crew_id] = cog_state
-        # Also map by name for easier lookup
-        state['cognitive_npc_state'][crew_member.name] = cog_state
+        try:
+             # Safety check for psyche access
+             archetype = "Stoic"
+             if hasattr(crew_member, 'psyche') and crew_member.psyche:
+                 if isinstance(crew_member.psyche, dict):
+                     archetype = crew_member.psyche.get('personality_archetype', "Stoic")
+                 else:
+                     archetype = getattr(crew_member.psyche, 'personality_archetype', "Stoic")
+             
+             profile = PersonalityProfile(
+                name=crew_member.name,
+                role=crew_member.role,
+                traits=[archetype],
+                narrative_seed=f"{crew_member.name} is the {crew_member.role} of the Aethelgard. {crew_member.description}",
+                current_mood="Neutral"
+            )
+             # Create State
+             cog_state = CognitiveState(npc_id=crew_id, profile=profile)
+             state['cognitive_npc_state'][crew_id] = cog_state
+             # Also map by name for easier lookup
+             state['cognitive_npc_state'][crew_member.name] = cog_state
+        except Exception as e:
+            print(f"Warning: Failed to init cognitive state for {crew_id}: {e}")
 
     SESSIONS[session_id] = state
     
@@ -339,6 +390,13 @@ def get_psyche(session_id: str):
     
     # Merge into response
     response = dict(psyche) if isinstance(psyche, dict) else psyche.dict() if hasattr(psyche, 'dict') else {}
+    
+    # Explicitly serialize archetype_profile using its to_dict method which has computed props
+    if hasattr(psyche, 'archetype_profile') and psyche.archetype_profile:
+        # Check if it has to_dict (it should)
+        if hasattr(psyche.archetype_profile, 'to_dict'):
+             response['archetype_profile'] = psyche.archetype_profile.to_dict()
+    
     response["phobias"] = phobias
     response["addictions"] = addictions
     response["guilt"] = guilt
@@ -378,6 +436,34 @@ async def calibrate_identity(req: CalibrateRequest):
     impact = IdentityScore(**choice['impact'] if isinstance(choice['impact'], dict) else choice['impact'].to_dict())
     state['psyche'].profile.identity.update_scores(impact, f"Calibration Choice: {choice['text']}")
     
+    # NEW: Also seed the Archetype Profile (Phase 4)
+    if not state['psyche'].archetype_profile:
+        from src.narrative.archetype_types import ArchetypeProfile
+        state['psyche'].archetype_profile = ArchetypeProfile()
+        
+    ap = state['psyche'].archetype_profile
+    
+    # Map IdentityScore fields to Archetypes
+    # Values in impact are typically 0.1 to 0.5
+    if impact.violence > 0:
+        ap.destroyer += impact.violence * 0.6
+        ap.avenger += impact.violence * 0.4
+    if impact.stealth > 0:
+        ap.fugitive += impact.stealth * 0.5
+        ap.ghost += impact.stealth * 0.5
+    if impact.empathy > 0:
+        ap.savior += impact.empathy * 0.5
+        ap.martyr += impact.empathy * 0.5
+    if impact.logic > 0:
+        ap.controller += impact.logic * 0.5
+        ap.pedant += impact.logic * 0.5
+    if impact.greed > 0:
+        ap.hedonist += impact.greed * 0.5
+        ap.manipulator += impact.greed * 0.5
+    
+    # Update observation count to boost confidence slightly
+    ap.observation_count += 3
+    
     return {
         "identity": state['psyche'].profile.identity.to_dict(),
         "hint": choice['narrative_hint']
@@ -399,51 +485,82 @@ async def get_npc_data(npc_id: str, session_id: str = "default"):
     relationships = state.get('relationships', {})
     crew = relationships.get('crew', {}) if isinstance(relationships, dict) else relationships.crew
     
-    # Try to find NPC by id first, then by name
     npc = None
+    is_world_npc = False
+
+    # 1. Search in Crew
     if isinstance(crew, dict):
-        # Check by id
         if npc_id.lower() in crew:
             npc = crew[npc_id.lower()]
         else:
-            # Check by name (case-insensitive)
             for member_id, member in crew.items():
                 member_name = member.get('name', '') if isinstance(member, dict) else member.name
                 if member_name.lower() == npc_id.lower():
                     npc = member
                     break
     
+    # 2. Search in World NPCs if not found in Crew
+    if not npc:
+        world_npcs = state['world'].npcs
+        for w_npc in world_npcs:
+            if w_npc.get('name', '').lower() == npc_id.lower() or w_npc.get('id', '').lower() == npc_id.lower():
+                npc = w_npc
+                is_world_npc = True
+                break
+
     if not npc:
         raise HTTPException(status_code=404, detail=f"NPC not found: {npc_id}")
     
-    # Extract fields (handle both dict and object)
-    if isinstance(npc, dict):
-        trust = npc.get('trust', 0.5)
+    # Extract fields
+    if not is_world_npc:
+        # Crew Member
+        if isinstance(npc, dict):
+            trust = npc.get('trust', 0.5)
+            suspicion = npc.get('suspicion', 0.0)
+            name = npc.get('name', npc_id)
+            role = npc.get('role', 'Unknown')
+            image_url = npc.get('image_url')
+            description = npc.get('description', '')
+            known_facts = npc.get('known_facts', [])[:5]
+        else:
+            trust = npc.trust
+            suspicion = npc.suspicion
+            name = npc.name
+            role = npc.role
+            image_url = npc.image_url if hasattr(npc, 'image_url') else None
+            description = npc.description if hasattr(npc, 'description') else ''
+            known_facts = npc.known_facts[:5] if npc.known_facts else []
+    else:
+        # World NPC (always dict)
+        trust = npc.get('trust', 0.5) # Default to neutral
         suspicion = npc.get('suspicion', 0.0)
         name = npc.get('name', npc_id)
-        role = npc.get('role', 'Unknown')
+        role = npc.get('role', npc.get('archetype', 'Unknown'))
         image_url = npc.get('image_url')
-        description = npc.get('description', '')
-        known_facts = npc.get('known_facts', [])[:5]
-    else:
-        trust = npc.trust
-        suspicion = npc.suspicion
-        name = npc.name
-        role = npc.role
-        image_url = npc.image_url if hasattr(npc, 'image_url') else None
-        description = npc.description if hasattr(npc, 'description') else ''
-        known_facts = npc.known_facts[:5] if npc.known_facts else []
-    
+        description = npc.get('description', npc.get('narrative_role', ''))
+        known_facts = [] # World NPCs might not have structured known_facts yet
+
     # Refresh portrait if missing
     if not image_url:
-        image_url = await generate_portrait(
-            character_name=name,
-            description=description or f"A gritty {role.lower()}"
-        )
-        if isinstance(npc, dict):
-            npc['image_url'] = image_url
-        else:
-            npc.image_url = image_url
+        print(f"Generating missing portrait for {name}...")
+        try:
+            image_url = await generate_portrait(
+                character_name=name,
+                description=description or f"A gritty {role.lower()}"
+            )
+            
+            # Update state with new image
+            if not is_world_npc:
+                if isinstance(npc, dict):
+                    npc['image_url'] = image_url
+                else:
+                    npc.image_url = image_url
+            else:
+                npc['image_url'] = image_url
+                
+        except Exception as e:
+            print(f"Failed to generate lazy portrait for {name}: {e}")
+            image_url = "/assets/defaults/portrait_placeholder.png"
 
     # Calculate disposition based on trust/suspicion
     if trust >= 0.7:
@@ -464,8 +581,102 @@ async def get_npc_data(npc_id: str, session_id: str = "default"):
         "suspicion": suspicion,
         "disposition": disposition,
         "image_url": image_url or "/assets/defaults/portrait_placeholder.png",
-        "description": description or f"A {role.lower()} aboard the vessel.",
+        "description": description or f"A {role.lower()} encounter.",
         "known_facts": known_facts
+    }
+
+@app.get("/api/npc/{npc_id}/archetype_response")
+async def get_npc_archetype_response(npc_id: str, session_id: str = "default"):
+    """Get NPC's specific response based on player's current archetype (WoundType)."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get player's dominant wound/archetype
+    player_wound = state['psyche'].profile.identity.wound_profile.dominant_wound
+    player_wound_str = player_wound.value if hasattr(player_wound, 'value') else str(player_wound)
+    
+    # Get RelationshipWeb
+    relationships_data = state.get('relationships', {})
+    if hasattr(relationships_data, 'model_dump'):
+        relationships = RelationshipWeb.from_dict(relationships_data.model_dump())
+    elif isinstance(relationships_data, dict):
+        relationships = RelationshipWeb.from_dict(relationships_data)
+    else:
+        relationships = relationships_data
+    
+    # Get response
+    response_text = relationships.get_npc_archetype_response(npc_id, player_wound_str)
+    
+    return {
+        "npc_id": npc_id,
+        "player_archetype": player_wound_str,
+        "response": response_text
+    }
+
+@app.post("/api/npc/generate-all")
+async def generate_all_npc_portraits(session_id: str = "default"):
+    """Trigger generation for all NPCs missing portraits."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    state = SESSIONS[session_id]
+    generated_count = 0
+    errors = []
+    
+    # Collect all NPCs needing images
+    targets = []
+    
+    # 1. Crew
+    relationships = state['relationships']
+    crew = relationships.get('crew', {}) if isinstance(relationships, dict) else relationships.crew
+    
+    crew_items = crew.items() if isinstance(crew, dict) else [(c.id, c) for c in crew.values()]
+    
+    for _, npc in crew_items:
+        img = npc.get('image_url') if isinstance(npc, dict) else getattr(npc, 'image_url', None)
+        if not img:
+            name = npc.get('name') if isinstance(npc, dict) else npc.name
+            desc = npc.get('description') if isinstance(npc, dict) else getattr(npc, 'description', "")
+            targets.append((npc, name, desc or f"Crew member {name}"))
+
+    # 2. World NPCs
+    for npc in state['world'].npcs:
+        if not npc.get('image_url'):
+            targets.append((npc, npc['name'], npc.get('description', npc.get('role', 'NPC'))))
+            
+    # Generate concurrently
+    import asyncio
+    
+    async def _gen_and_assign(target_tuple):
+        npc_obj, name, desc = target_tuple
+        try:
+            url = await generate_portrait(name, desc)
+            if url:
+                if isinstance(npc_obj, dict):
+                    npc_obj['image_url'] = url
+                else:
+                    npc_obj.image_url = url
+                return True
+        except Exception as e:
+            return f"Failed {name}: {e}"
+        return False
+
+    if targets:
+        print(f"Batch generating {len(targets)} portraits...")
+        results = await asyncio.gather(*[_gen_and_assign(t) for t in targets])
+        
+        for r in results:
+            if r is True:
+                generated_count += 1
+            elif r:
+                errors.append(str(r))
+                
+    return {
+        "generated": generated_count,
+        "total_targets": len(targets),
+        "errors": errors
     }
 
 @app.get("/api/assets")
@@ -483,6 +694,7 @@ def get_music_manifest():
     """Get all available music tracks organized by mood."""
     music_dir = ASSETS_DIR / "music"
     manifest = {
+        "theme": [],
         "relaxing": [],
         "tense": [],
         "dramatic": [],
@@ -596,6 +808,15 @@ async def chat(req: ActionRequest):
         raise HTTPException(status_code=404, detail="Session not found")
     
     state = SESSIONS[req.session_id]
+
+    # --- NEW: Update Psychological Profile (Wounds/RUO) ---
+    try:
+        from src.psych_profile import PsychologicalEngine
+        psych_engine = PsychologicalEngine()
+        psych_engine.update_wound_profile(state['psyche'].profile, req.action)
+    except Exception as e:
+        print(f"Psych profile update warning: {e}")
+    # ------------------------------------------------------
     
     # 0. Hydrate Orchestrator & Director
     from src.narrative_orchestrator import NarrativeOrchestrator
@@ -662,11 +883,25 @@ async def chat(req: ActionRequest):
                  if name and name not in active_npcs:
                      active_npcs.append(name)
     
-    # Get Orchestrator Guidance (Bonds, Pacing, World Facts, etc.)
+    # Mystery Status Check
+    is_mystery_solved = False
+    mystery_state = state.get('mystery')
+    if mystery_state:
+        if isinstance(mystery_state, dict):
+            is_mystery_solved = mystery_state.get('is_revealed', False)
+        else:
+            is_mystery_solved = getattr(mystery_state, 'is_revealed', False)
+    
+    # Auto-trigger ending sequence in state
+    if is_mystery_solved and not state['narrative'].ending_triggered:
+        state['narrative'].ending_triggered = True
+
     orchestrator_guidance = orchestrator.get_comprehensive_guidance(
         location=state['world'].current_location,
         active_npcs=active_npcs,
-        player_action=req.action
+        player_action=req.action,
+        psych_profile=state['psyche'].profile,
+        is_mystery_solved=is_mystery_solved
     )
     
     # Append immediate combat update result if any
@@ -1841,6 +2076,8 @@ def export_story_markdown(session_id: str):
 ---
 
 *Generated by Starforged AI Game Master*
+# Starforged AI Game Master Server
+# Forced reload trigger
 """
     
     return Response(
@@ -2126,7 +2363,7 @@ class VolumeRequest(BaseModel):
 @app.post("/api/audio/volume")
 def set_volume(req: VolumeRequest):
     """Set volume for a specific audio channel."""
-    if session_id not in SESSIONS:
+    if req.session_id not in SESSIONS:
         raise HTTPException(status_code=404, detail="Session not found")
     
     state = SESSIONS[req.session_id]
@@ -2167,6 +2404,258 @@ def toggle_mute(session_id: str):
     
     return {"muted": muted}
 
+
+# ============================================================================
+# CHAPTER PROGRESSION ENDPOINTS
+# ============================================================================
+
+# Global progression manager instance
+from src.narrative.progression import ProgressionManager
+
+PROGRESSION_MANAGER = None
+
+def get_progression_manager() -> ProgressionManager:
+    """Get or create progression manager singleton."""
+    global PROGRESSION_MANAGER
+    if PROGRESSION_MANAGER is None:
+        PROGRESSION_MANAGER = ProgressionManager()
+    return PROGRESSION_MANAGER
+
+@app.get("/api/chapter/current")
+def get_current_chapter(session_id: str = "default"):
+    """Get current chapter metadata and state."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get or initialize progression state from session
+    if 'chapter_progression' not in state:
+        manager = get_progression_manager()
+        state['chapter_progression'] = manager.state.to_dict()
+    else:
+        # Hydrate manager with saved state
+        manager = get_progression_manager()
+        from src.narrative.progression import ChapterState
+        manager.state = ChapterState.from_dict(state['chapter_progression'])
+    
+    return manager.get_state()
+
+@app.get("/api/chapter/regions")
+def get_chapter_regions(session_id: str = "default"):
+    """Get unlocked and locked regions."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    manager = get_progression_manager()
+    
+    if 'chapter_progression' in state:
+        from src.narrative.progression import ChapterState
+        manager.state = ChapterState.from_dict(state['chapter_progression'])
+    
+    current_chapter = manager.get_current_chapter()
+    
+    # Get all possible regions from all chapters
+    all_regions = set()
+    for chapter in manager.chapters.values():
+        all_regions.update(chapter.regions_unlocked)
+    
+    unlocked = []
+    locked = []
+    
+    for region in all_regions:
+        is_accessible = manager.is_region_accessible(region)
+        region_data = {
+            'id': region,
+            'accessible': is_accessible
+        }
+        
+        if is_accessible:
+            unlocked.append(region_data)
+        else:
+            # Check why it's locked
+            if region not in manager.state.unlocked_regions:
+                region_data['reason'] = 'Not unlocked in current chapter'
+            else:
+                # Find soft lock
+                for soft_lock in manager.state.active_soft_locks.values():
+                    if soft_lock.active and region in soft_lock.affected_regions:
+                        region_data['reason'] = soft_lock.description
+                        break
+            locked.append(region_data)
+    
+    return {
+        'unlocked': unlocked,
+        'locked': locked,
+        'total': len(all_regions)
+    }
+
+@app.get("/api/chapter/soft-locks")
+def get_soft_locks(session_id: str = "default"):
+    """Get active soft locks (diegetic barriers)."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    manager = get_progression_manager()
+    
+    if 'chapter_progression' in state:
+        from src.narrative.progression import ChapterState
+        manager.state = ChapterState.from_dict(state['chapter_progression'])
+    
+    active_locks = []
+    inactive_locks = []
+    
+    for lock_id, soft_lock in manager.state.active_soft_locks.items():
+        lock_data = {
+            'id': lock_id,
+            'description': soft_lock.description,
+            'affected_regions': soft_lock.affected_regions
+        }
+        
+        if soft_lock.active:
+            active_locks.append(lock_data)
+        else:
+            inactive_locks.append(lock_data)
+    
+    return {
+        'active': active_locks,
+        'inactive': inactive_locks
+    }
+
+class ChapterAdvanceRequest(BaseModel):
+    session_id: str = "default"
+    next_chapter_id: str
+
+@app.post("/api/chapter/advance")
+def advance_chapter(req: ChapterAdvanceRequest):
+    """Advance to the next chapter (validates mission completion)."""
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[req.session_id]
+    manager = get_progression_manager()
+    
+    if 'chapter_progression' in state:
+        from src.narrative.progression import ChapterState
+        manager.state = ChapterState.from_dict(state['chapter_progression'])
+    
+    # Attempt advancement
+    result = manager.advance_chapter(req.next_chapter_id)
+    
+    if not result['success']:
+        raise HTTPException(status_code=400, detail=result.get('error', 'Cannot advance chapter'))
+    
+    # Save updated state
+    state['chapter_progression'] = manager.state.to_dict()
+    
+    return result
+
+@app.get("/api/chapter/progress")
+def get_chapter_progress(session_id: str = "default"):
+    """Get mission completion status for current chapter (synchronized with Quest Graph)."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    from src.quest_api import _get_quest_graph
+    graph = _get_quest_graph(session_id)
+    
+    current_phase_id = graph.state_manager.current_phase
+    phase_data = graph.phases.get(current_phase_id)
+    
+    if not phase_data:
+        return {
+            'chapter_id': f"chapter_{current_phase_id}",
+            'chapter_name': f"Phase {current_phase_id}",
+            'critical_missions': [],
+            'completed_missions': [],
+            'missing_missions': [],
+            'is_complete': True,
+            'can_advance': True
+        }
+    
+    critical_quests = phase_data.get('critical_quests', [])
+    completed_quests = graph.state_manager.get_completed_quests()
+    
+    completed_missions = [q for q in critical_quests if q in completed_quests]
+    missing_missions = [q for q in critical_quests if q not in completed_quests]
+    is_complete = len(missing_missions) == 0
+    
+    return {
+        'chapter_id': f"chapter_{current_phase_id}",
+        'chapter_name': phase_data.get('name', f"Phase {current_phase_id}"),
+        'critical_missions': critical_quests,
+        'completed_missions': completed_missions,
+        'missing_missions': missing_missions,
+        'is_complete': is_complete,
+        'can_advance': is_complete
+    }
+
+class DebugChapterRequest(BaseModel):
+    session_id: str = "default"
+    chapter_id: str
+
+@app.post("/api/debug/chapter/set")
+def debug_set_chapter(req: DebugChapterRequest):
+    """DEBUG: Force-set chapter without validation."""
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[req.session_id]
+    manager = get_progression_manager()
+    
+    if 'chapter_progression' in state:
+        from src.narrative.progression import ChapterState
+        manager.state = ChapterState.from_dict(state['chapter_progression'])
+    
+    success = manager.force_set_chapter(req.chapter_id)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Chapter not found: {req.chapter_id}")
+    
+    # Save updated state
+    state['chapter_progression'] = manager.state.to_dict()
+    
+    return {
+        'success': True,
+        'chapter': manager.get_state()
+    }
+
+class DebugUnlockRegionRequest(BaseModel):
+    session_id: str = "default"
+    region_id: str
+
+@app.post("/api/debug/chapter/unlock-region")
+def debug_unlock_region(req: DebugUnlockRegionRequest):
+    """DEBUG: Bypass region locks."""
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[req.session_id]
+    manager = get_progression_manager()
+    
+    if 'chapter_progression' in state:
+        from src.narrative.progression import ChapterState
+        manager.state = ChapterState.from_dict(state['chapter_progression'])
+    
+    manager.unlock_region(req.region_id)
+    
+    # Also clear any soft locks affecting this region
+    for soft_lock in manager.state.active_soft_locks.values():
+        if req.region_id in soft_lock.affected_regions:
+            soft_lock.active = False
+    
+    # Save updated state
+    state['chapter_progression'] = manager.state.to_dict()
+    
+    return {
+        'success': True,
+        'region_id': req.region_id,
+        'accessible': manager.is_region_accessible(req.region_id)
+    }
+
+# ============================================================================
 
 def run():
     uvicorn.run("src.server:app", host="0.0.0.0", port=8000, reload=True)
@@ -2306,6 +2795,44 @@ class DirectorEventRequest(BaseModel):
     importance: int = 5
     location_id: Optional[str] = None
     
+@app.get("/api/narrative/murder-resolution")
+async def get_murder_resolution(session_id: str = "default"):
+    """
+    Generates the murder resolution mirror dialogue based on the player's character identity.
+    Returns the full revelation structure with phases and archetype-specific content.
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Import here to avoid circular dependencies
+    from src.character_identity import WoundType
+    from src.narrative.murder_mirror import MirrorSystem
+    
+    # Get the player's dominant wound from their psychological profile
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    # Access the wound profile
+    wound = WoundType.UNKNOWN
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'identity'):
+        wound = psyche.profile.identity.wound_profile.dominant_wound
+    elif hasattr(psyche, 'identity'):
+        wound = psyche.identity.wound_profile.dominant_wound
+    
+    # If wound is still unknown, default to CONTROLLER as a safe fallback
+    if wound == WoundType.UNKNOWN:
+        wound = WoundType.CONTROLLER
+        
+    revelation = MirrorSystem.generate_revelation(wound)
+    
+    return {
+        "player_wound": wound.value,
+        "revelation": revelation
+    }
+
 @app.post("/api/director/event")
 async def trigger_director_event(req: DirectorEventRequest):
     """
@@ -2320,5 +2847,1170 @@ async def trigger_director_event(req: DirectorEventRequest):
     return {"status": "Event published", "summary": req.summary}
 
 
+@app.get("/api/narrative/reyes/journal")
+def get_reyes_journal(session_id: str = "default", entry_id: Optional[str] = None):
+    """
+    Retrieve Captain Reyes's journal fragments.
+    If entry_id is provided, returns that specific entry.
+    Otherwise returns all available entries.
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    if entry_id:
+        entry = ReyesJournalSystem.get_entry(entry_id)
+        if not entry:
+            raise HTTPException(status_code=404, detail=f"Journal entry not found: {entry_id}")
+        return entry
+    
+    return {"entries": ReyesJournalSystem.get_all_entries()}
+
+
+
+@app.post("/api/narrative/revelation/choice-crystallized")
+def trigger_choice_crystallized(session_id: str = "default"):
+    """
+    Triggers Stage 4 of the Revelation Ladder.
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Safely access wound profile
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+        
+    current_wound = WoundType.UNKNOWN
+    # Support both structure types depending on how GameState unpacks
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+        current_wound = psyche.profile.wound_profile.dominant_wound
+    elif hasattr(psyche, 'wound_profile'):
+         current_wound = psyche.wound_profile.dominant_wound
+    
+    if current_wound == WoundType.UNKNOWN:
+        current_wound = WoundType.CONTROLLER 
+
+    scene_data = ChoiceCrystallizedSystem.get_scene(current_wound)
+    
+    return scene_data
+
+class RevelationResponse(BaseModel):
+    session_id: str
+    scene_id: str
+    response_type: str # engaged, deflected, attacked
+    wound_type: str 
+
+@app.post("/api/narrative/revelation/respond")
+def respond_to_revelation(req: RevelationResponse):
+    """
+    Handle player response to the revelation.
+    """
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    state = SESSIONS[req.session_id]
+    psyche = state.get('psyche')
+    
+    profile = None
+    if hasattr(psyche, 'profile'):
+        profile = psyche.profile
+    
+    # Access wound profile safely
+    target_profile = None
+    if profile and hasattr(profile, 'wound_profile'):
+         target_profile = profile.wound_profile
+    elif hasattr(psyche, 'wound_profile'):
+         target_profile = psyche.wound_profile
+         
+    if not target_profile:
+         raise HTTPException(status_code=500, detail="Could not access wound profile structure")
+    
+    # Convert string back to Enum
+    try:
+        w_type = WoundType(req.wound_type)
+    except ValueError:
+        w_type = WoundType.CONTROLLER
+        
+    record = ChoiceCrystallizedSystem.process_response(
+        target_profile, 
+        req.scene_id, 
+        req.response_type, 
+        w_type
+    )
+    
+    return {"status": "recorded", "record": record.to_dict()}
+
+
+@app.post("/api/narrative/revelation/mirror-moment")
+def trigger_mirror_moment(session_id: str = "default"):
+    """
+    Triggers Stage 1 of the Revelation Ladder (Mirror Moment).
+    Requires 25% story progress.
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get story progress (you may need to adjust this based on your progress tracking)
+    # For now, using scene count as a proxy
+    scene_count = len(state.get('narrative', {}).get('history', []))
+    story_progress = min(1.0, scene_count / 40.0)  # Assume ~40 scenes = 100%
+    
+    # Get player's wound
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    current_wound = WoundType.UNKNOWN
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+        current_wound = psyche.profile.wound_profile.dominant_wound
+    elif hasattr(psyche, 'wound_profile'):
+        current_wound = psyche.wound_profile.dominant_wound
+    
+    if current_wound == WoundType.UNKNOWN:
+        current_wound = WoundType.CONTROLLER
+    
+    # Get scene
+    scene_data = MirrorMomentSystem.get_mirror_scene(current_wound, story_progress)
+    
+    # If scene was successfully retrieved, record it
+    if "error" not in scene_data:
+        # Access wound profile
+        target_profile = None
+        if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+            target_profile = psyche.profile.wound_profile
+        elif hasattr(psyche, 'wound_profile'):
+            target_profile = psyche.wound_profile
+        
+        if target_profile:
+            MirrorMomentSystem.record_delivery(
+                target_profile,
+                scene_data['scene_id'],
+                current_wound
+            )
+    
+    return scene_data
+
+
+@app.post("/api/narrative/revelation/cost-revealed")
+def trigger_cost_revealed(session_id: str = "default"):
+    """
+    Triggers Stage 2 of the Revelation Ladder (Cost Revealed).
+    Requires 40% story progress.
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get story progress
+    scene_count = len(state.get('narrative', {}).get('history', []))
+    story_progress = min(1.0, scene_count / 40.0)
+    
+    # Get player's wound
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    current_wound = WoundType.UNKNOWN
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+        current_wound = psyche.profile.wound_profile.dominant_wound
+    elif hasattr(psyche, 'wound_profile'):
+        current_wound = psyche.wound_profile.dominant_wound
+    
+    if current_wound == WoundType.UNKNOWN:
+        current_wound = WoundType.CONTROLLER
+    
+    # Get scene
+    from src.narrative.cost_revealed import CostRevealedSystem
+    scene_data = CostRevealedSystem.get_cost_scene(current_wound, story_progress)
+    
+    # Record if successful
+    if "error" not in scene_data:
+        target_profile = None
+        if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+            target_profile = psyche.profile.wound_profile
+        elif hasattr(psyche, 'wound_profile'):
+            target_profile = psyche.wound_profile
+            
+        if target_profile:
+            CostRevealedSystem.record_delivery(
+                target_profile,
+                scene_data['scene_id'],
+                current_wound
+            )
+    
+    return scene_data
+
+
+@app.post("/api/narrative/revelation/origin-glimpsed")
+def trigger_origin_glimpsed(session_id: str = "default"):
+    """
+    Triggers Stage 3 of the Revelation Ladder (Origin Glimpsed).
+    Requires 55% story progress.
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get story progress
+    scene_count = len(state.get('narrative', {}).get('history', []))
+    story_progress = min(1.0, scene_count / 40.0)
+    
+    # Get player's wound
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    current_wound = WoundType.UNKNOWN
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+        current_wound = psyche.profile.wound_profile.dominant_wound
+    elif hasattr(psyche, 'wound_profile'):
+        current_wound = psyche.wound_profile.dominant_wound
+    
+    if current_wound == WoundType.UNKNOWN:
+        current_wound = WoundType.CONTROLLER
+    
+    # Get scene
+    from src.narrative.origin_glimpsed import OriginGlimpsedSystem
+    scene_data = OriginGlimpsedSystem.get_origin_scene(current_wound, story_progress)
+    
+    # Record if successful
+    if "error" not in scene_data:
+        target_profile = None
+        if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+            target_profile = psyche.profile.wound_profile
+        elif hasattr(psyche, 'wound_profile'):
+            target_profile = psyche.wound_profile
+            
+        if target_profile:
+            OriginGlimpsedSystem.record_delivery(
+                target_profile,
+                scene_data['scene_id'],
+                current_wound
+            )
+    
+    return scene_data
+
+
+@app.post("/api/narrative/revelation/choice-crystallized")
+def trigger_choice_crystallized(session_id: str = "default"):
+    """
+    Triggers Stage 4 of the Revelation Ladder (Choice Crystallized).
+    Requires 70% story progress.
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get player's wound
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    current_wound = WoundType.CONTROLLER
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+        current_wound = psyche.profile.wound_profile.dominant_wound
+    elif hasattr(psyche, 'wound_profile'):
+        current_wound = psyche.wound_profile.dominant_wound
+        
+    # Get scene
+    from src.narrative.choice_crystallized import ChoiceCrystallizedSystem
+    scene_data = ChoiceCrystallizedSystem.get_scene(current_wound)
+    
+    return scene_data
+
+
+class RevelationRespondRequest(BaseModel):
+    session_id: str
+    stage: str
+    scene_id: str
+    response_type: str
+    wound_type: str
+
+
+@app.post("/api/narrative/revelation/respond")
+def respond_revelation(req: RevelationRespondRequest):
+    """
+    Processes the player's response to a revelation stage.
+    """
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[req.session_id]
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    profile = None
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+        profile = psyche.profile.wound_profile
+    elif hasattr(psyche, 'wound_profile'):
+        profile = psyche.wound_profile
+        
+    if not profile:
+        raise HTTPException(status_code=500, detail="Could not access wound profile")
+
+    # Determine which system to use based on stage
+    from src.character_identity import WoundType
+    try:
+        w_type = WoundType(req.wound_type.lower())
+    except ValueError:
+        w_type = WoundType.CONTROLLER
+
+    record = None
+    if req.stage == "choice_crystallized":
+        from src.narrative.choice_crystallized import ChoiceCrystallizedSystem
+        record = ChoiceCrystallizedSystem.process_response(
+            profile, req.scene_id, req.response_type, w_type
+        )
+    elif req.stage == "origin_glimpsed":
+        from src.narrative.origin_glimpsed import OriginGlimpsedSystem
+        record = OriginGlimpsedSystem.process_response(
+            profile, req.scene_id, req.response_type, w_type
+        )
+    elif req.stage == "cost_revealed":
+        from src.narrative.cost_revealed import CostRevealedSystem
+        record = CostRevealedSystem.process_response(
+            profile, req.scene_id, req.response_type, w_type
+        )
+    elif req.stage == "mirror_moment":
+        from src.narrative.mirror_moment import MirrorMomentSystem
+        record = MirrorMomentSystem.process_response(
+            profile, req.scene_id, req.response_type, w_type
+        )
+    
+    if not record:
+        raise HTTPException(status_code=400, detail=f"Unsupported revelation stage: {req.stage}")
+        
+    # Save session
+    return {"success": True, "stage": req.stage, "response": req.response_type}
+
+
+@app.get("/api/narrative/revelation/status")
+def get_revelation_status(session_id: str = "default"):
+    """Returns the current status of the Revelation Ladder."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    scene_count = len(state.get('narrative', {}).get('history', []))
+    story_progress = min(1.0, scene_count / 40.0)
+    
+    profile = None
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+        profile = psyche.profile.wound_profile
+    elif hasattr(psyche, 'wound_profile'):
+        profile = psyche.wound_profile
+        
+    if not profile:
+        raise HTTPException(status_code=500, detail="Could not access wound profile")
+
+    from src.narrative.revelation_orchestrator import RevelationOrchestrator
+    return RevelationOrchestrator.get_status(profile, story_progress)
+
+
+@app.get("/api/narrative/revelation/check")
+def check_for_revelation(session_id: str = "default"):
+    """
+    Checks if any new revelation stage should be triggered.
+    Returns the scene data or null.
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+        
+    scene_count = len(state.get('narrative', {}).get('history', []))
+    story_progress = min(1.0, scene_count / 40.0)
+    
+    profile = None
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+        profile = psyche.profile.wound_profile
+    elif hasattr(psyche, 'wound_profile'):
+        profile = psyche.wound_profile
+        
+    if not profile:
+        raise HTTPException(status_code=500, detail="Could not access wound profile")
+
+    from src.narrative.revelation_orchestrator import RevelationOrchestrator
+    scene_data = RevelationOrchestrator.get_pending_revelation(profile, story_progress)
+    
+    if scene_data and "error" not in scene_data:
+        stage = scene_data.get("stage")
+        if stage in ["mirror_moment", "cost_revealed", "origin_glimpsed", "choice_crystallized"]:
+            if stage == "mirror_moment":
+                from src.narrative.mirror_moment import MirrorMomentSystem
+                MirrorMomentSystem.record_delivery(profile, scene_data['scene_id'], profile.dominant_wound)
+            elif stage == "cost_revealed":
+                from src.narrative.cost_revealed import CostRevealedSystem
+                CostRevealedSystem.record_delivery(profile, scene_data['scene_id'], profile.dominant_wound)
+            elif stage == "origin_glimpsed":
+                from src.narrative.origin_glimpsed import OriginGlimpsedSystem
+                OriginGlimpsedSystem.record_delivery(profile, scene_data['scene_id'], profile.dominant_wound)
+            elif stage == "choice_crystallized":
+                from src.narrative.choice_crystallized import ChoiceCrystallizedSystem
+                ChoiceCrystallizedSystem.record_delivery(profile, scene_data['scene_id'], profile.dominant_wound)
+    
+    return scene_data
+
+
+# --- INTERROGATION ENDPOINTS ---
+
+class InterrogateStartRequest(BaseModel):
+    session_id: str
+    npc_id: str
+
+class InterrogateRespondRequest(BaseModel):
+    session_id: str
+    choice_id: str
+
+@app.post("/api/narrative/interrogate/start")
+def start_interrogation(req: InterrogateStartRequest):
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    state = SESSIONS[req.session_id]
+    
+    # Initialize Manager if needed
+    from src.narrative.interrogation import InterrogationManager
+    from src.narrative.interrogation_scenes import get_interrogation_scene
+    
+    # Access via Pydantic model
+    manager = state['narrative'].interrogation_manager
+    if not manager:
+        manager = InterrogationManager()
+        state['narrative'].interrogation_manager = manager
+        
+    scene_map = {
+        "security": "torres", "torres": "torres",
+        "pilot": "vasquez", "vasquez": "vasquez", 
+        "engineer": "kai", "kai": "kai",
+        "medic": "okonkwo", "doctor": "okonkwo", "doc": "okonkwo",
+        "ember": "ember",
+        "scientist": "yuki", "yuki": "yuki"
+    }
+    
+    scene_name = scene_map.get(req.npc_id.lower(), req.npc_id.lower())
+    scene = get_interrogation_scene(scene_name)
+    
+    if not scene:
+        raise HTTPException(status_code=404, detail=f"No interrogation scene for {req.npc_id}")
+        
+    scene_key = f"{scene_name}_{len(manager.active_state.history) if manager.active_state else 0}"
+    manager.register_scene(scene_key, scene)
+    
+    try:
+        # Prepare injection data
+        web = state.get('relationships')
+        if isinstance(web, dict):
+             web = RelationshipWeb.from_dict(web)
+             
+        psyche = state.get('psyche')
+        wound_profile = None
+        if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+            wound_profile = psyche.profile.wound_profile
+        elif hasattr(psyche, 'wound_profile'):
+            wound_profile = psyche.wound_profile
+            
+        node = manager.start_interrogation(scene_key, relationship_web=web, player_wound_profile=wound_profile)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    return {
+        "npc_text": node.npc_text,
+        "choices": [{"id": c.id, "text": c.text} for c in node.choices],
+        "is_complete": node.is_terminal
+    }
+
+@app.post("/api/narrative/interrogate/respond")
+def respond_interrogation(req: InterrogateRespondRequest):
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    state = SESSIONS[req.session_id]
+    manager = state['narrative'].interrogation_manager
+    
+    if not manager or not manager.active_state:
+        raise HTTPException(status_code=400, detail="No active interrogation")
+        
+    try:
+        node = manager.advance(req.choice_id)
+        
+        # If interrogation complete, apply changes to game state
+        if node.is_terminal:
+            # 1. Apply Relationship Changes
+            try:
+                npc_id = manager.active_state.npc_id
+                # Direct access to relationships crew dict
+                if 'relationships' in state and 'crew' in state['relationships']:
+                    crew_dict = state['relationships']['crew']
+                    if npc_id in crew_dict:
+                        crew_dict[npc_id]['trust'] = max(0.0, min(1.0, 
+                            crew_dict[npc_id].get('trust', 0.5) + manager.active_state.trust_delta))
+                        crew_dict[npc_id]['suspicion'] = max(0.0, min(1.0, 
+                            crew_dict[npc_id].get('suspicion', 0.0) + manager.active_state.suspicion_delta))
+            except Exception as e:
+                print(f"Warning: Could not update relationships: {e}")
+            
+            # 2. Apply Wound Profile Changes
+            try:
+                psyche = state.get('psyche')
+                if psyche and hasattr(psyche, 'profile'):
+                    wound_profile = psyche.profile.wound_profile if hasattr(psyche.profile, 'wound_profile') else None
+                    if wound_profile:
+                        manager.apply_signals_to_wound_profile(wound_profile)
+            except Exception as e:
+                print(f"Warning: Could not update wound profile: {e}")
+        
+        return {
+            "npc_text": node.npc_text,
+            "choices": [{"id": c.id, "text": c.text} for c in node.choices],
+            "is_complete": node.is_terminal,
+            "signals": manager.active_state.signals_accumulated,
+            "trust_delta": manager.active_state.trust_delta,
+            "suspicion_delta": manager.active_state.suspicion_delta
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Scene Templates API
+# ============================================================================
+
+@app.get("/api/narrative/scene-templates/list")
+def list_scene_templates():
+    """List all available scene template types."""
+    from src.narrative.scene_templates import list_scene_types
+    return {"scene_types": list_scene_types()}
+
+
+@app.get("/api/narrative/scene-templates/{scene_type}")
+def get_scene_template_details(scene_type: str):
+    """Get detailed information about a specific scene template."""
+    from src.narrative.scene_templates import get_scene_template, SceneType
+    
+    try:
+        st = SceneType(scene_type)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Scene type '{scene_type}' not found")
+    
+    template = get_scene_template(st)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    return {
+        "scene_type": template.scene_type.value,
+        "name": template.name,
+        "purpose": template.purpose,
+        "trigger_conditions": template.trigger_conditions,
+        "beats": [
+            {
+                "beat_number": beat.beat_number,
+                "beat_name": beat.beat_name,
+                "description": beat.description,
+                "narrative_text": beat.narrative_text,
+                "archetype_variations": {k.value: v for k, v in beat.archetype_variations.items()}
+            }
+            for beat in template.beats
+        ],
+        "npc_variations": list(template.npc_variations.keys()),
+        "archetype_integration": {k.value: v for k, v in template.archetype_integration.items()}
+    }
+
+
+class GenerateSceneRequest(BaseModel):
+    session_id: str
+    scene_type: str
+    npc_id: Optional[str] = None
+
+
+@app.post("/api/narrative/scene-templates/generate")
+def generate_scene_instance(req: GenerateSceneRequest):
+    """
+    Generate a scene instance based on current game state.
+    
+    Accepts:
+    - session_id: Current game session
+    - scene_type: Type of scene to generate
+    - npc_id: Optional specific NPC for NPC-variant scenes
+    
+    Returns:
+    - Fully instantiated scene with dialogue, choices, and consequences
+    """
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[req.session_id]
+    
+    # Get player's archetype
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    player_wound = WoundType.UNKNOWN
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+        player_wound = psyche.profile.wound_profile.dominant_wound
+    elif hasattr(psyche, 'wound_profile'):
+        player_wound = psyche.wound_profile.dominant_wound
+    
+    if player_wound == WoundType.UNKNOWN:
+        player_wound = WoundType.CONTROLLER
+    
+    # Get story progress
+    scene_count = len(state.get('narrative', {}).get('history', []))
+    story_progress = min(1.0, scene_count / 40.0)
+    
+    # Get relationship score if NPC specified
+    relationship_score = 0.0
+    if req.npc_id:
+        relationships = state.get('relationships', {})
+        if isinstance(relationships, dict) and 'crew' in relationships:
+            crew = relationships['crew']
+            if req.npc_id in crew:
+                relationship_score = crew[req.npc_id].get('trust', 0.0)
+    
+    # Generate scene
+    from src.narrative.scene_templates import generate_scene_instance as gen_scene, SceneType
+    
+    try:
+        st = SceneType(req.scene_type)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Scene type '{req.scene_type}' not found")
+    
+    scene_instance = gen_scene(
+        scene_type=st,
+        player_archetype=player_wound,
+        npc_id=req.npc_id,
+        story_progress=story_progress,
+        relationship_score=relationship_score
+    )
+    
+    return scene_instance
+
+
 if __name__ == "__main__":
     run()
+
+# ============================================================================
+# Ending System API
+# ============================================================================
+
+@app.get("/api/ending/decision-prompt")
+def get_ending_decision_prompt(session_id: str = "default"):
+    """Get the moral decision prompt for the player's archetype."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get player's dominant wound/archetype
+    player_wound = state['psyche'].profile.identity.wound_profile.dominant_wound
+    archetype = player_wound.value if hasattr(player_wound, 'value') else str(player_wound)
+    
+    # Hydrate orchestrator
+    from src.narrative_orchestrator import NarrativeOrchestrator
+    orchestrator_data = state.get("narrative_orchestrator", {}).get("orchestrator_data", {})
+    if orchestrator_data:
+        orchestrator = NarrativeOrchestrator.from_dict(orchestrator_data)
+    else:
+        orchestrator = NarrativeOrchestrator()
+    
+    # Get decision prompt
+    prompt = orchestrator.ending_system.get_decision_prompt(archetype)
+    
+    return {
+        "archetype": archetype,
+        "question": prompt["question"],
+        "options": prompt["options"]
+    }
+
+
+class EndingChoiceRequest(BaseModel):
+    session_id: str
+    choice: str  # "accept" or "reject" or specific option key
+
+
+@app.post("/api/ending/submit-choice")
+def submit_ending_choice(req: EndingChoiceRequest):
+    """Process the player's ending choice and determine Hero/Tragedy path."""
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[req.session_id]
+    
+    # Get player's archetype
+    player_wound = state['psyche'].profile.identity.wound_profile.dominant_wound
+    archetype = player_wound.value if hasattr(player_wound, 'value') else str(player_wound)
+    
+    # Hydrate orchestrator
+    from src.narrative_orchestrator import NarrativeOrchestrator
+    from src.narrative.endings import EndingType
+    
+    orchestrator_data = state.get("narrative_orchestrator", {}).get("orchestrator_data", {})
+    if orchestrator_data:
+        orchestrator = NarrativeOrchestrator.from_dict(orchestrator_data)
+    else:
+        orchestrator = NarrativeOrchestrator()
+    
+    # Process decision
+    ending_type = orchestrator.ending_system.process_decision(archetype, req.choice)
+    
+    # Update state
+    state['narrative'].ending_choice = req.choice
+    state['narrative'].ending_type = ending_type.value
+    state['narrative'].ending_stage = "decision"
+    
+    # Save orchestrator state
+    state['narrative_orchestrator'].orchestrator_data = orchestrator.to_dict()
+    
+    return {
+        "ending_type": ending_type.value,
+        "archetype": archetype,
+        "choice": req.choice
+    }
+
+
+@app.get("/api/ending/narrative-beat")
+def get_ending_narrative_beat(session_id: str = "default", stage: str = "decision"):
+    """Get the narrative text for a specific ending stage."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Validate that ending has been triggered
+    if not state['narrative'].ending_type:
+        raise HTTPException(status_code=400, detail="Ending not yet triggered")
+    
+    # Get player's archetype
+    player_wound = state['psyche'].profile.identity.wound_profile.dominant_wound
+    archetype = player_wound.value if hasattr(player_wound, 'value') else str(player_wound)
+    
+    # Hydrate orchestrator
+    from src.narrative_orchestrator import NarrativeOrchestrator
+    from src.narrative.endings import EndingType, EndingStage
+    
+    orchestrator_data = state.get("narrative_orchestrator", {}).get("orchestrator_data", {})
+    if orchestrator_data:
+        orchestrator = NarrativeOrchestrator.from_dict(orchestrator_data)
+    else:
+        orchestrator = NarrativeOrchestrator()
+    
+    # Convert string to enum
+    ending_type = EndingType(state['narrative'].ending_type)
+    ending_stage = EndingStage(stage.lower())
+    
+    # Get narrative beat
+    narrative_text = orchestrator.ending_system.get_narrative_beat(
+        archetype, ending_type, ending_stage
+    )
+    
+    # Update stage in state
+    state['narrative'].ending_stage = stage
+    
+    return {
+        "stage": stage,
+        "ending_type": ending_type.value,
+        "archetype": archetype,
+        "narrative": narrative_text
+    }
+
+
+# ============================================================================
+# Comprehensive Ending Variations API
+# ============================================================================
+
+@app.get("/api/narrative/ending/sequence")
+def get_ending_sequence(session_id: str = "default"):
+    """
+    Returns the complete ending sequence for the player's archetype.
+    Includes both hero and tragedy paths with all 5 stages.
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get player's archetype
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    player_wound = WoundType.UNKNOWN
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'identity'):
+        player_wound = psyche.profile.identity.wound_profile.dominant_wound
+    elif hasattr(psyche, 'identity'):
+        player_wound = psyche.identity.wound_profile.dominant_wound
+    
+    if player_wound == WoundType.UNKNOWN:
+        player_wound = WoundType.CONTROLLER
+    
+    archetype = player_wound.value if hasattr(player_wound, 'value') else str(player_wound)
+    
+    # Get orchestrator
+    from src.narrative.endings import EndingOrchestrator, EndingType, EndingStage
+    orchestrator = EndingOrchestrator()
+    
+    # Get decision prompt
+    decision_prompt = orchestrator.get_decision_prompt(archetype)
+    
+    # Get all narrative beats for both paths
+    hero_path = {
+        "decision": orchestrator.get_narrative_beat(archetype, EndingType.HERO, EndingStage.DECISION),
+        "test": orchestrator.get_narrative_beat(archetype, EndingType.HERO, EndingStage.TEST),
+        "resolution": orchestrator.get_narrative_beat(archetype, EndingType.HERO, EndingStage.RESOLUTION),
+        "wisdom": orchestrator.get_narrative_beat(archetype, EndingType.HERO, EndingStage.WISDOM),
+        "final_scene": orchestrator.get_narrative_beat(archetype, EndingType.HERO, EndingStage.FINAL_SCENE)
+    }
+    
+    tragedy_path = {
+        "decision": orchestrator.get_narrative_beat(archetype, EndingType.TRAGEDY, EndingStage.DECISION),
+        "test": orchestrator.get_narrative_beat(archetype, EndingType.TRAGEDY, EndingStage.TEST),
+        "resolution": orchestrator.get_narrative_beat(archetype, EndingType.TRAGEDY, EndingStage.RESOLUTION),
+        "wisdom": orchestrator.get_narrative_beat(archetype, EndingType.TRAGEDY, EndingStage.WISDOM),
+        "final_scene": orchestrator.get_narrative_beat(archetype, EndingType.TRAGEDY, EndingStage.FINAL_SCENE)
+    }
+    
+    return {
+        "archetype": archetype,
+        "moral_question": decision_prompt["question"],
+        "decision_options": decision_prompt["options"],
+        "hero_path": hero_path,
+        "tragedy_path": tragedy_path
+    }
+
+
+@app.post("/api/narrative/ending/decision")
+def process_ending_decision(req: EndingChoiceRequest):
+    """
+    Processes the player's moral decision and determines the ending path.
+    Returns the ending type (hero or tragedy) and the next stage.
+    """
+    if req.session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[req.session_id]
+    
+    # Get player's archetype
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    player_wound = WoundType.UNKNOWN
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'identity'):
+        player_wound = psyche.profile.identity.wound_profile.dominant_wound
+    elif hasattr(psyche, 'identity'):
+        player_wound = psyche.identity.wound_profile.dominant_wound
+    
+    if player_wound == WoundType.UNKNOWN:
+        player_wound = WoundType.CONTROLLER
+    
+    archetype = player_wound.value if hasattr(player_wound, 'value') else str(player_wound)
+    
+    # Process decision
+    from src.narrative.endings import EndingOrchestrator, EndingType
+    orchestrator = EndingOrchestrator()
+    ending_type = orchestrator.process_decision(archetype, req.choice)
+    
+    # Update game state
+    if hasattr(state['narrative'], 'ending_choice'):
+        state['narrative'].ending_choice = req.choice
+    if hasattr(state['narrative'], 'ending_type'):
+        state['narrative'].ending_type = ending_type.value
+    if hasattr(state['narrative'], 'ending_stage'):
+        state['narrative'].ending_stage = "test"  # Next stage after decision
+    
+    return {
+        "ending_type": ending_type.value,
+        "archetype": archetype,
+        "choice": req.choice,
+        "next_stage": "test"
+    }
+
+
+@app.get("/api/narrative/ending/progress")
+def get_ending_progress(session_id: str = "default", stage: str = "test"):
+    """
+    Returns the narrative content for a specific stage of the ending sequence.
+    Requires that a decision has already been made.
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Validate that ending has been triggered
+    ending_type_str = None
+    if hasattr(state['narrative'], 'ending_type'):
+        ending_type_str = state['narrative'].ending_type
+    
+    if not ending_type_str:
+        raise HTTPException(status_code=400, detail="Ending not yet triggered. Make a decision first.")
+    
+    # Get player's archetype
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    player_wound = WoundType.UNKNOWN
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'identity'):
+        player_wound = psyche.profile.identity.wound_profile.dominant_wound
+    elif hasattr(psyche, 'identity'):
+        player_wound = psyche.identity.wound_profile.dominant_wound
+    
+    if player_wound == WoundType.UNKNOWN:
+        player_wound = WoundType.CONTROLLER
+    
+    archetype = player_wound.value if hasattr(player_wound, 'value') else str(player_wound)
+    
+    # Get narrative beat
+    from src.narrative.endings import EndingOrchestrator, EndingType, EndingStage
+    orchestrator = EndingOrchestrator()
+    
+    ending_type = EndingType(ending_type_str)
+    ending_stage = EndingStage(stage.lower())
+    
+    narrative_text = orchestrator.get_narrative_beat(archetype, ending_type, ending_stage)
+    
+    # Update current stage in state
+    if hasattr(state['narrative'], 'ending_stage'):
+        state['narrative'].ending_stage = stage
+    
+    return {
+        "stage": stage,
+        "ending_type": ending_type.value,
+        "archetype": archetype,
+        "narrative": narrative_text
+    }
+
+
+# ============================================================================
+# Port Arrival Sequence API
+# ============================================================================
+
+@app.get("/api/narrative/port-arrival/approach")
+def get_port_approach(session_id: str = "default", npc_id: Optional[str] = None):
+    """
+    Get Day 8 approach scene content.
+    
+    Args:
+        session_id: Game session ID
+        npc_id: Optional specific NPC conversation to retrieve
+        
+    Returns:
+        Approach scene content with NPC conversations
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get or create port arrival orchestrator
+    from src.narrative.port_arrival_orchestrator import PortArrivalOrchestrator
+    
+    orchestrator_data = state.get("port_arrival_orchestrator", {})
+    if orchestrator_data:
+        orchestrator = PortArrivalOrchestrator.from_dict(orchestrator_data)
+    else:
+        orchestrator = PortArrivalOrchestrator()
+    
+    # Get approach scene
+    scene = orchestrator.get_approach(npc_id)
+    
+    # Save orchestrator state
+    state["port_arrival_orchestrator"] = orchestrator.to_dict()
+    
+    return scene
+
+
+@app.get("/api/narrative/port-arrival/docking")
+def get_port_docking(session_id: str = "default"):
+    """
+    Get docking scenario based on story choices.
+    
+    Args:
+        session_id: Game session ID
+        
+    Returns:
+        Docking scene with authority presence based on story state
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Determine story choices from game state
+    # These would be set during the investigation/revelation phases
+    story_choices = {
+        "murder_reported": state.get("narrative", {}).get("murder_reported", False),
+        "yuki_past_revealed": state.get("narrative", {}).get("yuki_past_revealed", False),
+        "kai_debts_unresolved": state.get("narrative", {}).get("kai_debts_unresolved", True)
+    }
+    
+    # Get or create port arrival orchestrator
+    from src.narrative.port_arrival_orchestrator import PortArrivalOrchestrator
+    
+    orchestrator_data = state.get("port_arrival_orchestrator", {})
+    if orchestrator_data:
+        orchestrator = PortArrivalOrchestrator.from_dict(orchestrator_data)
+    else:
+        orchestrator = PortArrivalOrchestrator()
+    
+    # Get docking scene
+    scene = orchestrator.get_docking(story_choices)
+    
+    # Save orchestrator state
+    state["port_arrival_orchestrator"] = orchestrator.to_dict()
+    
+    return scene
+
+
+@app.get("/api/narrative/port-arrival/dispersal")
+def get_port_dispersal(session_id: str = "default", npc_id: Optional[str] = None):
+    """
+    Get NPC dispersal outcomes based on Hero/Tragedy path.
+    
+    Args:
+        session_id: Game session ID
+        npc_id: Optional specific NPC to get dispersal for
+        
+    Returns:
+        NPC dispersal content based on ending type
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get ending type from game state
+    ending_type = None
+    if hasattr(state.get('narrative'), 'ending_type'):
+        ending_type = state['narrative'].ending_type
+    
+    if not ending_type:
+        raise HTTPException(
+            status_code=400, 
+            detail="Ending decision not yet made. Complete the Hero/Tragedy fork first."
+        )
+    
+    # Get or create port arrival orchestrator
+    from src.narrative.port_arrival_orchestrator import PortArrivalOrchestrator
+    
+    orchestrator_data = state.get("port_arrival_orchestrator", {})
+    if orchestrator_data:
+        orchestrator = PortArrivalOrchestrator.from_dict(orchestrator_data)
+    else:
+        orchestrator = PortArrivalOrchestrator()
+    
+    # Get dispersal
+    dispersal = orchestrator.get_dispersal(ending_type, npc_id)
+    
+    # Save orchestrator state
+    state["port_arrival_orchestrator"] = orchestrator.to_dict()
+    
+    return dispersal
+
+
+@app.get("/api/narrative/port-arrival/epilogue")
+def get_port_epilogue(session_id: str = "default"):
+    """
+    Get epilogue for the player's archetype and ending path.
+    
+    Args:
+        session_id: Game session ID
+        
+    Returns:
+        Complete epilogue with setting, reflection, closing image, wisdom, and final question
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get player's archetype
+    psyche = state.get('psyche')
+    if not psyche:
+        raise HTTPException(status_code=400, detail="No psychological profile found")
+    
+    player_wound = WoundType.UNKNOWN
+    if hasattr(psyche, 'profile') and hasattr(psyche.profile, 'identity'):
+        player_wound = psyche.profile.identity.wound_profile.dominant_wound
+    elif hasattr(psyche, 'identity'):
+        player_wound = psyche.identity.wound_profile.dominant_wound
+    elif hasattr(psyche, 'profile') and hasattr(psyche.profile, 'wound_profile'):
+        player_wound = psyche.profile.wound_profile.dominant_wound
+    elif hasattr(psyche, 'wound_profile'):
+        player_wound = psyche.wound_profile.dominant_wound
+    
+    if player_wound == WoundType.UNKNOWN:
+        player_wound = WoundType.CONTROLLER
+    
+    # Get ending type from game state
+    ending_type = None
+    if hasattr(state.get('narrative'), 'ending_type'):
+        ending_type = state['narrative'].ending_type
+    
+    if not ending_type:
+        raise HTTPException(
+            status_code=400,
+            detail="Ending decision not yet made. Complete the Hero/Tragedy fork first."
+        )
+    
+    # Get or create port arrival orchestrator
+    from src.narrative.port_arrival_orchestrator import PortArrivalOrchestrator
+    
+    orchestrator_data = state.get("port_arrival_orchestrator", {})
+    if orchestrator_data:
+        orchestrator = PortArrivalOrchestrator.from_dict(orchestrator_data)
+    else:
+        orchestrator = PortArrivalOrchestrator()
+    
+    # Get epilogue
+    epilogue = orchestrator.get_epilogue_content(player_wound, ending_type)
+    
+    # Save orchestrator state
+    state["port_arrival_orchestrator"] = orchestrator.to_dict()
+    
+    return epilogue
+
+
+@app.get("/api/narrative/port-arrival/status")
+def get_port_status(session_id: str = "default"):
+    """
+    Get current port arrival progress and available scenes.
+    
+    Args:
+        session_id: Game session ID
+        
+    Returns:
+        Status information about port arrival progression
+    """
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    state = SESSIONS[session_id]
+    
+    # Get or create port arrival orchestrator
+    from src.narrative.port_arrival_orchestrator import PortArrivalOrchestrator
+    
+    orchestrator_data = state.get("port_arrival_orchestrator", {})
+    if orchestrator_data:
+        orchestrator = PortArrivalOrchestrator.from_dict(orchestrator_data)
+    else:
+        orchestrator = PortArrivalOrchestrator()
+    
+    return orchestrator.get_status()

@@ -1,0 +1,271 @@
+# Regional Metadata for World Simulation
+# Defines sectors/biomes with simulation weights and characteristics
+
+regions:
+  # ==========================================================================
+  # Core Worlds - High civilization, heavy law presence
+  # ==========================================================================
+  - id: core_nexus
+    name: "Nexus Prime Sector"
+    biome: settled_space
+    description: "Heart of the Forge, heavily populated and patrolled"
+    
+    # Settlement and civilization
+    settlement_density: 0.95
+    population_tier: high
+    infrastructure_level: advanced
+    
+    # Faction control
+    faction_ownership: "Keepers"
+    faction_influence:
+      Keepers: 0.8
+      Iron_Syndicate: 0.1
+      Free_Traders: 0.1
+    
+    # Law enforcement
+    law_presence:
+      patrol_density: 0.9           # Very high patrol frequency
+      response_time: 0.5            # Hours, very fast
+      escalation_speed: 1.5         # Multiplier, escalates faster
+      bounty_enforcement: strict
+    
+    # Traffic patterns
+    traffic:
+      trade_route_density: 0.9
+      congestion_baseline: 0.6      # Always somewhat congested
+      patrol_routes: 8              # Number of active patrol routes
+    
+    # Wildlife (minimal in settled space)
+    wildlife:
+      spawn_enabled: false
+      species_present: []
+    
+    # Weather patterns
+    weather:
+      default_state: clear
+      hazard_frequency: 0.1         # Rare hazards
+      common_states: [clear, light_nebula]
+
+  # ==========================================================================
+  # Frontier Outpost - Medium civilization, moderate law
+  # ==========================================================================
+  - id: frontier_haven
+    name: "Haven's Edge"
+    biome: frontier_outpost
+    description: "Bustling frontier station, gateway to the outer reaches"
+    
+    settlement_density: 0.6
+    population_tier: medium
+    infrastructure_level: moderate
+    
+    faction_ownership: "Free_Traders"
+    faction_influence:
+      Free_Traders: 0.5
+      Keepers: 0.2
+      Iron_Syndicate: 0.2
+      Archivists: 0.1
+    
+    law_presence:
+      patrol_density: 0.5
+      response_time: 2.0
+      escalation_speed: 1.0
+      bounty_enforcement: moderate
+    
+    traffic:
+      trade_route_density: 0.7
+      congestion_baseline: 0.3
+      patrol_routes: 4
+    
+    wildlife:
+      spawn_enabled: true
+      species_present: [nebula_drifter, asteroid_borer]
+      density_multiplier: 0.5
+    
+    weather:
+      default_state: light_nebula
+      hazard_frequency: 0.3
+      common_states: [clear, light_nebula, asteroid_field]
+
+  # ==========================================================================
+  # Lawless Expanse - Low civilization, minimal law
+  # ==========================================================================
+  - id: lawless_expanse
+    name: "The Shattered Belt"
+    biome: asteroid_field
+    description: "Lawless asteroid belt, haven for smugglers and pirates"
+    
+    settlement_density: 0.2
+    population_tier: low
+    infrastructure_level: minimal
+    
+    faction_ownership: null
+    faction_influence:
+      Iron_Syndicate: 0.6
+      Free_Traders: 0.3
+      Keepers: 0.1
+    
+    law_presence:
+      patrol_density: 0.1           # Minimal patrols
+      response_time: 8.0            # Very slow
+      escalation_speed: 0.5         # Slower escalation
+      bounty_enforcement: lax
+    
+    traffic:
+      trade_route_density: 0.3
+      congestion_baseline: 0.1
+      patrol_routes: 1
+    
+    wildlife:
+      spawn_enabled: true
+      species_present: [asteroid_borer, crystal_swarm, plasma_eel]
+      density_multiplier: 1.2
+    
+    weather:
+      default_state: asteroid_field
+      hazard_frequency: 0.6
+      common_states: [asteroid_field, debris_field, ion_storm]
+
+  # ==========================================================================
+  # Deep Nebula - No civilization, no law, high wildlife
+  # ==========================================================================
+  - id: deep_nebula
+    name: "The Veiled Expanse"
+    biome: dense_nebula
+    description: "Uncharted nebula, home to strange creatures and phenomena"
+    
+    settlement_density: 0.0
+    population_tier: none
+    infrastructure_level: none
+    
+    faction_ownership: null
+    faction_influence: {}
+    
+    law_presence:
+      patrol_density: 0.0
+      response_time: null
+      escalation_speed: 0.0
+      bounty_enforcement: none
+    
+    traffic:
+      trade_route_density: 0.05     # Almost no traffic
+      congestion_baseline: 0.0
+      patrol_routes: 0
+    
+    wildlife:
+      spawn_enabled: true
+      species_present: [void_leviathan, nebula_drifter, plasma_eel]
+      density_multiplier: 2.0       # Double wildlife density
+    
+    weather:
+      default_state: dense_nebula
+      hazard_frequency: 0.8
+      common_states: [dense_nebula, ion_storm, solar_flare]
+
+  # ==========================================================================
+  # Iron Syndicate Territory - High law (faction), industrial
+  # ==========================================================================
+  - id: syndicate_forge
+    name: "Iron Forge Station"
+    biome: industrial_sector
+    description: "Iron Syndicate stronghold, heavily fortified and monitored"
+    
+    settlement_density: 0.8
+    population_tier: high
+    infrastructure_level: industrial
+    
+    faction_ownership: "Iron_Syndicate"
+    faction_influence:
+      Iron_Syndicate: 0.95
+      Free_Traders: 0.05
+    
+    law_presence:
+      patrol_density: 0.85          # High, but faction-specific
+      response_time: 1.0
+      escalation_speed: 2.0         # Very aggressive
+      bounty_enforcement: brutal    # Syndicate justice is harsh
+    
+    traffic:
+      trade_route_density: 0.8
+      congestion_baseline: 0.5
+      patrol_routes: 6
+    
+    wildlife:
+      spawn_enabled: false
+      species_present: []
+    
+    weather:
+      default_state: clear
+      hazard_frequency: 0.2
+      common_states: [clear, light_nebula, debris_field]
+
+  # ==========================================================================
+  # Archivist Sanctuary - Low traffic, moderate law, unique weather
+  # ==========================================================================
+  - id: archivist_sanctuary
+    name: "The Archive Nebula"
+    biome: nebula_sanctuary
+    description: "Mysterious Archivist enclave, shrouded in eternal mists"
+    
+    settlement_density: 0.4
+    population_tier: low
+    infrastructure_level: advanced  # High tech, low population
+    
+    faction_ownership: "Archivists"
+    faction_influence:
+      Archivists: 0.9
+      Keepers: 0.1
+    
+    law_presence:
+      patrol_density: 0.3
+      response_time: 3.0
+      escalation_speed: 0.8
+      bounty_enforcement: scholarly  # More interested in knowledge than punishment
+    
+    traffic:
+      trade_route_density: 0.2
+      congestion_baseline: 0.1
+      patrol_routes: 2
+    
+    wildlife:
+      spawn_enabled: true
+      species_present: [nebula_drifter, void_leviathan]
+      density_multiplier: 0.8
+    
+    weather:
+      default_state: light_nebula
+      hazard_frequency: 0.4
+      common_states: [light_nebula, dense_nebula]  # Perpetual nebula
+
+# =============================================================================
+# Biome Definitions (referenced by regions)
+# =============================================================================
+biomes:
+  settled_space:
+    description: "Heavily populated sectors with stations and infrastructure"
+    base_visibility: 1.0
+    base_danger: 0.1
+  
+  frontier_outpost:
+    description: "Edge of civilization, mix of order and chaos"
+    base_visibility: 0.8
+    base_danger: 0.4
+  
+  asteroid_field:
+    description: "Dense asteroid clusters, hazardous navigation"
+    base_visibility: 0.7
+    base_danger: 0.6
+  
+  dense_nebula:
+    description: "Thick nebula clouds, poor visibility and sensors"
+    base_visibility: 0.3
+    base_danger: 0.7
+  
+  industrial_sector:
+    description: "Heavy industry and mining operations"
+    base_visibility: 0.9
+    base_danger: 0.3
+  
+  nebula_sanctuary:
+    description: "Calm nebula regions, mystical and serene"
+    base_visibility: 0.5
+    base_danger: 0.2

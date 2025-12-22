@@ -274,6 +274,7 @@ class EnvironmentalStoryGenerator:
     
     def __init__(self):
         self.discoveries_generated: list[str] = []
+        self.ship_zones_cache = None  # Lazy load ship zones
     
     def generate_discovery(
         self,
@@ -322,6 +323,111 @@ class EnvironmentalStoryGenerator:
         
         self.discoveries_generated.append(description)
         return discovery
+    
+    def _load_ship_zones(self):
+        """Lazy load ship zones from exile_gambit module."""
+        if self.ship_zones_cache is None:
+            try:
+                from src.narrative.exile_gambit import SHIP_ZONES
+                self.ship_zones_cache = SHIP_ZONES
+            except ImportError:
+                self.ship_zones_cache = {}
+        return self.ship_zones_cache
+    
+    def generate_ship_zone_discovery(
+        self,
+        zone_id: str,
+        player_archetype: str | None = None,
+        scene: int = 0
+    ) -> EnvironmentalDiscovery | None:
+        """
+        Generate a discovery based on a ship zone's environmental details.
+        
+        Args:
+            zone_id: The ship zone identifier (e.g., "bridge", "engineering")
+            player_archetype: Optional archetype for archetype-specific seeds
+            scene: Current scene number
+        
+        Returns:
+            EnvironmentalDiscovery or None if zone not found
+        """
+        zones = self._load_ship_zones()
+        zone = zones.get(zone_id)
+        
+        if not zone:
+            return None
+        
+        # Pick a random environmental detail from the zone
+        if not zone.environmental_details:
+            return None
+        
+        detail = random.choice(zone.environmental_details)
+        
+        # Determine tone based on zone atmosphere
+        tone_mapping = {
+            "clean": EmotionalTone.PEACEFUL,
+            "professional": EmotionalTone.PEACEFUL,
+            "controlled": EmotionalTone.OMINOUS,
+            "interrupted": EmotionalTone.TRAGIC,
+            "chaos": EmotionalTone.OMINOUS,
+            "clinical": EmotionalTone.BITTERSWEET,
+            "warm": EmotionalTone.HOPEFUL,
+            "organized": EmotionalTone.PEACEFUL,
+            "heart": EmotionalTone.HOPEFUL,
+            "quiet": EmotionalTone.PEACEFUL,
+            "sacred": EmotionalTone.BITTERSWEET
+        }
+        
+        # Infer tone from atmosphere
+        atmosphere_lower = zone.atmosphere.lower()
+        tone = EmotionalTone.BITTERSWEET  # Default
+        for keyword, mapped_tone in tone_mapping.items():
+            if keyword in atmosphere_lower:
+                tone = mapped_tone
+                break
+        
+        # Build discovery
+        discovery = EnvironmentalDiscovery(
+            discovery_type=DiscoveryType.SCENE,
+            tone=tone,
+            description=f"{detail.name}: {detail.story_text}",
+            implied_story=f"This is {zone.name}. {zone.atmosphere}",
+            player_reaction_prompt=f"You are in {zone.name}. What do you do?",
+            scene=scene
+        )
+        
+        self.discoveries_generated.append(detail.story_text)
+        return discovery
+    
+    def get_zone_archetype_seeds(
+        self,
+        zone_id: str,
+        player_archetype: str
+    ) -> list[str]:
+        """
+        Get archetype-specific narrative seeds for a zone.
+        
+        Args:
+            zone_id: The ship zone identifier
+            player_archetype: Player's archetype (e.g., "Controller", "Ghost")
+        
+        Returns:
+            List of seed descriptions
+        """
+        zones = self._load_ship_zones()
+        zone = zones.get(zone_id)
+        
+        if not zone:
+            return []
+        
+        # Filter seeds by archetype
+        seeds = [
+            seed.description
+            for seed in zone.archetype_seeds
+            if player_archetype.lower() in seed.archetype_role.lower()
+        ]
+        
+        return seeds
     
     def get_show_dont_tell_guidance(self) -> str:
         """Get general narrator guidance for environmental storytelling."""

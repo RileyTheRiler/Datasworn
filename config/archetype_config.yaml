@@ -1,0 +1,1041 @@
+# Archetype Configuration
+# Defines all 22 archetypes with their psychological/moral needs, signals, and seeds
+
+# ============================================================================
+# OVERCONTROLLED CLUSTER (8 archetypes)
+# ============================================================================
+
+archetypes:
+  controller:
+    cluster: overcontrolled
+    psychological_wound: fear_of_chaos
+    psychological_need: accept_uncertainty
+    moral_corruption: treats_people_as_means
+    moral_need: respect_autonomy
+    
+    signals:
+      dialogue:
+        demanding_tone: 2.0
+        impatient_interruption: 1.5
+        requires_explanation: 1.0
+        dismisses_feelings: 1.5
+        
+      action:
+        searches_without_permission: 3.0
+        manipulates_for_information: 2.0
+        creates_detailed_logs: 1.0
+        overrides_others_decisions: 2.5
+        
+      interrogation:
+        threatening_approach: 2.0
+        refuses_ambiguity: 1.5
+        demands_certainty: 2.0
+        
+      crisis:
+        takes_charge_immediately: 2.0
+        ignores_others_input: 1.5
+        
+    stress_modifiers:
+      loss_of_control: 1.5
+      uncertainty: 1.3
+      chaos: 1.4
+      
+    seeds:
+      environmental:
+        - "Navigation charts with obsessive annotations"
+        - "Manual override switches worn from use"
+        - "Broken lock—forced, not picked"
+        - "Perfectly organized workspace, everything labeled"
+      dialogue:
+        - "The captain always needed to know everything"
+        - "You can't control addiction. Only accept it."
+        - "Some things refuse to be controlled"
+      symbolic:
+        - "hands_gripping"
+        - "alarms_unsilenced"
+        - "locked_doors"
+        
+    revelation_triggers:
+      mirror_moment: "sees_another_controller_fail"
+      cost_revealed: "npc_withholds_because_of_player_control"
+      origin_glimpsed: "player_references_past_loss"
+      choice_crystallized: "ember_names_control_pattern"
+
+  judge:
+    cluster: overcontrolled
+    psychological_wound: fear_of_moral_failure
+    psychological_need: accept_moral_complexity
+    moral_corruption: condemns_others_to_feel_superior
+    moral_need: practice_compassion
+    
+    signals:
+      dialogue:
+        moralistic_language: 2.0
+        condemns_others: 2.5
+        expresses_disgust: 1.5
+        binary_thinking: 2.0
+        
+      action:
+        refuses_to_help_flawed_people: 2.0
+        punishes_perceived_wrongdoing: 2.5
+        avoids_morally_gray_situations: 1.5
+        
+      interrogation:
+        judgmental_tone: 2.5
+        focuses_on_moral_failings: 2.0
+        
+      crisis:
+        condemns_before_understanding: 2.0
+        refuses_to_compromise: 1.5
+        
+    stress_modifiers:
+      moral_ambiguity: 1.5
+      being_judged: 1.4
+      witnessing_wrongdoing: 1.3
+      
+    seeds:
+      environmental:
+        - "Religious texts with passages underlined"
+        - "Wanted posters with harsh sentences"
+        - "Graffiti: 'Judge not lest ye be judged'"
+      dialogue:
+        - "She always knew who was right and who was wrong"
+        - "Sometimes the guilty deserve mercy too"
+        - "We're all sinners here"
+      symbolic:
+        - "pointing_finger"
+        - "scales_unbalanced"
+        - "black_and_white"
+
+  ghost:
+    cluster: overcontrolled
+    psychological_wound: fear_of_intimacy
+    psychological_need: allow_connection
+    moral_corruption: abandons_people_who_need_them
+    moral_need: stay_present
+    
+    signals:
+      dialogue:
+        deflects_personal_questions: 2.0
+        changes_subject_when_emotional: 2.5
+        speaks_in_abstractions: 1.5
+        avoids_eye_contact_references: 1.0
+        
+      action:
+        leaves_conversations_early: 2.0
+        avoids_social_gatherings: 1.5
+        disappears_when_needed: 2.5
+        
+      interrogation:
+        emotionally_distant: 2.0
+        focuses_on_facts_not_feelings: 1.5
+        
+      crisis:
+        withdraws_instead_of_engaging: 2.5
+        goes_silent: 2.0
+        
+    stress_modifiers:
+      forced_intimacy: 1.6
+      emotional_vulnerability: 1.5
+      being_needed: 1.3
+      
+    seeds:
+      environmental:
+        - "Empty chair at the table"
+        - "Unopened messages piling up"
+        - "Photos with faces turned away"
+      dialogue:
+        - "They were there, but never really there"
+        - "Sometimes presence is the greatest gift"
+        - "You can't run from yourself forever"
+      symbolic:
+        - "fading_away"
+        - "empty_spaces"
+        - "closed_doors"
+
+  perfectionist:
+    cluster: overcontrolled
+    psychological_wound: fear_of_inadequacy
+    psychological_need: accept_imperfection
+    moral_corruption: sabotages_others_to_avoid_comparison
+    moral_need: celebrate_others_success
+    
+    signals:
+      dialogue:
+        self_critical_language: 2.0
+        points_out_flaws: 2.5
+        never_satisfied: 2.0
+        
+      action:
+        redoes_work_repeatedly: 2.0
+        criticizes_others_work: 1.5
+        avoids_tasks_they_might_fail: 2.0
+        
+      interrogation:
+        focuses_on_inconsistencies: 2.0
+        demands_precision: 1.5
+        
+      crisis:
+        freezes_from_fear_of_failure: 2.5
+        becomes_hypercritical: 2.0
+        
+    stress_modifiers:
+      making_mistakes: 1.6
+      being_criticized: 1.5
+      imperfect_situations: 1.3
+      
+    seeds:
+      environmental:
+        - "Crumpled papers in the trash, all near-perfect"
+        - "Tools arranged by size, pristine"
+        - "Mirror with cracks—covered up"
+      dialogue:
+        - "Good enough was never good enough for them"
+        - "Perfection is the enemy of done"
+        - "Your best is enough"
+      symbolic:
+        - "measuring_tools"
+        - "eraser_marks"
+        - "straight_lines"
+
+  martyr:
+    cluster: overcontrolled
+    psychological_wound: fear_of_worthlessness
+    psychological_need: recognize_self_worth
+    moral_corruption: manipulates_through_self_sacrifice
+    moral_need: give_without_strings
+    
+    signals:
+      dialogue:
+        emphasizes_own_suffering: 2.5
+        guilt_trips_others: 2.0
+        refuses_help_dramatically: 1.5
+        
+      action:
+        takes_on_unnecessary_burdens: 2.0
+        makes_sacrifices_publicly: 2.5
+        keeps_score_of_favors: 2.0
+        
+      interrogation:
+        plays_victim: 2.0
+        emphasizes_what_they_gave_up: 1.5
+        
+      crisis:
+        volunteers_to_suffer: 2.5
+        makes_it_about_themselves: 2.0
+        
+    stress_modifiers:
+      being_unappreciated: 1.6
+      others_succeeding_without_them: 1.4
+      not_being_needed: 1.5
+      
+    seeds:
+      environmental:
+        - "Medical supplies, all used on others"
+        - "Personal rations given away"
+        - "Worn hands, overworked"
+      dialogue:
+        - "They gave everything and got nothing back"
+        - "True giving expects nothing in return"
+        - "You matter too"
+      symbolic:
+        - "empty_hands"
+        - "bleeding_heart"
+        - "cross_to_bear"
+
+  ascetic:
+    cluster: overcontrolled
+    psychological_wound: fear_of_desire
+    psychological_need: embrace_healthy_pleasure
+    moral_corruption: condemns_others_enjoyment
+    moral_need: allow_joy
+    
+    signals:
+      dialogue:
+        denounces_pleasure: 2.0
+        praises_deprivation: 2.5
+        suspicious_of_comfort: 1.5
+        
+      action:
+        refuses_comfort_items: 2.0
+        lives_spartanly: 1.5
+        judges_others_indulgence: 2.0
+        
+      interrogation:
+        focuses_on_excess: 1.5
+        condemns_luxury: 2.0
+        
+      crisis:
+        refuses_necessary_comforts: 2.0
+        becomes_more_austere: 1.5
+        
+    stress_modifiers:
+      temptation: 1.5
+      witnessing_pleasure: 1.4
+      abundance: 1.3
+      
+    seeds:
+      environmental:
+        - "Bare quarters, nothing decorative"
+        - "Luxury items left to rust"
+        - "Feast table, one empty plate"
+      dialogue:
+        - "They feared pleasure more than pain"
+        - "Joy is not a sin"
+        - "Life is meant to be lived"
+      symbolic:
+        - "empty_plate"
+        - "bare_walls"
+        - "cold_floor"
+
+  paranoid:
+    cluster: overcontrolled
+    psychological_wound: fear_of_betrayal
+    psychological_need: trust_selectively
+    moral_corruption: preemptively_betrays_others
+    moral_need: give_trust_a_chance
+    
+    signals:
+      dialogue:
+        questions_motives: 2.5
+        sees_conspiracies: 2.0
+        refuses_to_share_information: 1.5
+        
+      action:
+        checks_for_surveillance: 2.0
+        tests_others_loyalty: 2.5
+        keeps_secrets_unnecessarily: 2.0
+        
+      interrogation:
+        assumes_deception: 2.5
+        sets_traps: 2.0
+        
+      crisis:
+        suspects_everyone: 2.5
+        acts_preemptively: 2.0
+        
+    stress_modifiers:
+      trusting_situations: 1.6
+      being_vulnerable: 1.5
+      unknown_motives: 1.4
+      
+    seeds:
+      environmental:
+        - "Hidden cameras, everywhere"
+        - "Encrypted messages, paranoid notes"
+        - "Locks on locks"
+      dialogue:
+        - "Trust no one, they said. They were wrong."
+        - "Sometimes paranoia is just pattern recognition"
+        - "Not everyone is out to get you"
+      symbolic:
+        - "watching_eyes"
+        - "hidden_daggers"
+        - "locked_boxes"
+
+  pedant:
+    cluster: overcontrolled
+    psychological_wound: fear_of_being_wrong
+    psychological_need: accept_uncertainty
+    moral_corruption: uses_knowledge_to_dominate
+    moral_need: share_knowledge_generously
+    
+    signals:
+      dialogue:
+        corrects_others_constantly: 2.5
+        cites_sources_excessively: 2.0
+        dismisses_intuition: 1.5
+        
+      action:
+        insists_on_proper_procedure: 2.0
+        refuses_shortcuts: 1.5
+        lectures_instead_of_helping: 2.0
+        
+      interrogation:
+        focuses_on_technicalities: 2.0
+        demands_precise_language: 1.5
+        
+      crisis:
+        freezes_without_data: 2.0
+        becomes_more_rigid: 1.5
+        
+    stress_modifiers:
+      being_corrected: 1.6
+      ambiguity: 1.4
+      intuitive_decisions: 1.3
+      
+    seeds:
+      environmental:
+        - "Manuals, all highlighted and annotated"
+        - "Certificates and credentials displayed"
+        - "Corrected graffiti"
+      dialogue:
+        - "They knew everything except how to be wrong"
+        - "Sometimes the heart knows what the mind doesn't"
+        - "Being right isn't everything"
+      symbolic:
+        - "red_pen"
+        - "rulebook"
+        - "footnotes"
+
+# ============================================================================
+# UNDERCONTROLLED CLUSTER (8 archetypes)
+# ============================================================================
+
+  cynic:
+    cluster: undercontrolled
+    psychological_wound: fear_of_hope
+    psychological_need: allow_optimism
+    moral_corruption: crushes_others_hope
+    moral_need: nurture_possibility
+    
+    signals:
+      dialogue:
+        mocks_idealism: 2.5
+        expects_worst: 2.0
+        dismisses_positive_outcomes: 1.5
+        
+      action:
+        sabotages_hopeful_plans: 2.0
+        refuses_to_try: 1.5
+        spreads_negativity: 2.0
+        
+      interrogation:
+        assumes_guilt: 2.0
+        focuses_on_failures: 1.5
+        
+      crisis:
+        gives_up_immediately: 2.5
+        mocks_those_who_try: 2.0
+        
+    stress_modifiers:
+      hope: 1.5
+      optimism: 1.4
+      success: 1.3
+      
+    seeds:
+      environmental:
+        - "Motivational posters, all defaced"
+        - "Failed projects, displayed as warnings"
+        - "Broken dreams, catalogued"
+      dialogue:
+        - "Hope is the first step to disappointment"
+        - "Sometimes things actually work out"
+        - "Cynicism is just wounded idealism"
+      symbolic:
+        - "wilted_flowers"
+        - "broken_promises"
+        - "dark_clouds"
+
+  fugitive:
+    cluster: undercontrolled
+    psychological_wound: fear_of_commitment
+    psychological_need: stay_and_build
+    moral_corruption: abandons_responsibilities
+    moral_need: honor_commitments
+    
+    signals:
+      dialogue:
+        talks_about_leaving: 2.0
+        avoids_promises: 2.5
+        romanticizes_freedom: 1.5
+        
+      action:
+        keeps_escape_routes: 2.0
+        avoids_long_term_plans: 2.5
+        leaves_when_things_get_hard: 3.0
+        
+      interrogation:
+        evasive: 2.5
+        keeps_options_open: 2.0
+        
+      crisis:
+        runs_away: 3.0
+        abandons_others: 2.5
+        
+    stress_modifiers:
+      commitment: 1.6
+      being_trapped: 1.7
+      responsibility: 1.4
+      
+    seeds:
+      environmental:
+        - "Packed bags, always ready"
+        - "Maps with escape routes marked"
+        - "Goodbyes left unsaid"
+      dialogue:
+        - "They were always one foot out the door"
+        - "Sometimes staying is the bravest thing"
+        - "You can't run from yourself"
+      symbolic:
+        - "open_door"
+        - "running_shoes"
+        - "horizon"
+
+  hedonist:
+    cluster: undercontrolled
+    psychological_wound: fear_of_pain
+    psychological_need: accept_necessary_suffering
+    moral_corruption: uses_others_for_pleasure
+    moral_need: consider_others_wellbeing
+    
+    signals:
+      dialogue:
+        seeks_pleasure_constantly: 2.5
+        avoids_discomfort: 2.0
+        dismisses_consequences: 1.5
+        
+      action:
+        indulges_excessively: 2.5
+        avoids_hard_work: 2.0
+        uses_others_for_gratification: 2.0
+        
+      interrogation:
+        distracted_by_comfort: 1.5
+        avoids_difficult_topics: 2.0
+        
+      crisis:
+        seeks_escape_through_pleasure: 2.5
+        ignores_problem: 2.0
+        
+    stress_modifiers:
+      discomfort: 1.5
+      delayed_gratification: 1.4
+      pain: 1.6
+      
+    seeds:
+      environmental:
+        - "Luxury items, all used"
+        - "Empty bottles, pleasure's aftermath"
+        - "Comfort, at any cost"
+      dialogue:
+        - "They chased pleasure and found emptiness"
+        - "Some pain is necessary"
+        - "True joy comes from meaning, not pleasure"
+      symbolic:
+        - "overflowing_cup"
+        - "silk_sheets"
+        - "empty_bottles"
+
+  destroyer:
+    cluster: undercontrolled
+    psychological_wound: fear_of_powerlessness
+    psychological_need: find_constructive_power
+    moral_corruption: destroys_to_feel_strong
+    moral_need: build_instead_of_break
+    
+    signals:
+      dialogue:
+        threatens_violence: 2.5
+        glorifies_destruction: 2.0
+        dismisses_creation: 1.5
+        
+      action:
+        breaks_things: 2.5
+        escalates_to_violence: 3.0
+        sabotages_others_work: 2.0
+        
+      interrogation:
+        intimidates: 2.5
+        threatens: 2.0
+        
+      crisis:
+        resorts_to_violence: 3.0
+        destroys_to_solve: 2.5
+        
+    stress_modifiers:
+      powerlessness: 1.7
+      being_controlled: 1.6
+      weakness: 1.5
+      
+    seeds:
+      environmental:
+        - "Broken equipment, smashed in anger"
+        - "Scorch marks, violence's signature"
+        - "Weapons, always within reach"
+      dialogue:
+        - "They broke everything they touched"
+        - "Creation takes more strength than destruction"
+        - "Violence is the last refuge of the incompetent"
+      symbolic:
+        - "clenched_fist"
+        - "shattered_glass"
+        - "fire"
+
+  trickster:
+    cluster: undercontrolled
+    psychological_wound: fear_of_authenticity
+    psychological_need: be_genuine
+    moral_corruption: deceives_for_entertainment
+    moral_need: use_truth_responsibly
+    
+    signals:
+      dialogue:
+        lies_casually: 2.5
+        makes_jokes_of_serious_things: 2.0
+        wears_masks: 1.5
+        
+      action:
+        deceives_unnecessarily: 2.5
+        plays_pranks_that_hurt: 2.0
+        manipulates_for_fun: 2.0
+        
+      interrogation:
+        misdirects: 2.5
+        tells_half_truths: 2.0
+        
+      crisis:
+        lies_to_escape: 2.5
+        uses_deception: 2.0
+        
+    stress_modifiers:
+      being_seen_truly: 1.6
+      sincerity: 1.4
+      vulnerability: 1.5
+      
+    seeds:
+      environmental:
+        - "Masks, many faces"
+        - "Mirrors, showing different reflections"
+        - "Cards, all jokers"
+      dialogue:
+        - "They hid behind laughter and lies"
+        - "The truth will set you free"
+        - "Authenticity is the highest form of courage"
+      symbolic:
+        - "masks"
+        - "mirrors"
+        - "smoke"
+
+  narcissist:
+    cluster: undercontrolled
+    psychological_wound: fear_of_insignificance
+    psychological_need: find_true_self_worth
+    moral_corruption: uses_others_as_mirrors
+    moral_need: see_others_as_real
+    
+    signals:
+      dialogue:
+        talks_about_self_constantly: 2.5
+        dismisses_others_experiences: 2.0
+        seeks_admiration: 2.0
+        
+      action:
+        makes_everything_about_themselves: 2.5
+        uses_others_for_validation: 2.0
+        ignores_others_needs: 2.0
+        
+      interrogation:
+        redirects_to_self: 2.0
+        seeks_praise: 1.5
+        
+      crisis:
+        concerned_with_image: 2.5
+        uses_crisis_for_attention: 2.0
+        
+    stress_modifiers:
+      being_ignored: 1.7
+      criticism: 1.6
+      others_success: 1.5
+      
+    seeds:
+      environmental:
+        - "Mirrors, everywhere"
+        - "Trophies, all self-awarded"
+        - "Photos, all of themselves"
+      dialogue:
+        - "They saw others as reflections, not people"
+        - "True worth comes from within"
+        - "You are not the center of the universe"
+      symbolic:
+        - "mirror"
+        - "spotlight"
+        - "crown"
+
+  predator:
+    cluster: undercontrolled
+    psychological_wound: fear_of_being_prey
+    psychological_need: find_safety_in_community
+    moral_corruption: exploits_the_vulnerable
+    moral_need: protect_the_weak
+    
+    signals:
+      dialogue:
+        talks_about_dominance: 2.5
+        identifies_weakness: 2.0
+        threatens_subtly: 2.0
+        
+      action:
+        targets_vulnerable: 3.0
+        exploits_others: 2.5
+        intimidates: 2.0
+        
+      interrogation:
+        hunts_for_weakness: 2.5
+        exploits_fear: 2.0
+        
+      crisis:
+        attacks_the_weak: 3.0
+        takes_advantage: 2.5
+        
+    stress_modifiers:
+      being_vulnerable: 1.7
+      facing_equals: 1.5
+      being_challenged: 1.6
+      
+    seeds:
+      environmental:
+        - "Trophies from victims"
+        - "Hunting grounds, marked territory"
+        - "Weak points, catalogued"
+      dialogue:
+        - "They saw kindness as weakness"
+        - "Strength is protecting the vulnerable"
+        - "The strong should lift up the weak"
+      symbolic:
+        - "predator_eyes"
+        - "sharp_teeth"
+        - "stalking"
+
+  manipulator:
+    cluster: undercontrolled
+    psychological_wound: fear_of_direct_confrontation
+    psychological_need: be_direct_and_honest
+    moral_corruption: controls_through_deception
+    moral_need: respect_others_autonomy
+    
+    signals:
+      dialogue:
+        uses_guilt: 2.5
+        gaslights: 2.0
+        plays_victim: 2.0
+        
+      action:
+        manipulates_situations: 2.5
+        controls_through_deception: 2.0
+        creates_dependencies: 2.0
+        
+      interrogation:
+        twists_words: 2.5
+        uses_emotional_manipulation: 2.0
+        
+      crisis:
+        manipulates_to_escape: 2.5
+        uses_others_as_shields: 2.0
+        
+    stress_modifiers:
+      direct_confrontation: 1.6
+      being_exposed: 1.7
+      losing_control: 1.5
+      
+    seeds:
+      environmental:
+        - "Strings, all connected"
+        - "Puppets, controlled"
+        - "Web of lies"
+      dialogue:
+        - "They pulled strings from the shadows"
+        - "Honesty is the foundation of trust"
+        - "Direct is better than clever"
+      symbolic:
+        - "puppet_strings"
+        - "spider_web"
+        - "hidden_hands"
+
+# ============================================================================
+# HYBRID CLUSTER (6 archetypes)
+# ============================================================================
+
+  impostor:
+    cluster: hybrid
+    psychological_wound: fear_of_being_exposed
+    psychological_need: accept_authentic_self
+    moral_corruption: steals_others_achievements
+    moral_need: earn_recognition_honestly
+    
+    signals:
+      dialogue:
+        downplays_achievements: 2.0
+        fears_being_found_out: 2.5
+        attributes_success_to_luck: 1.5
+        
+      action:
+        takes_credit_for_others_work: 2.0
+        avoids_challenges: 1.5
+        overcompensates: 2.0
+        
+      interrogation:
+        deflects_praise: 2.0
+        fears_scrutiny: 2.5
+        
+      crisis:
+        fears_exposure: 2.5
+        becomes_defensive: 2.0
+        
+    stress_modifiers:
+      scrutiny: 1.6
+      success: 1.4
+      being_praised: 1.5
+      
+    seeds:
+      environmental:
+        - "Credentials, all borrowed"
+        - "Achievements, hollow"
+        - "Mask slipping"
+      dialogue:
+        - "They wore success like a costume"
+        - "You are enough as you are"
+        - "Authenticity beats perfection"
+      symbolic:
+        - "mask"
+        - "costume"
+        - "facade"
+
+  savior:
+    cluster: hybrid
+    psychological_wound: fear_of_own_needs
+    psychological_need: accept_help
+    moral_corruption: creates_dependency
+    moral_need: empower_others
+    
+    signals:
+      dialogue:
+        offers_help_constantly: 2.5
+        dismisses_own_needs: 2.0
+        sees_others_as_projects: 1.5
+        
+      action:
+        rescues_unnecessarily: 2.5
+        creates_dependency: 2.0
+        refuses_help: 2.0
+        
+      interrogation:
+        focuses_on_helping: 2.0
+        avoids_own_issues: 1.5
+        
+      crisis:
+        must_be_the_hero: 2.5
+        can't_accept_help: 2.0
+        
+    stress_modifiers:
+      not_being_needed: 1.6
+      accepting_help: 1.7
+      others_independence: 1.4
+      
+    seeds:
+      environmental:
+        - "First aid kit, always ready"
+        - "Others' problems, all solved"
+        - "Own wounds, ignored"
+      dialogue:
+        - "They saved everyone but themselves"
+        - "You can't pour from an empty cup"
+        - "Let others save themselves"
+      symbolic:
+        - "cape"
+        - "bandages"
+        - "rescue_rope"
+
+  avenger:
+    cluster: hybrid
+    psychological_wound: fear_of_letting_go
+    psychological_need: forgive_and_move_on
+    moral_corruption: punishes_beyond_justice
+    moral_need: practice_proportional_justice
+    
+    signals:
+      dialogue:
+        talks_about_revenge: 2.5
+        holds_grudges: 2.0
+        justifies_excessive_punishment: 2.0
+        
+      action:
+        seeks_revenge: 2.5
+        punishes_excessively: 2.0
+        can't_let_go: 2.0
+        
+      interrogation:
+        focuses_on_past_wrongs: 2.5
+        demands_retribution: 2.0
+        
+      crisis:
+        seeks_vengeance: 2.5
+        escalates_punishment: 2.0
+        
+    stress_modifiers:
+      injustice: 1.7
+      being_wronged: 1.8
+      forgiveness: 1.5
+      
+    seeds:
+      environmental:
+        - "List of wrongs, never forgotten"
+        - "Weapons, prepared for revenge"
+        - "Scars, never healed"
+      dialogue:
+        - "They carried every wound like a weapon"
+        - "Forgiveness is freedom"
+        - "Justice, not vengeance"
+      symbolic:
+        - "sword"
+        - "scales_tipped"
+        - "burning_grudge"
+
+  coward:
+    cluster: hybrid
+    psychological_wound: fear_of_danger
+    psychological_need: find_courage
+    moral_corruption: sacrifices_others_for_safety
+    moral_need: protect_others
+    
+    signals:
+      dialogue:
+        expresses_fear_constantly: 2.5
+        suggests_retreat: 2.0
+        rationalizes_cowardice: 1.5
+        
+      action:
+        avoids_danger: 2.5
+        uses_others_as_shields: 3.0
+        abandons_others: 2.5
+        
+      interrogation:
+        fearful: 2.5
+        seeks_safety: 2.0
+        
+      crisis:
+        runs_away: 3.0
+        sacrifices_others: 2.5
+        
+    stress_modifiers:
+      danger: 1.8
+      risk: 1.6
+      being_relied_upon: 1.5
+      
+    seeds:
+      environmental:
+        - "Hiding places, everywhere"
+        - "Escape routes, well-planned"
+        - "Others left behind"
+      dialogue:
+        - "They chose safety over honor"
+        - "Courage is not the absence of fear"
+        - "True bravery is protecting others"
+      symbolic:
+        - "hiding"
+        - "running"
+        - "shield"
+
+  zealot:
+    cluster: hybrid
+    psychological_wound: fear_of_meaninglessness
+    psychological_need: find_balanced_purpose
+    moral_corruption: harms_others_for_the_cause
+    moral_need: respect_individual_worth
+    
+    signals:
+      dialogue:
+        talks_about_the_cause: 2.5
+        dismisses_individual_concerns: 2.0
+        justifies_harm_for_greater_good: 2.0
+        
+      action:
+        sacrifices_others_for_cause: 2.5
+        refuses_compromise: 2.0
+        forces_beliefs_on_others: 2.0
+        
+      interrogation:
+        focuses_on_ideology: 2.5
+        dismisses_nuance: 2.0
+        
+      crisis:
+        escalates_for_cause: 2.5
+        sacrifices_individuals: 2.0
+        
+    stress_modifiers:
+      questioning_beliefs: 1.7
+      compromise: 1.5
+      individual_needs: 1.4
+      
+    seeds:
+      environmental:
+        - "Propaganda, everywhere"
+        - "Symbols of the cause"
+        - "Individual needs, ignored"
+      dialogue:
+        - "They served the cause, not the people"
+        - "People matter more than principles"
+        - "Extremism in defense of anything is vice"
+      symbolic:
+        - "flag"
+        - "manifesto"
+        - "crusade"
+
+  flatterer:
+    cluster: hybrid
+    psychological_wound: fear_of_rejection
+    psychological_need: accept_authentic_relationships
+    moral_corruption: enables_harmful_behavior
+    moral_need: speak_truth_with_love
+    
+    signals:
+      dialogue:
+        agrees_with_everyone: 2.5
+        gives_false_praise: 2.0
+        avoids_disagreement: 2.0
+        
+      action:
+        enables_bad_behavior: 2.5
+        refuses_to_confront: 2.0
+        seeks_approval_constantly: 2.0
+        
+      interrogation:
+        tells_people_what_they_want_to_hear: 2.5
+        avoids_hard_truths: 2.0
+        
+      crisis:
+        agrees_to_avoid_conflict: 2.5
+        enables_harm: 2.0
+        
+    stress_modifiers:
+      disagreement: 1.6
+      confrontation: 1.7
+      being_disliked: 1.8
+      
+    seeds:
+      environmental:
+        - "Compliments, all hollow"
+        - "Mirrors, showing what you want to see"
+        - "Truth, buried"
+      dialogue:
+        - "They said yes to everything and meant nothing"
+        - "True friends tell you what you need to hear"
+        - "Honesty is the highest form of respect"
+      symbolic:
+        - "yes_man"
+        - "empty_praise"
+        - "mirror"
+
+# ============================================================================
+# Inference Configuration
+# ============================================================================
+
+inference:
+  decay_rate: 0.95  # Per scene, old signals fade
+  confidence_threshold: 0.6  # Minimum confidence to act on archetype
+  shift_threshold: 0.15  # Weight difference needed to count as shift
+  min_observations: 5  # Minimum observations before high confidence
+  
+# ============================================================================
+# Revelation Configuration
+# ============================================================================
+
+revelation:
+  mirror_moment_threshold: 0.25  # Story progress (0-1)
+  cost_revealed_threshold: 0.40
+  origin_glimpsed_threshold: 0.55
+  choice_crystallized_threshold: 0.70
+  final_revelation_threshold: 0.85
+  
+  # How many scenes between revelations (minimum)
+  min_scenes_between_revelations: 3

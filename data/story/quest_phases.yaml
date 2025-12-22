@@ -1,0 +1,6 @@
+phases:
+  - id: 1
+    name: "Prologue"
+    critical_quests:
+      - "test_quest"
+    optional_threads: []

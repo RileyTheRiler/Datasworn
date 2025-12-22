@@ -141,8 +141,8 @@ class EnhancementEngine:
             pass
 
         try:
-            from src.faction_system import FactionSystem
-            self._faction_system = FactionSystem()
+            from src.narrative.factions import FactionManager
+            self._faction_system = FactionManager()
         except Exception:
             pass
 
@@ -209,6 +209,8 @@ class EnhancementEngine:
         player_name: str = "the protagonist",
         vow_states: List[Dict] = None,
         asset_states: List[Dict] = None,
+        asset_states: List[Dict] = None,
+        reputation: Dict[str, float] = None,
         is_session_start: bool = False,
     ) -> EnhancementContext:
         """
@@ -246,11 +248,11 @@ class EnhancementEngine:
 
         # 3. Faction Context
         if self._faction_system:
-            context.faction_context = self._faction_system.get_narrator_context()
+            context.faction_context = self._faction_system.get_narrator_context(reputation or {})
 
             # Check territory status for location
             if location:
-                territory = self._faction_system.get_territory_status(location)
+                territory = self._faction_system.get_territory_status(location, reputation or {})
                 if territory:
                     faction_parts = [f"  {impl}" for _, _, impl in territory]
                     context.faction_context += "\n" + "\n".join(faction_parts)
@@ -459,8 +461,8 @@ class EnhancementEngine:
             engine._vow_engine = VowComplicationEngine.from_dict(data["vow_complications"])
 
         if "faction_system" in data and engine._faction_system:
-            from src.faction_system import FactionSystem
-            engine._faction_system = FactionSystem.from_dict(data["faction_system"])
+            from src.narrative.factions import FactionManager
+            engine._faction_system = FactionManager.from_dict(data["faction_system"])
 
         if "combat_flow" in data and engine._combat_engine:
             from src.combat_flow import CombatFlowEngine

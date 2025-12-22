@@ -1,0 +1,174 @@
+# Chapter Progression Configuration
+# Defines narrative chapters with time/season jumps and world state changes
+
+chapters:
+  - chapter_id: "chapter_1"
+    name: "The Awakening"
+    season: "Winter"
+    regions_unlocked:
+      - "forge_station"
+      - "aethelgard_ship"
+      - "local_sector"
+    
+    critical_missions:
+      - "investigate_reyes_death"
+      - "first_clue_discovery"
+    
+    soft_locks:
+      - lock_id: "outer_rim_blockade"
+        description: "Corporate blockade prevents travel to outer rim"
+        affected_regions: ["outer_rim", "frontier_worlds"]
+      - lock_id: "bridge_construction"
+        description: "Station bridge under repair after incident"
+        affected_regions: ["station_industrial"]
+    
+    law_pressure: 0.8  # Moderate patrol presence
+    
+    economy_modifiers:
+      supplies: 1.0
+      weapons: 1.2  # Slightly inflated due to tension
+      ship_parts: 1.1
+      information: 0.9
+    
+    ambient_sets:
+      encounters:
+        - "corporate_patrol"
+        - "nervous_traders"
+        - "station_workers"
+      weather_bias: "clear"  # Station interior
+      ambient_dialogue:
+        - "Did you hear about the captain?"
+        - "Security's been asking questions..."
+        - "Something's not right on that ship."
+    
+    time_jump_outcome:
+      days_advanced: 0  # Starting chapter
+      narrative_summary: "You awaken to find Captain Reyes dead. The investigation begins."
+
+  - chapter_id: "chapter_2"
+    name: "Shadows Deepen"
+    season: "Winter"
+    regions_unlocked:
+      - "forge_station"
+      - "aethelgard_ship"
+      - "local_sector"
+      - "station_industrial"  # Bridge repaired
+      - "black_market"
+    
+    critical_missions:
+      - "interrogate_crew"
+      - "uncover_conspiracy"
+      - "revelation_stage_2"
+    
+    soft_locks:
+      - lock_id: "outer_rim_blockade"
+        description: "Blockade still active, but smuggler routes available"
+        affected_regions: ["outer_rim"]
+    
+    law_pressure: 1.2  # Increased security
+    
+    economy_modifiers:
+      supplies: 1.1
+      weapons: 1.4
+      ship_parts: 1.2
+      information: 1.3  # Information becomes valuable
+    
+    ambient_sets:
+      encounters:
+        - "corporate_enforcers"
+        - "suspicious_crew"
+        - "black_market_contacts"
+      weather_bias: "stormy"
+      ambient_dialogue:
+        - "The corps are tightening their grip."
+        - "Trust no one."
+        - "I heard the killer is still on board..."
+    
+    time_jump_outcome:
+      days_advanced: 7
+      narrative_summary: "A week has passed. Tensions rise as the investigation deepens. The station feels colder, more hostile."
+
+  - chapter_id: "chapter_3"
+    name: "Breaking Point"
+    season: "Spring"
+    regions_unlocked:
+      - "forge_station"
+      - "aethelgard_ship"
+      - "local_sector"
+      - "station_industrial"
+      - "black_market"
+      - "outer_rim"  # Blockade lifted
+      - "frontier_worlds"
+    
+    critical_missions:
+      - "confront_suspect"
+      - "revelation_stage_3"
+      - "faction_showdown"
+    
+    soft_locks: []  # All regions open
+    
+    law_pressure: 1.5  # High alert
+    
+    economy_modifiers:
+      supplies: 1.3
+      weapons: 1.6
+      ship_parts: 1.4
+      information: 1.5
+    
+    ambient_sets:
+      encounters:
+        - "armed_patrols"
+        - "fleeing_civilians"
+        - "faction_agents"
+      weather_bias: "rain"
+      ambient_dialogue:
+        - "War is coming."
+        - "Pick a side or get crushed."
+        - "The truth is out there, if you dare look."
+    
+    time_jump_outcome:
+      days_advanced: 21
+      narrative_summary: "Three weeks later. Spring thaw brings new life and new dangers. The conspiracy reaches beyond the ship."
+
+  - chapter_id: "chapter_4"
+    name: "Reckoning"
+    season: "Summer"
+    regions_unlocked:
+      - "forge_station"
+      - "aethelgard_ship"
+      - "local_sector"
+      - "station_industrial"
+      - "black_market"
+      - "outer_rim"
+      - "frontier_worlds"
+      - "deep_space"  # Final frontier
+    
+    critical_missions:
+      - "final_revelation"
+      - "hero_tragedy_choice"
+      - "ending_sequence"
+    
+    soft_locks: []
+    
+    law_pressure: 2.0  # Maximum enforcement
+    
+    economy_modifiers:
+      supplies: 1.5
+      weapons: 2.0
+      ship_parts: 1.6
+      information: 2.0
+    
+    ambient_sets:
+      encounters:
+        - "military_forces"
+        - "desperate_survivors"
+        - "final_confrontations"
+      weather_bias: "extreme"
+      ambient_dialogue:
+        - "This is it. The end game."
+        - "No turning back now."
+        - "History will remember this day."
+    
+    time_jump_outcome:
+      days_advanced: 30
+      narrative_summary: "A month has passed. Summer heat mirrors the intensity of the final confrontation. Everything leads to this moment."

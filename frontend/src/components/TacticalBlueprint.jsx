@@ -14,6 +14,7 @@ export function TacticalBlueprint({ sessionId, visible = false, onClose }) {
     const [hoveredNPC, setHoveredNPC] = useState(null);
     const [showMovement, setShowMovement] = useState(false);
     const [showVision, setShowVision] = useState(false);
+    const [showLegend, setShowLegend] = useState(false);
 
     const generateBlueprint = useCallback(async (forceRegenerate = false, options = {}) => {
         if (!sessionId) return;

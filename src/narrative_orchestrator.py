@@ -37,6 +37,9 @@ from src.utility_ai import evaluate_tactical_decision
 from src.goap import plan_npc_action
 from src.psychology import DreamSequenceEngine, PhobiaSystem, AddictionSystem, MoralInjurySystem, AttachmentSystem, TrustDynamicsSystem
 from src.npc.engine import NPCCognitiveEngine, CognitiveState
+from src.narrative.foreshadowing import ForeshadowingEngine, GamePhase
+from src.psych_profile import PsychologicalProfile
+
 
 
 
@@ -67,7 +70,7 @@ class NarrativeOrchestrator:
     
     # Phase 1 Systems
     payoff_tracker: PayoffTracker = field(default_factory=PayoffTracker)
-    npc_memories: Dict[str, NPCMemoryBank] = field(default_factory=dict)
+    npc_memories: Dict[str, dict] = field(default_factory=dict)  # NPC memory storage
     consequence_manager: ConsequenceManager = field(default_factory=ConsequenceManager)
     echo_system: ChoiceEchoSystem = field(default_factory=ChoiceEchoSystem)
     
@@ -107,6 +110,9 @@ class NarrativeOrchestrator:
     attachment_system: AttachmentSystem = field(default_factory=AttachmentSystem)
     trust_dynamics: TrustDynamicsSystem = field(default_factory=TrustDynamicsSystem)
     
+    # Foreshadowing (New)
+    foreshadowing_engine: ForeshadowingEngine = field(default_factory=ForeshadowingEngine)
+    
     # State
     current_scene: int = 0
     
@@ -135,6 +141,8 @@ class NarrativeOrchestrator:
         location: str = "",
         active_npcs: list[str] = None,
         player_action: str = "",
+        psych_profile: Optional[PsychologicalProfile] = None,
+        is_mystery_solved: bool = False,
     ) -> str:
         """
         Generate comprehensive narrative guidance from all systems.
@@ -290,9 +298,12 @@ class NarrativeOrchestrator:
         # Simple check for active NPCs
         for npc in active_npcs:
             if npc in self.npc_memories:
-                echo = self.npc_memories[npc].generate_callback(self.current_scene)
-                if echo:
-                    sections.append(f"\\n[CALLBACK SUGGESTION for {npc}: {echo}]")
+                # Simple callback based on stored interactions
+                interactions = self.npc_memories[npc].get("interactions", [])
+                if interactions:
+                    recent = interactions[-1] if interactions else None
+                    if recent:
+                        sections.append(f"\\n[CALLBACK SUGGESTION for {npc}: Recall previous interaction at scene {recent.get('scene_num')}]")
             
             # Choice echoes
             choice_recall = self.echo_system.generate_echo(
@@ -340,6 +351,29 @@ class NarrativeOrchestrator:
         if self.impossible_choices.active_dilemma and not self.impossible_choices.active_dilemma.resolved:
             d = self.impossible_choices.active_dilemma
             sections.append(f"\\n[ACTIVE DILEMMA: {d.description} | A: {d.option_a.description} | B: {d.option_b.description}]")
+
+        # 15. Archetype Foreshadowing (New)
+        # Attempt to get progress from story graph
+        progress = self.story_graph.get_progress() if hasattr(self.story_graph, 'get_progress') else 0.0
+        
+        # Use archetype scores from psychological profile if provided
+        archetype_scores = {}
+        if psych_profile and hasattr(psych_profile, 'identity') and hasattr(psych_profile.identity, 'wound_profile'):
+            archetype_scores = psych_profile.identity.wound_profile.scores.scores
+
+        # Select seeds
+        seeds = self.foreshadowing_engine.select_seeds(
+            archetype_scores=archetype_scores,
+            progress=progress,
+            location=location,
+            npc=active_npcs[0] if active_npcs else None
+        )
+        if seeds:
+            sections.append(f"\\n{self.foreshadowing_engine.get_narrator_instructions(seeds)}")
+
+        # 16. Ending Trigger
+        if is_mystery_solved:
+             sections.append("\\n<SYSTEM_OVERRIDE>\\n[[ENDING SEQUENCE INITIATED]]\\nThe mystery is solved. The climax is here. Prepare the player for the final moral decision.\\nContext: Does the player accept the imperfect reality (Hero) or reject it for control (Tragedy)?\\nTransition the scene to the final confrontation moment.\\n</SYSTEM_OVERRIDE>")
 
         return "\\n".join(sections)
     
@@ -451,16 +485,19 @@ class NarrativeOrchestrator:
         # 6. Update NPC Memories (New)
         for npc in active_npcs:
             if npc not in self.npc_memories:
-                self.npc_memories[npc] = NPCMemoryBank(npc_id=npc)
+                self.npc_memories[npc] = {
+                    "npc_id": npc,
+                    "interactions": []
+                }
             
             # Record that this interaction happened
             # We assume a general "interaction" topic for now unless parsed
-            self.npc_memories[npc].record_interaction(
-                scene_num=self.current_scene,
-                topic="general_interaction",
-                content=narrative_output[:100], # Store brief snippet
-                emotion="NEUTRAL" # Todo: derive from sentiment analysis
-            )
+            self.npc_memories[npc]["interactions"].append({
+                "scene_num": self.current_scene,
+                "topic": "general_interaction",
+                "content": narrative_output[:100],  # Store brief snippet
+                "emotion": "NEUTRAL"  # Todo: derive from sentiment analysis
+            })
             
         # 7. Update Reputation (Phase 2)
         # Rough heuristic for now - real system would use LLM analysis of player_action
@@ -557,7 +594,7 @@ class NarrativeOrchestrator:
             "current_scene": self.current_scene,
             # Phase 1 Persistence
             "payoff_tracker": self.payoff_tracker.to_dict(),
-            "npc_memories": {nid: mem.to_dict() for nid, mem in self.npc_memories.items()},
+            "npc_memories": self.npc_memories,  # Already a dict
             "consequence_manager": self.consequence_manager.to_dict(),
             "echo_system": self.echo_system.to_dict(),
             # Phase 2 Persistence
@@ -572,7 +609,7 @@ class NarrativeOrchestrator:
             # Phase 4 Persistence
             "ending_system": self.ending_system.to_dict(),
             "impossible_choices": self.impossible_choices.to_dict(),
-            "environmental_storyteller": self.environmental_storyteller.to_dict(),
+            "environmental_storyteller": self.environmental_storyteller.to_dict() if hasattr(self.environmental_storyteller, 'to_dict') else {},
             "flashback_system": self.flashback_system.to_dict(),
             # Phase 5 Persistence
             "unreliable_system": self.unreliable_system.to_dict(),
@@ -592,6 +629,7 @@ class NarrativeOrchestrator:
             "trust_dynamics": self.trust_dynamics.to_dict(),
             "callback_manager": self.callback_manager.to_dict(),
             "combat_system": self.combat_system.to_dict(),
+            "foreshadowing_engine": self.foreshadowing_engine.to_dict(),
         }
     
     @classmethod
@@ -626,10 +664,7 @@ class NarrativeOrchestrator:
             orchestrator.payoff_tracker = PayoffTracker.from_dict(data["payoff_tracker"])
             
         if "npc_memories" in data:
-            orchestrator.npc_memories = {
-                nid: NPCMemoryBank.from_dict(mem_data) 
-                for nid, mem_data in data["npc_memories"].items()
-            }
+            orchestrator.npc_memories = data["npc_memories"]
             
         if "consequence_manager" in data:
             orchestrator.consequence_manager = ConsequenceManager.from_dict(data["consequence_manager"])
@@ -716,6 +751,9 @@ class NarrativeOrchestrator:
         if "combat_system" in data:
             orchestrator.combat_system = CombatOrchestrator.from_dict(data["combat_system"])
         
+        if "foreshadowing_engine" in data:
+            orchestrator.foreshadowing_engine = ForeshadowingEngine.from_dict(data["foreshadowing_engine"])
+            
         return orchestrator
 
 

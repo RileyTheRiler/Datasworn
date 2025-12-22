@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Layout from './Layout'
 import PsycheDashboard from './components/PsycheDashboard'
 import CharacterCreation from './components/CharacterCreation'
+import MainMenu from './components/MainMenu'
 import { ToastProvider } from './components/ToastProvider'
 import { TensionVignette, AmbientParticles, HijackOverlay } from './components/UXEffects'
 import AudioManager from './components/AudioManager'
@@ -22,7 +23,8 @@ function GameContent() {
   const [hijackActive, setHijackActive] = useState(false)
   const [hijackAspect, setHijackAspect] = useState(null)
   const [isOnline, setIsOnline] = useState(true)
-  const [showCharacterCreation, setShowCharacterCreation] = useState(true) // Start with creation
+  const [showMenu, setShowMenu] = useState(true);
+  const [showCharacterCreation, setShowCharacterCreation] = useState(false); // Default false, triggered by New Game
 
   const { populateFromGameState } = useNPCCache();
 
@@ -142,6 +144,34 @@ function GameContent() {
     setHijackAspect(null);
   };
 
+  // Main Menu Handlers
+  const handleNewGame = () => {
+    setShowMenu(false);
+    setShowCharacterCreation(true);
+  };
+
+  const handleLoadGame = (state) => {
+    setGameState(state);
+    setSession("default"); // Assuming default session for MVP
+    setShowMenu(false);
+    setShowCharacterCreation(false);
+  };
+
+  const handleExit = () => {
+    // For now, just reload the page to "exit" to menu (or close if desktop app later)
+    window.location.reload();
+  };
+
+  if (showMenu) {
+    return (
+      <MainMenu
+        onNewGame={handleNewGame}
+        onLoadGame={handleLoadGame}
+        onExit={handleExit}
+      />
+    );
+  }
+
   // Show character creation wizard
   if (showCharacterCreation) {
     return (
@@ -149,14 +179,11 @@ function GameContent() {
         <div className="min-h-screen bg-disco-bg">
           <AmbientParticles type="dust" count={20} />
 
-          {/* Title */}
+          {/* Title - Hidden in Wizard if transitioning from Menu? Keep for now */}
           <div className="pt-8 text-center">
             <h1 className="text-5xl font-serif text-disco-paper tracking-wider">
-              STARFORGED
+              DISTANT SKIES
             </h1>
-            <p className="text-disco-cyan font-mono text-sm mt-2">
-              AI Game Master
-            </p>
           </div>
 
           <CharacterCreation

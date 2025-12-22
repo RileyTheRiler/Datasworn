@@ -1,0 +1,40 @@
+factions:
+  - id: "iron_syndicate"
+    name: "Iron Syndicate"
+    description: "A ruthless criminal organization controlling the black markets and illicit trade routes. They value strength and profit above all."
+    type: "Criminal"
+    initial_standing: "Neutral"
+    territory_influence: ["Deep Space", "Mining Colonies"]
+    color: "#ff4d4d"
+
+  - id: "keepers"
+    name: "The Keepers"
+    description: "An ancient order dedicated to preserving the history and technology of the Precursors. They are secretive and guarded."
+    type: "Religious/Scientific"
+    initial_standing: "Neutral"
+    territory_influence: ["Ancient Ruins", "Archives"]
+    color: "#4da6ff"
+
+  - id: "guild"
+    name: "The Guild"
+    description: "A powerful merchant conglomerate that regulates trade and commerce. They are bureaucratic but fair to those who follow their rules."
+    type: "Corporate"
+    initial_standing: "Neutral"
+    territory_influence: ["Trade Hubs", "Spacestations"]
+    color: "#ffcc00"
+
+  - id: "sovereigns"
+    name: "The Sovereigns"
+    description: "A loose alliance of independent planetary governors seeking to maintain autonomy from larger powers."
+    type: "Political"
+    initial_standing: "Neutral"
+    territory_influence: ["Planetary Capitals", "Outposts"]
+    color: "#99ff99"
+
+  - id: "forsaken"
+    name: "The Forsaken"
+    description: "Outcasts and exiles living on the fringes of society. Desperate and unpredictable."
+    type: "Outlaw"
+    initial_standing: "Suspicious"
+    territory_influence: ["Scrap Yards", "Derelict Ships"]
+    color: "#a6a6a6"

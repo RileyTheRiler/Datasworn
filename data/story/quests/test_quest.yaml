@@ -1,0 +1,18 @@
+id: "test_quest"
+phase: 1
+title: "Test Quest"
+description: "A simple test quest to verify the quest system"
+prerequisites:
+  quests: []
+  flags: []
+  reputation: {}
+recommended_order: 1
+converges_to: null
+expires_on_phase: null
+side_effects:
+  flags_to_set:
+    - "test_quest_completed"
+  world_deltas: []
+unlock_dialogue_options:
+  - "test_dialogue"
+quest_type: "side"

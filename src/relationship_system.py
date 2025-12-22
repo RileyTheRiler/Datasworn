@@ -96,17 +96,61 @@ class RelationshipWeb:
             self._initialize_crew()
             
     def _initialize_crew(self):
-        """Initialize the 6 crew members."""
-        defaults = [
-            CrewMember("captain", "Commander Vasquez", "Captain", trust=0.4, secrets=["Knows about Protocol 99"]),
-            CrewMember("engineer", "Chen Wei", "Chief Engineer", trust=0.6, secrets=["Sabotaged the backup drive"]),
-            CrewMember("medic", "Dr. Okonkwo", "Ship's Doctor", trust=0.7, secrets=["Has been drugging the crew"]),
-            CrewMember("scientist", "Dr. Petrova", "Lead Researcher", trust=0.5, secrets=["The experiment was her idea"]),
-            CrewMember("security", "Reyes", "Security Chief", trust=0.3, secrets=["Former military black ops"]),
-            CrewMember("pilot", "Nyx", "Pilot/Navigator", trust=0.5, secrets=["Is not who they claim to be"]),
-        ]
-        for c in defaults:
-            self.crew[c.id] = c
+        """Initialize the 6 crew members with detailed psychological profiles."""
+        try:
+            from src.npc.crew_profiles import CREW_PROFILES
+            from src.narrative.secondary_characters import SECONDARY_CHARACTERS
+            
+            # Map secondary character IDs to crew IDs and load rich data
+            crew_mapping = [
+                ("security", "yuki", "Yuki", "Security Chief", 0.3, 0.7),
+                ("pilot", "torres", "Torres", "Pilot", 0.4, 0.6),
+                ("cargo", "vasquez", "Vasquez", "Cargo Master", 0.6, 0.2),
+                ("engineer", "kai", "Kai", "Chief Engineer", 0.5, 0.1),
+                ("medic", "okonkwo", "Dr. Okonkwo", "Ship's Doctor", 0.7, 0.1),
+                ("apprentice", "ember", "Ember", "Apprentice", 0.5, 0.0),
+            ]
+            
+            for crew_id, sec_char_id, name, role, trust, suspicion in crew_mapping:
+                # Get secondary character data if available
+                sec_char = SECONDARY_CHARACTERS.get(sec_char_id)
+                
+                if sec_char:
+                    # Use rich secondary character data
+                    secrets = [sec_char.secret_knowledge]
+                    member = CrewMember(
+                        crew_id, 
+                        sec_char.name,  # Use full name from secondary char
+                        sec_char.role,
+                        trust=trust, 
+                        suspicion=suspicion, 
+                        secrets=secrets,
+                        description=sec_char.backstory_summary
+                    )
+                    
+                    # Load psyche from CREW_PROFILES (for backward compatibility)
+                    profile_key = sec_char_id if sec_char_id != "okonkwo" else "medic"
+                    member.psyche = CREW_PROFILES.get(profile_key)
+                else:
+                    # Fallback for Yuki (not in secondary characters)
+                    member = CrewMember(crew_id, name, role, trust=trust, suspicion=suspicion)
+                    member.psyche = CREW_PROFILES.get("security")
+                    member.secrets = ["Killed the captain to prevent exposure"]
+                
+                self.crew[crew_id] = member
+                
+        except ImportError:
+            # Fallback to basic crew if profiles not available
+            defaults = [
+                CrewMember("security", "Yuki", "Security Chief", trust=0.3, secrets=["Unknown past"]),
+                CrewMember("pilot", "Torres", "Pilot", trust=0.4, secrets=["Military background"]),
+                CrewMember("cargo", "Vasquez", "Cargo Master", trust=0.6, secrets=["Smuggler connections"]),
+                CrewMember("engineer", "Kai", "Chief Engineer", trust=0.5, secrets=["Addiction issues"]),
+                CrewMember("medic", "Dr. Okonkwo", "Ship's Doctor", trust=0.7, secrets=["Medical secret"]),
+                CrewMember("apprentice", "Ember", "Apprentice", trust=0.5, secrets=["Stowaway"]),
+            ]
+            for c in defaults:
+                self.crew[c.id] = c
             
     def apply_action(self, action_type: str, target_id: str, context: str = "", 
                      psych_profile: "PsychologicalProfile" = None) -> dict:
@@ -241,6 +285,32 @@ class RelationshipWeb:
             return emotion_reactions["low_suspicion"]
         
         return ""
+
+    def get_npc_archetype_response(self, npc_id: str, player_wound: str) -> str:
+        """
+        Get the specific dialogue/reaction from an NPC based on the player's archetype (WoundType).
+        """
+        if npc_id not in self.crew:
+            return ""
+            
+        npc = self.crew[npc_id]
+        if not npc.psyche or not npc.psyche.moral_profile:
+            return f"{npc.name} observes you closely."
+            
+        # Check specific interaction overrides first
+        if player_wound in npc.psyche.moral_profile.archetype_interactions:
+            return npc.psyche.moral_profile.archetype_interactions[player_wound]
+            
+        # Check if they mirror this archetype
+        if player_wound in npc.psyche.moral_profile.mirrors:
+            return f"{npc.name} seems to recognize a kindred spirit in your {player_wound} nature. 'We understand each other, don't we?'"
+            
+        # Check if they challenge this archetype
+        if player_wound in npc.psyche.moral_profile.challenges:
+            return f"{npc.name} visibly bristles at your {player_wound} behavior. Their moral argument clashes with yours."
+            
+        return f"{npc.name} doesn't seem to have a strong reaction to your current demeanor."
+
 
     # =========================================================================
     # SOCIAL PERCEPTION

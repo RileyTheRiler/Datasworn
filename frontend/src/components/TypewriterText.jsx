@@ -18,6 +18,7 @@ const TypewriterText = ({
     characters = {},       // NPC data for hover cards
     baseSpeed = 25,        // ms per character
     onComplete,            // callback when typing finishes
+    onInterrogate,         // callback when interrogate button clicked
     className = "",
     skipOnClick = true,
 }) => {
@@ -99,11 +100,11 @@ const TypewriterText = ({
         return parts.map((part, i) => {
             if (part.startsWith('[[') && part.endsWith(']]')) {
                 const name = part.slice(2, -2);
-                return <NPCHoverCard key={i} name={name} characters={characters} />;
+                return <NPCHoverCard key={i} name={name} characters={characters} onInterrogate={onInterrogate} />;
             }
             return <React.Fragment key={i}>{part}</React.Fragment>;
         });
-    }, [displayedText, characters]);
+    }, [displayedText, characters, onInterrogate]);
 
     return (
         <div className={`relative group/typewriter ${className}`}>

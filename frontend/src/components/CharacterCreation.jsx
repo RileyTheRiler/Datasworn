@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import CalibrationStep from './CalibrationStep';
 
 const API_URL = 'http://localhost:8000/api';
 
@@ -44,6 +45,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [availableAssets, setAvailableAssets] = useState({});
+    const [createdSessionId, setCreatedSessionId] = useState(null); // For calibration step
 
     // Character data
     const [name, setName] = useState('');
@@ -60,8 +62,8 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
     const [selectedAssets, setSelectedAssets] = useState([]);
     const [vow, setVow] = useState('');
 
-    // Stat points remaining (7 total: must sum to 7)
-    const totalPoints = 7;
+    // Stat points remaining (9 total: must sum to 9)
+    const totalPoints = 9;
     const usedPoints = Object.values(stats).reduce((a, b) => a + b, 0);
     const remaining = totalPoints - usedPoints;
 
@@ -116,13 +118,14 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                     character_name: name,
                     background_vow: vow || "Find my place among the stars",
                     stats: stats,
-                    asset_ids: selectedAssets, // These might need to be resolved to actual IDs if they aren't exact
-                    background: visualDescription // Map visual description to background for image gen
+                    asset_ids: selectedAssets,
+                    background: visualDescription
                 })
             });
             const data = await res.json();
             if (data.session_id) {
-                onComplete(data);
+                // Instead of completing, trigger calibration
+                setCreatedSessionId(data.session_id);
             }
         } catch (err) {
             console.error('Character creation failed:', err);
@@ -252,7 +255,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
 
             case 3:
                 return (
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                         <div className="flex justify-between items-center">
                             <h3 className="text-xl text-disco-cyan font-mono">Choose Your Assets</h3>
                             <span className="text-sm text-disco-muted">
@@ -260,29 +263,77 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                             </span>
                         </div>
 
+                        {/* Help Section */}
+                        <details className="bg-disco-bg/50 border border-disco-muted/30 p-3">
+                            <summary className="cursor-pointer text-sm text-disco-accent font-mono hover:text-disco-cyan transition-colors">
+                                ℹ️ What are Assets?
+                            </summary>
+                            <div className="mt-3 text-xs text-disco-muted space-y-2">
+                                <p>
+                                    <strong className="text-disco-paper">Assets</strong> are special abilities, equipment, companions, or traits that make your character unique.
+                                    You can choose up to <strong className="text-disco-cyan">3 assets</strong> to start with.
+                                </p>
+                                <div className="space-y-1">
+                                    <p><strong className="text-disco-accent">Path:</strong> Your training/profession (combat skills, navigation, etc.)</p>
+                                    <p><strong className="text-disco-accent">Companion:</strong> Allies that travel with you (robots, animals, etc.)</p>
+                                    <p><strong className="text-disco-accent">Module:</strong> Ship upgrades or special equipment</p>
+                                    <p><strong className="text-disco-accent">Deed:</strong> Special abilities earned through experience</p>
+                                </div>
+                                <p className="text-disco-cyan">
+                                    💡 Tip: Your archetype suggests assets that fit your playstyle, but you can swap them for others!
+                                </p>
+                            </div>
+                        </details>
+
                         {archetype && selectedAssets.length > 0 && (
-                            <div className="text-xs bg-disco-cyan/10 p-2 border border-disco-cyan/30 text-disco-cyan mb-2">
+                            <div className="text-xs bg-disco-cyan/10 p-2 border border-disco-cyan/30 text-disco-cyan">
                                 Pre-selected assets for {archetype}. Click to remove or add others.
                             </div>
                         )}
 
-                        <div className="max-h-64 overflow-y-auto space-y-4 pr-2">
+                        <div className="max-h-80 overflow-y-auto space-y-4 pr-2">
                             {Object.entries(availableAssets).map(([type, assets]) => (
                                 <div key={type}>
-                                    <div className="text-xs text-disco-accent uppercase tracking-wider mb-2">{type}</div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {assets.slice(0, 6).map(asset => (
-                                            <button
-                                                key={asset.name}
-                                                onClick={() => toggleAsset(asset.name)}
-                                                className={`p-2 text-left text-sm border transition-colors
-                                                    ${selectedAssets.includes(asset.name)
-                                                        ? 'border-disco-cyan bg-disco-cyan/10 text-disco-cyan'
-                                                        : 'border-disco-muted/30 hover:border-disco-muted text-disco-paper/70'}`}
-                                            >
-                                                <div className="font-mono">{asset.name}</div>
-                                            </button>
-                                        ))}
+                                    <div className="text-xs text-disco-accent uppercase tracking-wider mb-2 font-bold">{type}</div>
+                                    <div className="space-y-2">
+                                        {assets.slice(0, 8).map(asset => {
+                                            const isSelected = selectedAssets.includes(asset.name);
+                                            const canSelect = selectedAssets.length < 3 || isSelected;
+
+                                            return (
+                                                <button
+                                                    key={asset.name}
+                                                    onClick={() => toggleAsset(asset.name)}
+                                                    disabled={!canSelect}
+                                                    className={`w-full p-3 text-left border transition-all
+                                                        ${isSelected
+                                                            ? 'border-disco-cyan bg-disco-cyan/10 text-disco-cyan'
+                                                            : canSelect
+                                                                ? 'border-disco-muted/30 hover:border-disco-muted text-disco-paper/70 hover:bg-disco-bg/30'
+                                                                : 'border-disco-muted/10 text-disco-muted/30 cursor-not-allowed'
+                                                        }`}
+                                                >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="flex-1">
+                                                            <div className="font-mono font-bold text-sm mb-1">{asset.name}</div>
+                                                            {asset.abilities && asset.abilities.length > 0 && (
+                                                                <div className="text-xs opacity-80 space-y-1">
+                                                                    {asset.abilities.slice(0, 2).map((ability, idx) => (
+                                                                        <div key={idx} className="flex gap-1">
+                                                                            <span className="text-disco-accent">•</span>
+                                                                            <span>{ability}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        {isSelected && (
+                                                            <span className="text-disco-cyan text-lg">✓</span>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             ))}
@@ -405,7 +456,14 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6">
-                    {renderStep()}
+                    {createdSessionId ? (
+                        <CalibrationStep
+                            sessionId={createdSessionId}
+                            onComplete={() => onComplete({ session_id: createdSessionId })}
+                        />
+                    ) : (
+                        renderStep()
+                    )}
                 </div>
 
                 {/* Footer */}

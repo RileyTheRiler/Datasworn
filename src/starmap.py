@@ -221,14 +221,7 @@ class StarMap:
 
     def _generate_system_name(self) -> str:
         """Generate a procedural system name."""
-        prefixes = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Theta"]
-        suffixes = ["Prime", "Secundus", "Tertius", "Major", "Minor"]
-        names = ["Centauri", "Draconis", "Orionis", "Cygni", "Lyrae", "Aquilae"]
-        
-        if random.random() < 0.5:
-            return f"{random.choice(prefixes)} {random.choice(names)}"
-        else:
-            return f"{random.choice(names)} {random.choice(suffixes)}"
+        return _generate_system_name()
     
     def travel_to(self, system_id: str) -> dict[str, Any]:
         """Travel to a system and mark it as discovered."""

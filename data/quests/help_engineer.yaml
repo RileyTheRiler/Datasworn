@@ -1,0 +1,27 @@
+# Side Quest Example - Converges to main quest
+
+id: help_engineer
+phase: 1
+title: "Help the Engineer"
+description: "Torres needs help repairing the damaged engine. Assisting might reveal clues."
+quest_type: side
+recommended_order: 2
+
+prerequisites:
+  quests: []
+  flags: []
+  reputation: {}
+
+converges_to: discover_truth  # This quest feeds into the main quest
+expires_on_phase: 2  # Must complete in Phase 1
+
+side_effects:
+  flags_to_set:
+    - engineer_helped
+    - engine_repaired
+  world_deltas:
+    - engine_room_cleaned
+
+unlock_dialogue_options:
+  - torres_grateful_dialogue
+  - engine_clue_dialogue

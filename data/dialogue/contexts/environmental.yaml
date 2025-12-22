@@ -1,0 +1,318 @@
+# Environmental Contextual Dialogue
+# Weather and location-based dialogue variations
+
+contexts:
+  # Rainy Weather
+  rain:
+    conditions:
+      - weather: "rain"
+    
+    greetings:
+      - text: "Miserable weather, isn't it?"
+        weight: 1.0
+        npc_mood: "gloomy"
+        
+      - text: "*Pulls cloak tighter* At least you're prepared for this."
+        weight: 0.8
+        npc_mood: "cold"
+        player_has_item: "cloak"
+        
+      - text: "Come inside before you catch your death!"
+        weight: 0.7
+        npc_mood: "concerned"
+        location_type: "indoor"
+        
+      - text: "*Shivers* I hate the rain..."
+        weight: 0.9
+        npc_mood: "uncomfortable"
+    
+    walk_by_barks:
+      - text: "*Hurries past, head down*"
+        weight: 1.0
+        animation: "hurrying"
+        
+      - text: "Damn this weather!"
+        weight: 0.8
+        
+      - text: "*Splashes through puddles*"
+        weight: 0.6
+    
+    seeking_shelter:
+      - text: "Quick, under here!"
+        weight: 1.0
+        location_type: "awning"
+        
+      - text: "The tavern's dry at least."
+        weight: 0.8
+        location_nearby: "tavern"
+        
+      - text: "*Ducks into doorway*"
+        weight: 0.7
+        animation: "seek_cover"
+  
+  # Storm
+  storm:
+    conditions:
+      - weather: "storm"
+    
+    greetings:
+      - text: "*Shouts over wind* Get inside!"
+        weight: 1.0
+        npc_mood: "urgent"
+        
+      - text: "Are you mad? This storm will kill you!"
+        weight: 0.9
+        npc_mood: "alarmed"
+        
+      - text: "*Grabs your arm* Come on!"
+        weight: 0.8
+        npc_mood: "panicked"
+        animation: "pull"
+    
+    walk_by_barks:
+      - text: "*Runs for shelter*"
+        weight: 1.0
+        animation: "running"
+        
+      - text: "*Thunder crashes*"
+        weight: 0.9
+        sound_effect: "thunder"
+    
+    seeking_shelter:
+      - text: "Everyone to the cellar!"
+        weight: 1.0
+        npc_archetype: "guard"
+        
+      - text: "*Boards up windows*"
+        weight: 0.8
+        animation: "barricading"
+  
+  # Extreme Heat
+  extreme_heat:
+    conditions:
+      - weather: "extreme_heat"
+    
+    greetings:
+      - text: "*Wipes sweat* Too hot to talk..."
+        weight: 1.0
+        npc_mood: "exhausted"
+        
+      - text: "Find shade, friend. This heat is deadly."
+        weight: 0.9
+        npc_mood: "concerned"
+        
+      - text: "*Fans self* Water... need water..."
+        weight: 0.8
+        npc_mood: "desperate"
+        npc_state: "dehydrated"
+    
+    walk_by_barks:
+      - text: "*Moves slowly, conserving energy*"
+        weight: 1.0
+        animation: "sluggish"
+        
+      - text: "*Seeks any shade available*"
+        weight: 0.9
+        animation: "shade_seeking"
+  
+  # Cold/Snow
+  cold:
+    conditions:
+      - weather: "cold"
+    
+    greetings:
+      - text: "*Teeth chattering* C-cold out here..."
+        weight: 1.0
+        npc_mood: "freezing"
+        
+      - text: "Warm yourself by the fire inside."
+        weight: 0.8
+        npc_mood: "hospitable"
+        location_type: "building_with_fire"
+        
+      - text: "*Blows on hands* Can't feel my fingers..."
+        weight: 0.9
+        npc_mood: "uncomfortable"
+    
+    walk_by_barks:
+      - text: "*Huddles in coat*"
+        weight: 1.0
+        animation: "shivering"
+        
+      - text: "*Breath visible in air*"
+        weight: 0.7
+        visual_effect: "breath_fog"
+  
+  # Fog
+  fog:
+    conditions:
+      - weather: "fog"
+    
+    greetings:
+      - text: "Can barely see you in this fog..."
+        weight: 1.0
+        npc_mood: "uneasy"
+        
+      - text: "*Peers through mist* Who's there?"
+        weight: 0.9
+        npc_mood: "cautious"
+        
+      - text: "Dangerous to travel in this. Stay close."
+        weight: 0.8
+        npc_mood: "protective"
+    
+    walk_by_barks:
+      - text: "*Moves carefully, feeling way forward*"
+        weight: 1.0
+        animation: "cautious_walk"
+        
+      - text: "*Calls out* Anyone there?"
+        weight: 0.7
+  
+  # Night Time
+  night:
+    conditions:
+      - time_of_day: "night"
+    
+    greetings:
+      - text: "Bit late to be wandering, isn't it?"
+        weight: 1.0
+        npc_mood: "suspicious"
+        
+      - text: "*Yawns* Should be in bed..."
+        weight: 0.8
+        npc_mood: "tired"
+        
+      - text: "Watch yourself. Dangerous at night."
+        weight: 0.9
+        npc_mood: "warning"
+        npc_archetype: "guard"
+    
+    walk_by_barks:
+      - text: "*Carries lantern*"
+        weight: 1.0
+        prop: "lantern"
+        
+      - text: "*Looks over shoulder nervously*"
+        weight: 0.8
+        animation: "paranoid"
+  
+  # Dawn
+  dawn:
+    conditions:
+      - time_of_day: "dawn"
+    
+    greetings:
+      - text: "Early riser, eh? Me too."
+        weight: 1.0
+        npc_mood: "friendly"
+        
+      - text: "*Stretches* Beautiful morning."
+        weight: 0.8
+        npc_mood: "content"
+        
+      - text: "The day begins. Much to do."
+        weight: 0.7
+        npc_mood: "businesslike"
+    
+    walk_by_barks:
+      - text: "*Breathes in fresh air*"
+        weight: 1.0
+        
+      - text: "*Watches sunrise*"
+        weight: 0.6
+        animation: "admiring"
+  
+  # Crowded Location
+  crowded:
+    conditions:
+      - location_density: ">= 0.7"
+    
+    greetings:
+      - text: "*Shouts over noise* What?"
+        weight: 1.0
+        npc_mood: "overwhelmed"
+        
+      - text: "Too many people here..."
+        weight: 0.8
+        npc_mood: "uncomfortable"
+        
+      - text: "*Pushes through crowd* Excuse me!"
+        weight: 0.9
+        npc_mood: "impatient"
+    
+    walk_by_barks:
+      - text: "*Jostled by crowd*"
+        weight: 1.0
+        animation: "bumped"
+        
+      - text: "Watch it!"
+        weight: 0.8
+  
+  # Isolated/Wilderness
+  isolated:
+    conditions:
+      - location_type: "wilderness"
+      - nearby_npcs: "< 2"
+    
+    greetings:
+      - text: "Didn't expect to see anyone out here."
+        weight: 1.0
+        npc_mood: "surprised"
+        
+      - text: "*Hand on weapon* State your business."
+        weight: 0.9
+        npc_mood: "defensive"
+        
+      - text: "Thank the stars! I thought I was lost."
+        weight: 0.7
+        npc_mood: "relieved"
+        npc_state: "lost"
+    
+    walk_by_barks:
+      - text: "*Watches warily*"
+        weight: 1.0
+        
+      - text: "*Keeps distance*"
+        weight: 0.8
+        animation: "maintain_distance"
+  
+  # Dangerous Area
+  dangerous:
+    conditions:
+      - location_danger_level: ">= 0.7"
+    
+    greetings:
+      - text: "*Whispers* Keep your voice down..."
+        weight: 1.0
+        npc_mood: "fearful"
+        
+      - text: "You shouldn't be here. Neither should I."
+        weight: 0.9
+        npc_mood: "nervous"
+        
+      - text: "*Weapon ready* Friend or foe?"
+        weight: 0.8
+        npc_mood: "combat_ready"
+    
+    walk_by_barks:
+      - text: "*Moves silently*"
+        weight: 1.0
+        animation: "stealth"
+        
+      - text: "*Scans surroundings constantly*"
+        weight: 0.9
+        animation: "alert"
+
+# Neutral environmental fallback
+neutral:
+  greetings:
+    - text: "Pleasant day, isn't it?"
+      weight: 1.0
+      
+    - text: "Good to see you."
+      weight: 0.8
+      
+  walk_by_barks:
+    - text: "*Goes about their day*"
+      weight: 1.0

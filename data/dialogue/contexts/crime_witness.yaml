@@ -1,0 +1,304 @@
+# Crime Witness Contextual Dialogue
+# NPC reactions to witnessed crimes with panic levels
+
+contexts:
+  # Witnessed Murder
+  witnessed_murder:
+    conditions:
+      - npc_memory_has: "witnessed_murder"
+      - memory_age: "< 600"  # Within 10 minutes
+    
+    panic_levels:
+      extreme:  # Panic >= 0.8
+        greetings:
+          - text: "*Screaming* MURDERER! GUARDS!"
+            weight: 1.0
+            npc_mood: "terrified"
+            animation: "screaming"
+            triggers: "guard_alert"
+            
+          - text: "*Runs away in terror*"
+            weight: 0.9
+            npc_mood: "panicked"
+            animation: "fleeing"
+            behavior: "flee_to_guards"
+            
+          - text: "*Collapses* No... no... I saw it all..."
+            weight: 0.7
+            npc_mood: "traumatized"
+            animation: "collapse"
+        
+        walk_by_barks:
+          - text: "*Points and screams*"
+            weight: 1.0
+            animation: "point_scream"
+            
+          - text: "*Hyperventilating*"
+            weight: 0.8
+            animation: "panic_breathing"
+      
+      high:  # Panic 0.5-0.8
+        greetings:
+          - text: "I-I saw what you did! Stay back!"
+            weight: 1.0
+            npc_mood: "fearful"
+            animation: "backing_away"
+            
+          - text: "*Shaking* The guards will hear about this!"
+            weight: 0.9
+            npc_mood: "frightened"
+            behavior: "report_to_guards"
+            
+          - text: "You... you killed them..."
+            weight: 0.8
+            npc_mood: "shocked"
+        
+        walk_by_barks:
+          - text: "*Whispers urgently to others*"
+            weight: 1.0
+            animation: "urgent_whisper"
+            behavior: "spread_rumor"
+            
+          - text: "*Avoids eye contact, hurries past*"
+            weight: 0.9
+            animation: "avoid"
+      
+      medium:  # Panic 0.3-0.5
+        greetings:
+          - text: "I know what you did. I won't forget."
+            weight: 1.0
+            npc_mood: "accusatory"
+            
+          - text: "The law will catch up with you."
+            weight: 0.8
+            npc_mood: "stern"
+            
+          - text: "*Glares* Murderer."
+            weight: 0.9
+            npc_mood: "hostile"
+        
+        walk_by_barks:
+          - text: "*Mutters* Killer..."
+            weight: 1.0
+            
+          - text: "*Stares coldly*"
+            weight: 0.8
+            animation: "cold_stare"
+      
+      low:  # Panic < 0.3
+        greetings:
+          - text: "I saw what happened. My silence has a price."
+            weight: 1.0
+            npc_mood: "opportunistic"
+            dialogue_option: "bribe_available"
+            
+          - text: "That was... impressive. Brutal, but impressive."
+            weight: 0.7
+            npc_mood: "impressed"
+            npc_trait_required: "criminal"
+            
+          - text: "*Nods knowingly* They had it coming."
+            weight: 0.6
+            npc_mood: "complicit"
+            npc_relationship: ">= 0.6"
+  
+  # Witnessed Theft
+  witnessed_theft:
+    conditions:
+      - npc_memory_has: "witnessed_theft"
+      - memory_age: "< 600"
+    
+    panic_levels:
+      high:
+        greetings:
+          - text: "Thief! Someone stop them!"
+            weight: 1.0
+            npc_mood: "outraged"
+            triggers: "guard_alert"
+            
+          - text: "Give that back right now!"
+            weight: 0.9
+            npc_mood: "angry"
+            npc_trait_required: "brave"
+        
+        walk_by_barks:
+          - text: "*Shouts* Thief!"
+            weight: 1.0
+            
+          - text: "*Points accusingly*"
+            weight: 0.8
+            animation: "point"
+      
+      medium:
+        greetings:
+          - text: "I saw you take that. Put it back."
+            weight: 1.0
+            npc_mood: "stern"
+            
+          - text: "Stealing? Really? How low."
+            weight: 0.8
+            npc_mood: "disappointed"
+        
+        walk_by_barks:
+          - text: "*Shakes head disapprovingly*"
+            weight: 1.0
+            animation: "disapprove"
+      
+      low:
+        greetings:
+          - text: "I didn't see anything... for a price."
+            weight: 1.0
+            npc_mood: "opportunistic"
+            dialogue_option: "bribe_available"
+            
+          - text: "*Winks* Nice work. Quick hands."
+            weight: 0.7
+            npc_mood: "amused"
+            npc_trait_required: "criminal"
+  
+  # Witnessed Assault
+  witnessed_assault:
+    conditions:
+      - npc_memory_has: "witnessed_assault"
+      - memory_age: "< 600"
+    
+    panic_levels:
+      high:
+        greetings:
+          - text: "You can't just attack people!"
+            weight: 1.0
+            npc_mood: "outraged"
+            
+          - text: "*Helps victim* Are you alright?"
+            weight: 0.8
+            npc_mood: "concerned"
+            animation: "help_victim"
+            npc_trait_required: "kind"
+        
+        walk_by_barks:
+          - text: "Brute!"
+            weight: 1.0
+            
+          - text: "*Comforts victim*"
+            weight: 0.7
+            animation: "comfort"
+      
+      medium:
+        greetings:
+          - text: "That was uncalled for."
+            weight: 1.0
+            npc_mood: "disapproving"
+            
+          - text: "Violence solves nothing."
+            weight: 0.8
+            npc_mood: "disappointed"
+        
+        walk_by_barks:
+          - text: "*Tuts disapprovingly*"
+            weight: 1.0
+      
+      low:
+        greetings:
+          - text: "They probably deserved it."
+            weight: 1.0
+            npc_mood: "indifferent"
+            
+          - text: "Good punch. I felt that from here."
+            weight: 0.7
+            npc_mood: "entertained"
+  
+  # Witnessed Player Rescue/Heroism
+  witnessed_rescue:
+    conditions:
+      - npc_memory_has: "witnessed_rescue"
+      - memory_age: "< 600"
+    
+    greetings:
+      - text: "You saved them! You're a hero!"
+        weight: 1.0
+        npc_mood: "grateful"
+        reputation_change: 0.2
+        
+      - text: "*Bows* Thank you for your bravery."
+        weight: 0.9
+        npc_mood: "respectful"
+        animation: "bow"
+        
+      - text: "I'll never forget what you did."
+        weight: 0.8
+        npc_mood: "moved"
+        relationship_change: 0.3
+    
+    walk_by_barks:
+      - text: "*Smiles warmly*"
+        weight: 1.0
+        animation: "smile"
+        
+      - text: "*Nods with respect*"
+        weight: 0.9
+        animation: "respectful_nod"
+  
+  # Post-Crime Reporting Behavior
+  reporting:
+    immediate:  # < 1 minute after crime
+      - behavior: "run_to_guards"
+        animation: "running"
+        dialogue: "Guards! Guards! Come quick!"
+        
+      - behavior: "sound_alarm"
+        animation: "ringing_bell"
+        sound_effect: "alarm_bell"
+        
+    delayed:  # 1-5 minutes after
+      - behavior: "walk_to_guards"
+        animation: "hurrying"
+        dialogue: "I need to report a crime..."
+        
+      - behavior: "tell_others"
+        animation: "gossiping"
+        dialogue: "Did you hear what happened?"
+    
+    suppressed:  # Bribed or intimidated
+      - behavior: "stay_quiet"
+        animation: "nervous_glance"
+        dialogue: "*Says nothing, looks away*"
+        
+      - behavior: "leave_area"
+        animation: "casual_walk"
+        dialogue: "*Pretends not to notice*"
+
+# Memory decay for crime witnesses
+memory_decay:
+  murder:
+    half_life: 1440  # 24 hours in minutes
+    min_retention: 0.3  # Always remember at least 30%
+    
+  theft:
+    half_life: 360  # 6 hours
+    min_retention: 0.1
+    
+  assault:
+    half_life: 720  # 12 hours
+    min_retention: 0.2
+    
+  rescue:
+    half_life: 2880  # 48 hours (positive memories last longer)
+    min_retention: 0.4
+
+# Panic calculation modifiers
+panic_modifiers:
+  npc_traits:
+    brave: -0.3
+    cowardly: 0.4
+    criminal: -0.5
+    lawful: 0.2
+    
+  relationship_with_player:
+    high_trust: -0.4  # Less likely to panic if they trust you
+    low_trust: 0.2
+    
+  victim_relationship:
+    family: 0.5  # More panic if victim was family
+    friend: 0.3
+    stranger: 0.0
+    enemy: -0.2  # Less panic if victim was enemy

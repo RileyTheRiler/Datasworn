@@ -8,7 +8,7 @@ const WorldEvents = ({ sessionId }) => {
     useEffect(() => {
         const fetchEvents = async () => {
             try {
-                const response = await fetch(`/api/world/events/${sessionId}`);
+                const response = await fetch(`/api/world/simulation/events/${sessionId}`);
                 if (response.ok) {
                     const data = await response.json();
                     setEvents(data.events.reverse()); // Show newest first
@@ -23,12 +23,23 @@ const WorldEvents = ({ sessionId }) => {
         fetchEvents();
 
         // Polling for updates every minute
-        const interval = setInterval(fetchEvents, 60000);
+        const interval = setInterval(fetchEvents, 10000); // Poll every 10s for more responsive updates
         return () => clearInterval(interval);
     }, [sessionId]);
 
     const getEventIcon = (type) => {
-        switch (type) {
+        // Handle both simple strings and strings that might contain the type
+        const t = type.toLowerCase();
+
+        if (t.includes('traffic')) return '🚀';
+        if (t.includes('patrol')) return '🚨';
+        if (t.includes('crime') || t.includes('suspicion')) return '🕵️';
+        if (t.includes('pursuit') || t.includes('blockade')) return '🚔';
+        if (t.includes('wildlife') || t.includes('predator') || t.includes('prey')) return '🐾';
+        if (t.includes('weather') || t.includes('hazard')) return '⚡';
+
+        switch (t) {
+            case 'faction_update': return '⚖️';
             case 'faction_war': return '⚔️';
             case 'faction_peace': return '🕊️';
             case 'faction_expansion': return '🚩';
@@ -37,6 +48,8 @@ const WorldEvents = ({ sessionId }) => {
             case 'npc_death': return '💀';
             case 'discovery': return '🔭';
             case 'crisis': return '⚠️';
+            case 'distress_signal': return '🆘';
+            case 'npc_witnessed': return '👁️';
             default: return '📢';
         }
     };

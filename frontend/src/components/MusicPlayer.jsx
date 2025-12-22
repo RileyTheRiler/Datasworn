@@ -16,6 +16,7 @@ const MusicPlayer = () => {
 
     const getMoodColor = (mood) => {
         switch (mood) {
+            case 'theme': return 'text-disco-accent';
             case 'relaxing': return 'text-disco-cyan';
             case 'tense': return 'text-disco-purple';
             case 'dramatic': return 'text-disco-yellow';
@@ -46,7 +47,7 @@ const MusicPlayer = () => {
             {isExpanded && (
                 <div className="flex items-center gap-4 ml-2 animate-slide-in-right">
                     <div className="flex gap-1">
-                        {['relaxing', 'tense', 'dramatic', 'intense'].map(m => (
+                        {['theme', 'relaxing', 'tense', 'dramatic', 'intense'].map(m => (
                             <button
                                 key={m}
                                 onClick={() => playMood(m)}

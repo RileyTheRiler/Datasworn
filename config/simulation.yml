@@ -1,0 +1,200 @@
+# World Simulation Configuration
+# Tunables for traffic, law, wildlife, and weather systems
+
+# =============================================================================
+# Traffic System - Space ship movements, trade routes, patrols
+# =============================================================================
+traffic:
+  # Congestion thresholds
+  congestion_threshold_low: 0.3      # Below this = free flow
+  congestion_threshold_high: 0.7     # Above this = heavy congestion
+  max_ships_per_sector: 50           # Population cap per sector
+  
+  # Trade routes
+  trade_route_density: 0.6           # 0.0-1.0, affects spawn frequency
+  convoy_size_min: 2
+  convoy_size_max: 5
+  trade_ship_speed: 1.0              # Base speed multiplier
+  
+  # Patrol behavior
+  patrol_frequency_multiplier: 1.0   # Affects how often patrols spawn
+  patrol_route_variance: 0.2         # How much patrols deviate from route
+  patrol_scan_range: 2.0             # Sectors, how far patrols can detect
+  
+  # Collision avoidance
+  avoidance_distance: 1.5            # Distance to start avoiding
+  emergency_stop_distance: 0.5       # Distance for emergency maneuvers
+
+# =============================================================================
+# Law Enforcement System - Suspicion, investigation, pursuit, escalation
+# =============================================================================
+law:
+  # Suspicion accumulation
+  suspicion_decay_rate: 0.1          # Per hour, how fast suspicion fades
+  suspicion_threshold_investigation: 0.3  # Triggers investigation
+  suspicion_threshold_pursuit: 0.6   # Triggers active pursuit
+  suspicion_threshold_lethal: 0.9    # Triggers lethal force authorization
+  
+  # Crime severity multipliers
+  crime_severity_multipliers:
+    petty_theft: 0.1
+    assault: 0.3
+    smuggling: 0.4
+    murder: 1.0
+    treason: 1.5
+  
+  # Witness behavior
+  witness_report_chance: 0.7         # Chance witness reports crime
+  witness_memory_duration: 24.0      # Hours before witness forgets
+  
+  # Investigation
+  investigation_duration: 2.0        # Hours for investigation phase
+  scan_detection_chance: 0.8         # Chance to detect contraband in scan
+  
+  # Pursuit
+  pursuit_ship_speed_multiplier: 1.3 # Faster than player
+  pursuit_duration_max: 6.0          # Hours before pursuit is abandoned
+  blockade_threshold: 0.8            # Suspicion level to trigger blockades
+  
+  # Escalation timings
+  escalation_warning_duration: 0.5   # Hours
+  escalation_fine_duration: 1.0      # Hours
+  escalation_arrest_duration: 2.0    # Hours
+  
+  # Bounty system
+  bounty_base_amount: 1000           # Credits
+  bounty_multiplier_per_severity: 500
+  bounty_decay_rate: 0.05            # Per hour
+
+# =============================================================================
+# Wildlife System - Alien ecosystems, populations, behaviors
+# =============================================================================
+wildlife:
+  # Population dynamics
+  population_cap_multiplier: 1.0     # Global multiplier for all caps
+  spawn_density_multiplier: 1.0      # Affects spawn frequency
+  despawn_distance: 5.0              # Sectors, creatures despawn if player too far
+  
+  # Behavior probabilities (per tick)
+  behavior_idle_to_hunting: 0.1
+  behavior_hunting_to_idle: 0.05
+  behavior_flee_duration: 3.0        # Hours
+  behavior_territorial_radius: 2.0   # Sectors
+  
+  # Predator/prey
+  predator_detection_range: 1.5      # Sectors
+  predator_chase_speed_multiplier: 1.5
+  prey_flee_speed_multiplier: 1.2
+  predator_hunt_success_chance: 0.3
+  
+  # Migration
+  migration_trigger_chance: 0.01     # Per day
+  migration_distance_min: 3
+  migration_distance_max: 8
+  
+  # Species-specific population caps (per biome)
+  species_caps:
+    void_leviathan: 1                # Rare, apex predator
+    nebula_drifter: 20               # Common, passive
+    asteroid_borer: 15               # Common, neutral
+    plasma_eel: 8                    # Uncommon, aggressive
+    crystal_swarm: 30                # Very common, passive
+
+# =============================================================================
+# Weather System - Environmental conditions and hazards
+# =============================================================================
+weather:
+  # Transition probabilities (Markov chain)
+  # Each state lists probability of transitioning to other states
+  transition_probabilities:
+    clear:
+      clear: 0.7
+      light_nebula: 0.15
+      asteroid_field: 0.1
+      ion_storm: 0.05
+    light_nebula:
+      clear: 0.4
+      light_nebula: 0.3
+      dense_nebula: 0.2
+      ion_storm: 0.1
+    dense_nebula:
+      light_nebula: 0.5
+      dense_nebula: 0.3
+      ion_storm: 0.2
+    asteroid_field:
+      clear: 0.6
+      asteroid_field: 0.3
+      debris_field: 0.1
+    debris_field:
+      asteroid_field: 0.5
+      debris_field: 0.3
+      clear: 0.2
+    ion_storm:
+      light_nebula: 0.4
+      ion_storm: 0.3
+      solar_flare: 0.2
+      clear: 0.1
+    solar_flare:
+      ion_storm: 0.5
+      clear: 0.3
+      solar_flare: 0.2
+  
+  # Transition timing
+  weather_change_interval_min: 2.0   # Hours
+  weather_change_interval_max: 8.0   # Hours
+  
+  # Environmental modifiers
+  modifiers:
+    clear:
+      visibility: 1.0
+      sensor_range: 1.0
+      ship_damage_rate: 0.0
+      speed_multiplier: 1.0
+    light_nebula:
+      visibility: 0.7
+      sensor_range: 0.6
+      ship_damage_rate: 0.0
+      speed_multiplier: 0.9
+    dense_nebula:
+      visibility: 0.3
+      sensor_range: 0.3
+      ship_damage_rate: 0.05
+      speed_multiplier: 0.7
+    asteroid_field:
+      visibility: 0.8
+      sensor_range: 0.9
+      ship_damage_rate: 0.1
+      speed_multiplier: 0.6
+    debris_field:
+      visibility: 0.6
+      sensor_range: 0.7
+      ship_damage_rate: 0.2
+      speed_multiplier: 0.5
+    ion_storm:
+      visibility: 0.4
+      sensor_range: 0.2
+      ship_damage_rate: 0.15
+      speed_multiplier: 0.7
+    solar_flare:
+      visibility: 0.9
+      sensor_range: 0.1
+      ship_damage_rate: 0.3
+      speed_multiplier: 0.8
+  
+  # Hazard durations
+  hazard_duration_min: 1.0           # Hours
+  hazard_duration_max: 4.0           # Hours
+  
+  # Forecast accuracy
+  forecast_steps: 3                  # How many transitions to predict
+  forecast_accuracy: 0.7             # Chance each step is accurate
+
+# =============================================================================
+# Global Simulation Settings
+# =============================================================================
+global:
+  tick_rate: 1.0                     # Seconds between simulation ticks
+  time_scale: 1.0                    # Game time multiplier (1.0 = real-time)
+  event_history_max: 100             # Max events to keep in history
+  enable_cross_system_events: true   # Allow systems to interact
+  debug_mode: false                  # Enable verbose logging

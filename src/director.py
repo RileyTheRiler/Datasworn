@@ -14,7 +14,11 @@ import ollama
 from .psych_profile import PsychologicalProfile, PsychologicalEngine
 from .inner_voice import InnerVoiceSystem
 from .relationship_system import RelationshipWeb
+from .relationship_system import RelationshipWeb
 from .dream_system import DreamEngine
+from src.shaping.thematic_director import ThematicDirector
+from src.shaping.seed_planter import SeedPlanter
+from src.shaping.dialogue_shaper import DialogueShaper
 
 
 # ============================================================================
@@ -247,7 +251,11 @@ class DirectorAgent:
     psycho_engine: PsychologicalEngine = field(default_factory=PsychologicalEngine)
     inner_voice: InnerVoiceSystem = field(default_factory=InnerVoiceSystem)
     relationships: RelationshipWeb = field(default_factory=RelationshipWeb)
+    relationships: RelationshipWeb = field(default_factory=RelationshipWeb)
     dream_engine: DreamEngine = field(default_factory=DreamEngine)
+    thematic_director: ThematicDirector = field(default_factory=ThematicDirector)
+    seed_planter: SeedPlanter = field(default_factory=SeedPlanter)
+    dialogue_shaper: DialogueShaper = field(default_factory=DialogueShaper)
     _client: ollama.Client = field(default_factory=ollama.Client, repr=False)
     
     def __post_init__(self):
@@ -345,7 +353,14 @@ class DirectorAgent:
         subversion = None
         if player_action and world_state.get('psyche'):
             profile = world_state['psyche'].profile
-            self.psycho_engine.evolve_from_event(profile, player_action, outcome=last_roll_outcome)
+            archetype_profile = getattr(world_state['psyche'], 'archetype_profile', None)
+            
+            self.psycho_engine.evolve_from_event(
+                profile, 
+                player_action, 
+                outcome=last_roll_outcome, 
+                archetype_profile=archetype_profile
+            )
             
             # Update Relationships if an NPC ID is found in the action or context
             # (Heuristic: search for NPC IDs in the text)
@@ -439,6 +454,25 @@ class DirectorAgent:
             import logging
             logging.getLogger("director").warning(f"LLM analysis failed: {e}")
         
+            import logging
+            logging.getLogger("director").warning(f"LLM analysis failed: {e}")
+        
+        # Archetype Shaping
+        if world_state.get('psyche'):
+            psyche = world_state['psyche']
+            # Access archetype_profile if it exists
+            if hasattr(psyche, 'archetype_profile') and psyche.archetype_profile:
+                arch_profile = psyche.archetype_profile
+                
+                # Apply Thematic Director
+                plan = self.thematic_director.apply_archetype_influence(plan, arch_profile)
+                
+                # Apply Seed Planter
+                plan = self.seed_planter.plant_seeds(plan, arch_profile, self.state)
+                
+                # Apply Dialogue Shaper
+                plan = self.dialogue_shaper.shape_dialogue(plan, arch_profile)
+
         # Update state
         self.state.record_pacing(plan.pacing.value)
         self.state.increment_scene(plan.pacing == Pacing.FAST)

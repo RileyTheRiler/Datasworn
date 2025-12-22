@@ -13,7 +13,9 @@ from dataclasses import dataclass, field
 from pydantic import BaseModel, Field
 import random
 from datetime import datetime
-from .character_identity import CharacterIdentity
+from .character_identity import CharacterIdentity, WoundType, WoundProfile, WoundScore, RUOType
+from src.config.archetype_config_loader import ArchetypeConfigLoader
+from src.narrative.archetype_types import ArchetypeProfile
 
 
 @dataclass
@@ -112,12 +114,6 @@ class Compulsion(BaseModel):
     uses: int = 0  # How many times triggered
     threshold: int = 3  # Uses before it becomes a compulsion
 
-class NPCPsyche(BaseModel):
-    """Simplified psychological profile for an NPC actor."""
-    name: str
-    dominant_trait: str
-    current_emotion: EmotionalState = EmotionalState.NEUTRAL
-    instability: float = 0.0  # 0-1, high = unpredictable behavior
 
 class CopingMechanism(BaseModel):
     """A coping strategy the character can use to manage stress/trauma."""
@@ -128,6 +124,36 @@ class CopingMechanism(BaseModel):
     sanity_cost: float = 0.0  # Potential sanity cost
     side_effect: str = ""  # Description of potential side effect
     requires_npc: bool = False  # Requires interaction with NPC
+
+@dataclass
+class MoralProfile:
+    """The deep moral architecture of a character."""
+    # The central question they answer
+    central_problem_answer: str
+    # Their specific argument/justification
+    strong_but_flawed_argument: str
+    # The psychological wound driving them
+    psychological_wound: str
+    # Archetypes they mirror (reflect back to player)
+    mirrors: List[str] = field(default_factory=list)
+    # Archetypes they challenge (force growth)
+    challenges: List[str] = field(default_factory=list)
+    # Specific interactions keyed by player archetype (WoundType)
+    # e.g., {"CONTROLLER": "You think you can control death?"}
+    archetype_interactions: Dict[str, str] = field(default_factory=dict)
+
+class NPCPsyche(BaseModel):
+    """Simplified psychological profile for an NPC actor."""
+    name: str
+    dominant_trait: str
+    current_emotion: EmotionalState = EmotionalState.NEUTRAL
+    instability: float = 0.0  # 0-1, high = unpredictable behavior
+    description: str = ""
+    # Deep moral profile (optional for generic NPCs, required for Main Cast)
+    moral_profile: Optional[MoralProfile] = None
+
+    class Config:
+        arbitrary_types_allowed = True
 
 class PsychologicalArc(BaseModel):
     """Tracks the evolution of a trauma over time."""
@@ -251,6 +277,10 @@ class PsychologicalEngine:
     
     def __init__(self, llm_client=None):
         self.llm_client = llm_client  # Optional for LLM-based updates
+        try:
+            self.archetype_config = ArchetypeConfigLoader()
+        except:
+            self.archetype_config = None
 
     def update_stress(self, profile: PsychologicalProfile, amount: float):
         """Update stress level, clamping between 0 and 1."""
@@ -508,6 +538,7 @@ RELATIONSHIPS:
 IDENTITY:
   Archetype: {identity_info}
   Recent Path: {', '.join([c.description for c in profile.identity.choice_history[-3:]]) if profile.identity.choice_history else "None"}
+  Core Wound: {profile.identity.wound_profile.dominant_wound.value.upper()} (Rev: {profile.identity.wound_profile.revelation_progress:.0%})
 
 INNER MONOLOGUE GUIDANCE:
   If Stress is high, focus on threats and failure.
@@ -516,32 +547,50 @@ INNER MONOLOGUE GUIDANCE:
   If {profile.get_dominant_values()[0][0].value} is high, frame choices through that lens.
 </psychological_profile>"""
 
-    def evolve_from_event(self, profile: PsychologicalProfile, event_desc: str, outcome: str = ""):
+    def evolve_from_event(self, profile: PsychologicalProfile, event_desc: str, outcome: str = "", archetype_profile: Optional[ArchetypeProfile] = None):
         """
         Heuristic-based evolution. (can be enhanced with LLM later).
         Updates stats based on simple keyword matching or outcome.
         """
+        # Calculate stress multiplier from Archetype
+        stress_mult = 1.0
+        if archetype_profile and self.archetype_config and archetype_profile.primary_archetype:
+            try:
+                defn = self.archetype_config.get_archetype(archetype_profile.primary_archetype)
+                for key, mod in defn.stress_modifiers.items():
+                    # Check if key (e.g. "loss_of_control") matches event description 
+                    # Normalize key: "loss_of_control" -> "loss of control"
+                    normalized_key = key.replace("_", " ")
+                    if normalized_key in event_desc.lower():
+                        stress_mult *= mod
+                    
+                    # Also map outcome "miss" to potential fear of failure keys
+                    if outcome == "miss" and key in ["failure", "making_mistakes", "mistake"]:
+                        stress_mult *= mod
+            except Exception as e:
+                print(f"Error applying archetype stress modifiers: {e}")
+
         # Simple heuristic examples
         
         # Stress/Sanity from outcome
         if outcome == "miss":
-            self.update_stress(profile, 0.1)
+            self.update_stress(profile, 0.1 * stress_mult)
             profile.current_emotion = EmotionalState.AFRAID
         elif outcome == "strong_hit":
-            self.update_stress(profile, -0.1)
+            self.update_stress(profile, -0.1) # Relief doesn't get multiplied by stress modifiers usually
             profile.current_emotion = EmotionalState.CONFIDENT
         
         # Keyword matching
         lower_desc = event_desc.lower()
         
         if "betray" in lower_desc:
-            self.update_stress(profile, 0.2)
+            self.update_stress(profile, 0.2 * stress_mult)
             profile.traits["paranoia"] = min(1.0, profile.traits.get("paranoia", 0.0) + 0.1)
             profile.current_emotion = EmotionalState.SUSPICIOUS
             
         if "horror" in lower_desc or "terrifying" in lower_desc:
             self.update_sanity(profile, -0.1)
-            self.update_stress(profile, 0.2)
+            self.update_stress(profile, 0.2 * stress_mult)
             
         if "help" in lower_desc or "saved" in lower_desc:
             profile.values[ValueSystem.COMMUNITY] = min(1.0, profile.values.get(ValueSystem.COMMUNITY, 0.0) + 0.05)
@@ -734,6 +783,249 @@ TASK:
         ])
         
         return random.choice(pool)
+
+    # =========================================================================
+    # CHARACTER IDENTITY & WOUND SYSTEM (EXPANDED)
+    # =========================================================================
+
+    def detect_wound_indicators(self, text: str) -> Dict[WoundType, float]:
+        """
+        Analyze text for signals pointing to specific core wounds (22 types).
+        Returns a dictionary of wound types and their detected intensity (0.0 to 1.0).
+        """
+        text = text.lower()
+        scores: Dict[WoundType, float] = {w: 0.0 for w in WoundType if w != WoundType.UNKNOWN}
+        
+        # Helper to add score
+        def add(wound: WoundType, amount: float):
+            scores[wound] += amount
+
+        # --- OVERCONTROLLED CLUSTER ---
+        if any(w in text for w in ["interrogate", "demand", "force", "analyze", "puzzle", "control", "methodical"]):
+            add(WoundType.CONTROLLER, 0.2)
+        if any(w in text for w in ["guilty", "criminal", "monster", "punish", "justice", "wrong", "sin", "blame"]):
+            add(WoundType.JUDGE, 0.2)
+        if any(w in text for w in ["dead", "gone", "memory", "ghost", "past", "forget", "leave", "alone"]):
+            add(WoundType.GHOST, 0.2)
+        if any(w in text for w in ["perfect", "mistake", "error", "flaw", "fail", "correct", "precise"]):
+            add(WoundType.PERFECTIONIST, 0.2)
+        if any(w in text for w in ["sacrifice", "burden", "suffering", "carry", "save them", "my fault"]):
+            add(WoundType.MARTYR, 0.2)
+        if any(w in text for w in ["deny", "refuse", "discipline", "clean", "pure", "abstain", "control self"]):
+            add(WoundType.ASCETIC, 0.2)
+        if any(w in text for w in ["spy", "watch", "traitor", "enemy", "trust no one", "suspect", "plot"]):
+            add(WoundType.PARANOID, 0.2)
+        if any(w in text for w in ["actually", "technically", "ignorant", "study", "read", "fact", "wrong"]):
+            add(WoundType.PEDANT, 0.2)
+
+        # --- UNDERCONTROLLED CLUSTER ---
+        if any(w in text for w in ["betray", "lie", "fake", "naive", "stupid", "always", "expect"]):
+            add(WoundType.CYNIC, 0.2)
+        if any(w in text for w in ["run", "escape", "hide", "identity", "secret", "chase", "behind", "track"]):
+            add(WoundType.FUGITIVE, 0.2)
+        if any(w in text for w in ["want", "take", "pleasure", "now", "bored", "more", "taste"]):
+            add(WoundType.HEDONIST, 0.2)
+        if any(w in text for w in ["burn", "break", "destroy", "smash", "kill", "rage", "hate"]):
+            add(WoundType.DESTROYER, 0.2)
+        if any(w in text for w in ["joke", "laugh", "trick", "fool", "chaos", "fun", "bored"]):
+            add(WoundType.TRICKSTER, 0.2)
+        if any(w in text for w in ["me", "mine", "admire", "look at me", "best", "deserve", "special"]):
+            add(WoundType.NARCISSIST, 0.2)
+        if any(w in text for w in ["prey", "hunt", "weak", "strong", "win", "loser", "dominant"]):
+            add(WoundType.PREDATOR, 0.2)
+        if any(w in text for w in ["use", "pawn", "game", "play", "strategy", "move", "tool"]):
+            add(WoundType.MANIPULATOR, 0.2)
+
+        # --- HYBRID CLUSTER ---
+        if any(w in text for w in ["fake", "pretend", "mask", "actor", "role", "hide who i am"]):
+            add(WoundType.IMPOSTOR, 0.2)
+        if any(w in text for w in ["help", "fix", "rescue", "need me", "good person", "support"]):
+            add(WoundType.SAVIOR, 0.2)
+        if any(w in text for w in ["revenge", "avenge", "payback", "blood", "debt", "settle"]):
+            add(WoundType.AVENGER, 0.2)
+        if any(w in text for w in ["afraid", "scared", "run away", "danger", "safe", "hide me"]):
+            add(WoundType.COWARD, 0.2)
+        if any(w in text for w in ["faith", "belief", "cause", "mission", "truth", "convert", "blind"]):
+            add(WoundType.ZEALOT, 0.2)
+        if any(w in text for w in ["agree", "yes", "compliment", "nice", "approve", "like me"]):
+            add(WoundType.FLATTERER, 0.2)
+        if any(w in text for w in ["keep", "hoard", "mine", "scarce", "cost", "price", "loss"]):
+            add(WoundType.MISER, 0.2)
+
+        return scores
+    
+    def detect_ruo_signals(self, text: str) -> Dict[RUOType, float]:
+        """Detect signals for Resilient, Overcontrolled, or Undercontrolled tendencies."""
+        text = text.lower()
+        signals = {RUOType.RESILIENT: 0.0, RUOType.OVERCONTROLLED: 0.0, RUOType.UNDERCONTROLLED: 0.0}
+        
+        # Overcontrolled: Inhibition, anxiety, planning, withdrawal
+        if any(w in text for w in ["wait", "plan", "analyze", "careful", "danger", "risk", "rule", "protocol"]):
+            signals[RUOType.OVERCONTROLLED] += 0.2
+            
+        # Undercontrolled: Impulsivity, action, emotion, risk-taking
+        if any(w in text for w in ["go", "attack", "now", "feel", "hate", "love", "rush", "impulse"]):
+            signals[RUOType.UNDERCONTROLLED] += 0.2
+            
+        # Resilient: Adaptation, balance, perspective, regulation
+        if any(w in text for w in ["adjust", "adapt", "learn", "calm", "balance", "okay", "handle"]):
+            signals[RUOType.RESILIENT] += 0.2
+            
+        return signals
+
+    def update_wound_profile(self, profile: PsychologicalProfile, text: str):
+        """
+        Update the character's wound profile based on their actions/dialogue.
+        Calculates scores, RUO tendency, and updates dominant/secondary/tertiary wounds.
+        """
+        detected_wounds = self.detect_wound_indicators(text)
+        detected_ruo = self.detect_ruo_signals(text)
+        wound_profile = profile.identity.wound_profile
+        
+        # 1. Update Wound Scores
+        for wound, score in detected_wounds.items():
+            if score > 0:
+                current = wound_profile.scores.scores.get(wound, 0.0)
+                # Dampened accumulation
+                wound_profile.scores.scores[wound] = min(1.0, current + score * 0.1)
+                
+        # 2. Update RUO Tendency
+        for ruo, score in detected_ruo.items():
+            if score > 0:
+                current = wound_profile.ruo_tendency.get(ruo, 0.0)
+                wound_profile.ruo_tendency[ruo] = min(1.0, current + score * 0.1)
+
+        # 3. Determine Dominant, Secondary, Tertiary
+        # Sort wounds by score
+        sorted_wounds = sorted(
+            wound_profile.scores.scores.items(), 
+            key=lambda item: item[1], 
+            reverse=True
+        )
+        
+        # Update hierarchy if thresholds met
+        if len(sorted_wounds) >= 1 and sorted_wounds[0][1] > 0.3:
+            wound_profile.dominant_wound = sorted_wounds[0][0]
+        if len(sorted_wounds) >= 2 and sorted_wounds[1][1] > 0.2:
+            wound_profile.secondary_wound = sorted_wounds[1][0]
+        if len(sorted_wounds) >= 3 and sorted_wounds[2][1] > 0.15:
+            wound_profile.tertiary_wound = sorted_wounds[2][0]
+            
+        # 4. Update Needs and Wisdom based on Dominant Wound
+        self._update_derived_psychology(wound_profile)
+
+    def _update_derived_psychology(self, profile: WoundProfile):
+        """Update derived fields like needs and dark wisdom based on dominant wound."""
+        w = profile.dominant_wound
+        
+        # Map logic here (truncated for brevity, but covers key types)
+        if w == WoundType.CONTROLLER:
+            profile.philosophical_need = "To accept that control is an illusion and find peace in uncertainty."
+            profile.moral_need = "To respect others as autonomous beings, not puzzles to solve."
+            profile.dark_wisdom = "Control is the last illusion. I held it until it crushed what I loved."
+        elif w == WoundType.JUDGE:
+            profile.philosophical_need = "To accept that good people do terrible things and terrible people have humanity."
+            profile.moral_need = "To extend empathy even to those who have done wrong."
+            profile.dark_wisdom = "I built a world of monsters and victims. I was both."
+        elif w == WoundType.GHOST:
+            profile.philosophical_need = "To accept that loss is part of love, not a reason to avoid it."
+            profile.moral_need = "To stay with people even when staying is painful."
+            profile.dark_wisdom = "I died slowly to avoid dying all at once. I was already a ghost."
+        elif w == WoundType.FUGITIVE:
+             profile.philosophical_need = "To accept responsibility for who they were, and forgive themselves."
+             profile.moral_need = "To own their past and make amends."
+             profile.dark_wisdom = "I ran so far I forgot what I was running from. It was always me."
+        elif w == WoundType.CYNIC:
+             profile.philosophical_need = "To accept that trust is a choice, not a guarantee."
+             profile.moral_need = "To extend trust even at risk of being hurt again."
+             profile.dark_wisdom = "I was right about everyone. I made sure of it."
+        elif w == WoundType.DESTROYER:
+            profile.philosophical_need = "To accept that pain is not an excuse to create more pain."
+            profile.moral_need = "To build something instead of tearing everything down."
+            profile.dark_wisdom = "I burned it all down to feel warmth. Now I'm just alone in the ash."
+        # Defaults for others...
+            
+    def get_thematic_lens(self, profile: PsychologicalProfile) -> str:
+        """
+        Return narrator instructions based on the dominant wound.
+        """
+        wound = profile.identity.wound_profile.dominant_wound
+        
+        lens_map = {
+            WoundType.CONTROLLER: "THEME: Chaos and entropy. Describe things breaking, glitching, or defying analysis. Emphasize the futility of trying to solve people.",
+            WoundType.JUDGE: "THEME: Moral ambiguity. Describe suspects with redeeming qualities and 'innocents' with dark secrets. Challenge moral certainty.",
+            WoundType.GHOST: "THEME: Absence and haunting. Emphasize silence, cold, and remnants of those who are gone. The environment feels like a graveyard.",
+            WoundType.FUGITIVE: "THEME: Paranoia and the past. Every shadow could be a pursuer. Messages seem to reference secret history.",
+            WoundType.CYNIC: "THEME: Unexpected kindness that feels threatening. Betrayals are expected; genuine connection is the danger.",
+            WoundType.DESTROYER: "THEME: Decay and ruin. The fragility of structures. The anger simmering beneath the surface of things.",
+            WoundType.SAVIOR: "THEME: Helplessness. Situations where you cannot save everyone. The weight of others' dependence.",
+            WoundType.PERFECTIONIST: "THEME: Flaws and cracks. The impossibility of purity. The ugly truth beneath the polished surface.",
+        }
+        
+        return lens_map.get(wound, "THEME: Mysterious and claustrophobic sci-fi noir.")
+
+    def get_ember_dialogue(self, profile: PsychologicalProfile) -> str:
+        """
+        Generate dialogue for The Philosopher (Ember) based on the player's wound.
+        Ember acts as a mirror, stating the uncomfortable truth.
+        """
+        wound = profile.identity.wound_profile.dominant_wound
+        
+        dialogues = {
+            WoundType.CONTROLLER: "You went through everything. You're looking for something that'll make this make sense. It won't. The captain's dead and nothing you find changes that.",
+            WoundType.JUDGE: "You already decided who did it. I can see it. But you're not even curious anymore—you just want to be right. What if you're not?",
+            WoundType.GHOST: "You don't look at people when they're talking about something real. You look past them. Like you're already gone.",
+            WoundType.FUGITIVE: "You ask a lot of questions about everyone else. You never talk about before you got here. What are you running from?",
+            WoundType.CYNIC: "You expect everyone to be lying. So when someone tells the truth, you don't believe them anyway. That's... sad.",
+            WoundType.SAVIOR: "You keep helping me. Even when I don't need it. Why do you need me to need you?",
+            WoundType.DESTROYER: "You're angry. Like, all the time. Under everything. I get it. But what happens when there's nothing left to be angry at?",
+            WoundType.IMPOSTOR: "You're different with everyone. Different smile, different voice. Which one is real? Do you know?",
+            WoundType.PERFECTIONIST: "You're so hard on them. But you're harder on yourself, aren't you? If you make one mistake, does the world end?",
+            WoundType.PARANOID: "You think everyone's watching you. Maybe they are. But maybe you're just wishing you mattered enough to watch.",
+        }
+        
+        return dialogues.get(wound, "You're searching for something. I don't think it's just the killer.")
+
+    def get_dark_wisdom(self, profile: PsychologicalProfile) -> str:
+        """
+        Generate a 'Dark Wisdom' quote for tragic endings or high-insight moments.
+        Represents the character understanding their fatal flaw too late.
+        """
+        wound = profile.identity.wound_profile.dominant_wound
+        
+        wisdom = {
+            WoundType.CONTROLLER: "Control is the last illusion. I held onto it until it crushed everything I loved.",
+            WoundType.JUDGE: "I built a world of monsters and victims. In the end, I was both.",
+            WoundType.GHOST: "I died slowly to avoid dying all at once. I was already a ghost.",
+            WoundType.FUGITIVE: "I ran so far I forgot what I was running from. It was always me.",
+            WoundType.CYNIC: "I was right about everyone. I made sure of it.",
+            WoundType.PERFECTIONIST: "I polished the surface until there was nothing left underneath.",
+            WoundType.MARTYR: "I gave everything away until I was nothing but a void needing to be filled.",
+            WoundType.SAVIOR: "I saved them all, but I couldn't save myself from needing to be the hero.",
+            WoundType.DESTROYER: "I burned it all down to feel warmth. Now I'm just alone in the ash.",
+            WoundType.NARCISSIST: "I looked in the mirror and saw a king. Everyone else saw a beggar.",
+        }
+        
+        return wisdom.get(wound, "I see it clearly now, but the light is already fading.")
+            
+    def get_thematic_lens(self, profile: PsychologicalProfile) -> str:
+        """
+        Return narrator instructions based on the dominant wound.
+        """
+        wound = profile.identity.wound_profile.dominant_wound
+        
+        if wound == WoundType.CONTROLLER:
+            return "THEME: The world is chaotic and resisting control. Describe things breaking, glitching, or defying analysis. Emphasize the futility of trying to solve people."
+        elif wound == WoundType.JUDGE:
+            return "THEME: The line between good and evil is blurred. Describe suspects with redeeming qualities and 'innocents' with dark secrets. Challenge the character's moral certainty."
+        elif wound == WoundType.GHOST:
+            return "THEME: The ship feels empty and haunted. Emphasize silence, cold, and remnants of those who are gone. The environment should feel like a graveyard."
+        elif wound == WoundType.FUGITIVE:
+            return "THEME: Paranoia and the past catching up. Every shadow could be a pursuer. Messages or signals seem to reference the character's secret history."
+        elif wound == WoundType.CYNIC:
+            return "THEME: Unexpected moments of beauty or kindness that feel threatening. Betrayals are expected, but genuine connection is the real danger. The world is dark, but maybe not as dark as they think."
+        
+        return "THEME: Mysterious and claustrophobic sci-fi noir."
 
     def apply_coping_mechanism(self, profile: PsychologicalProfile, mechanism_id: str, success: bool) -> dict:
         """

@@ -1,19 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
+import DraggableModal from './DraggableModal';
 
 const StarMap = ({ sessionId, visible, onClose }) => {
     const [systems, setSystems] = useState([]);
+    const [lockedRegions, setLockedRegions] = useState({}); // Map of region_id -> reason
     const [loading, setLoading] = useState(false);
     const [currentSector, setCurrentSector] = useState("The Forge");
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         if (visible) {
             fetchNearby();
+            fetchRegionLocks();
         }
     }, [visible]);
 
+    const fetchRegionLocks = async () => {
+        try {
+            const data = await api.get(`/chapter/regions?session_id=${sessionId}`);
+            // Transform locked list into a map for easier lookup
+            const locks = {};
+            if (data.locked) {
+                data.locked.forEach(region => {
+                    locks[region.id] = region.reason || "Region Locked";
+                });
+            }
+            setLockedRegions(locks);
+        } catch (err) {
+            console.error("Failed to fetch region locks:", err);
+        }
+    };
+
     const fetchNearby = async () => {
         setLoading(true);
+        setError(null);
         try {
             // Check if we need to generate first
             const data = await api.get(`/starmap/nearby/${sessionId}?count=10`);
@@ -27,17 +48,41 @@ const StarMap = ({ sessionId, visible, onClose }) => {
             }
         } catch (err) {
             console.error("Failed to fetch systems:", err);
+            setError("Navigation systems offline.");
         } finally {
             setLoading(false);
         }
     };
 
-    const handleTravel = async (systemId) => {
+    const handleTravel = async (system) => {
+        // Check locks first
+        // Systems are grouped by region ID in backend, but for MVP we might map system names or properties
+        // For now, let's assume 'region_id' or 'sector' property matches our chapter regions
+        // If system doesn't have explicit region_id, we might check its name or tags
+
+        // Simpler approach: Check if system ID or Name matches any locked region keywords
+        // Or if the backend adds 'region_id' to system data. 
+        // Let's assume the 'system.id' or 'system.region' corresponds to our lockable regions.
+
+        // Since we don't have explicit region mapping in starmap yet, 
+        // we'll try to match exact IDs or assume all these systems are in 'local_sector' or 'frontier_worlds'
+        // based on tags/name. 
+
+        // Fallback: If 'frontier_worlds' is locked, and this system looks frontier-like...
+        // For accurate behavior, backend starmap generation should arguably tag systems with region_id.
+        // But for this MVP integration:
+        const systemRegion = system.region_id || "local_sector";
+
+        if (lockedRegions[systemRegion]) {
+            // Shake effect or sound?
+            return; // Locked
+        }
+
         setLoading(true);
         try {
             const result = await api.post('/starmap/travel', {
                 session_id: sessionId,
-                system_id: systemId
+                system_id: system.id
             });
 
             if (result.success) {
@@ -51,53 +96,94 @@ const StarMap = ({ sessionId, visible, onClose }) => {
         }
     };
 
-    if (!visible) return null;
+    // Helper to determine if a system is locked
+    const getLockReason = (system) => {
+        const region = system.region_id || "local_sector";
+        // Special case for outer rim / frontier based on keywords for demo
+        if (system.name.includes("Outer") || system.tags?.includes("Frontier")) {
+            return lockedRegions["outer_rim"] || lockedRegions["frontier_worlds"];
+        }
+        return lockedRegions[region];
+    };
 
     return (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center animate-fadeIn">
-            <div className="bg-disco-panel border-2 border-disco-cyan p-6 rounded-lg max-w-4xl w-full max-h-[85vh] overflow-y-auto shadow-hard relative">
-                {/* Header */}
-                <div className="flex justify-between items-center mb-6 border-b border-disco-cyan/30 pb-4">
-                    <div>
-                        <h2 className="text-3xl font-serif font-bold text-disco-cyan tracking-wider">STAR MAP</h2>
-                        <p className="text-disco-paper/60 font-mono text-xs uppercase tracking-[0.2em]">Sector: {currentSector}</p>
-                    </div>
+        <DraggableModal
+            isOpen={visible}
+            onClose={onClose}
+            title="🌌 Star Map"
+            defaultWidth={900}
+            defaultHeight={600}
+            className="p-6"
+        >
+            {/* Sector Info */}
+            <div className="mb-6 border-b border-disco-cyan/30 pb-4 flex justify-between items-end">
+                <div>
+                    <p className="text-disco-paper/60 font-mono text-xs uppercase tracking-[0.2em]">Sector: {currentSector}</p>
+                    {Object.keys(lockedRegions).length > 0 && (
+                        <p className="text-disco-red font-mono text-[10px] animate-pulse mt-1">
+                            ⚠ NAVIGATIONAL HAZARDS DETECTED
+                        </p>
+                    )}
+                </div>
+                <div className="text-right">
                     <button
-                        onClick={onClose}
-                        className="text-disco-muted hover:text-disco-red text-2xl"
+                        onClick={() => { fetchNearby(); fetchRegionLocks(); }}
+                        className="text-disco-cyan hover:text-white text-xs font-mono border border-disco-cyan/30 px-2 py-1 rounded hover:bg-disco-cyan/10 transition-colors"
                     >
-                        ×
+                        REFRESH SENSORS
                     </button>
                 </div>
+            </div>
 
-                {loading ? (
-                    <div className="h-64 flex flex-col items-center justify-center gap-4">
-                        <div className="w-12 h-12 border-2 border-disco-cyan border-t-transparent rounded-full animate-spin" />
-                        <span className="text-disco-cyan font-mono animate-pulse">Calculating Trajectories...</span>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {systems.map(system => (
+            {loading ? (
+                <div className="h-64 flex flex-col items-center justify-center gap-4">
+                    <div className="w-12 h-12 border-2 border-disco-cyan border-t-transparent rounded-full animate-spin" />
+                    <span className="text-disco-cyan font-mono animate-pulse">Calculating Trajectories...</span>
+                </div>
+            ) : error ? (
+                <div className="h-full flex items-center justify-center text-disco-red font-mono">
+                    {error}
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-12">
+                    {systems.map(system => {
+                        const lockReason = getLockReason(system);
+                        const isLocked = !!lockReason;
+
+                        return (
                             <div
                                 key={system.id}
                                 className={`
-                                    group relative p-4 border transition-all duration-300 cursor-pointer overflow-hidden
-                                    ${system.discovered
-                                        ? 'bg-disco-cyan/5 border-disco-cyan hover:bg-disco-cyan/10'
-                                        : 'bg-black/40 border-disco-muted/50 hover:border-disco-muted'}
-                                `}
-                                onClick={() => handleTravel(system.id)}
+                                group relative p-4 border transition-all duration-300 overflow-hidden
+                                ${isLocked
+                                        ? 'bg-red-900/10 border-red-900/30 opacity-70 cursor-not-allowed grayscale-[0.5]'
+                                        : system.discovered
+                                            ? 'bg-disco-cyan/5 border-disco-cyan hover:bg-disco-cyan/10 cursor-pointer'
+                                            : 'bg-black/40 border-disco-muted/50 hover:border-disco-muted cursor-pointer'
+                                    }
+                            `}
+                                onClick={() => !isLocked && handleTravel(system)}
                             >
                                 {/* Background Grid Effect */}
-                                <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-disco-cyan/50 to-transparent group-hover:opacity-20 transition-opacity" />
+                                <div className={`absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] ${isLocked ? 'from-red-500/50' : 'from-disco-cyan/50'} to-transparent group-hover:opacity-20 transition-opacity`} />
+
+                                {/* Locked Overlay Pattern */}
+                                {isLocked && (
+                                    <div className="absolute inset-0 bg-[url('/assets/patterns/diagonal-stripes.png')] opacity-10 pointer-events-none" />
+                                )}
 
                                 <div className="relative z-10 flex justify-between items-start">
-                                    <h3 className="text-xl font-bold text-disco-paper group-hover:text-disco-cyan transition-colors">
+                                    <h3 className={`text-xl font-bold transition-colors ${isLocked ? 'text-red-400/80' : 'text-disco-paper group-hover:text-disco-cyan'}`}>
                                         {system.name}
                                     </h3>
                                     {system.has_station && (
                                         <span className="text-xs px-1.5 py-0.5 border border-disco-accent text-disco-accent rounded bg-disco-accent/10">
                                             STATION
+                                        </span>
+                                    )}
+                                    {isLocked && (
+                                        <span className="text-[10px] px-1.5 py-0.5 border border-red-500 text-red-500 rounded bg-red-500/10 font-mono animate-pulse">
+                                            LOCKED
                                         </span>
                                     )}
                                 </div>
@@ -128,10 +214,18 @@ const StarMap = ({ sessionId, visible, onClose }) => {
                                             <span className="text-[10px]">⚠️ HAZARD: {system.hazard.name.toUpperCase()}</span>
                                         </div>
                                     )}
+
+                                    {/* Lock Reason Display */}
+                                    {isLocked && (
+                                        <div className="mt-3 p-2 bg-red-950/40 border border-red-900/50 rounded text-red-400 text-[10px] leading-tight flex items-start gap-2">
+                                            <span className="text-base">⛔</span>
+                                            <span>{lockReason.toUpperCase()}</span>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* Resource Tags */}
-                                {system.resources && system.resources.length > 0 && (
+                                {/* Resource Tags - Hide if locked to reduce clutter? Or keep visible? Keeping visible. */}
+                                {system.resources && system.resources.length > 0 && !isLocked && (
                                     <div className="relative z-10 mt-4 flex flex-wrap gap-1">
                                         {system.resources.map(res => (
                                             <span key={res} className="text-[10px] px-1.5 py-0.5 bg-black/50 border border-disco-muted/30 rounded text-disco-muted">
@@ -142,23 +236,25 @@ const StarMap = ({ sessionId, visible, onClose }) => {
                                 )}
 
                                 {/* Hover "Travel" Indicator */}
-                                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0 text-disco-accent font-bold text-xs uppercase tracking-widest">
-                                    ENGAGE &gt;&gt;
-                                </div>
+                                {!isLocked && (
+                                    <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0 text-disco-accent font-bold text-xs uppercase tracking-widest">
+                                        ENGAGE &gt;&gt;
+                                    </div>
+                                )}
                             </div>
-                        ))}
-                    </div>
-                )}
+                        )
+                    })}
+                </div>
+            )}
 
-                <div className="mt-6 pt-4 border-t border-disco-muted/20 flex justify-between items-center text-xs text-disco-muted font-mono">
-                    <span>Targeting System Online</span>
-                    <div className="flex gap-4">
-                        <span>FUEL: OPTIMAL</span>
-                        <span>HYPERDRIVE: READY</span>
-                    </div>
+            <div className="mt-6 pt-4 border-t border-disco-muted/20 flex justify-between items-center text-xs text-disco-muted font-mono">
+                <span>Targeting System Online</span>
+                <div className="flex gap-4">
+                    <span>FUEL: OPTIMAL</span>
+                    <span>HYPERDRIVE: {Object.keys(lockedRegions).length > 0 ? 'RESTRICTED' : 'READY'}</span>
                 </div>
             </div>
-        </div>
+        </DraggableModal>
     );
 };
 

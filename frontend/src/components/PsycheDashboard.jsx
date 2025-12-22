@@ -287,6 +287,74 @@ const PsycheDashboard = () => {
                             <span className="text-cyan-300 font-bold">{profile.dominant_trait}</span>
                         </div>
                     )}
+
+                    {/* NEW: Archetype Profile (Phase 4) */}
+                    {data.archetype_profile ? (
+                        <div className="mt-4 border-t border-slate-700 pt-3">
+                            <h4 className="text-[10px] text-slate-500 uppercase flex justify-between items-center">
+                                <span>Psyche Archetype</span>
+                                <span className="text-[9px] bg-slate-800 px-1 rounded text-slate-400">
+                                    {(data.archetype_profile.confidence * 100).toFixed(0)}% Conf
+                                </span>
+                            </h4>
+
+                            {/* Dominant Archetype Display */}
+                            <div className="mt-2 text-center">
+                                <div className="text-sm font-bold text-fuchsia-400 uppercase tracking-widest drop-shadow-[0_0_5px_rgba(232,121,249,0.3)]">
+                                    {data.archetype_profile.primary === "unknown" ? "Analying..." : data.archetype_profile.primary}
+                                </div>
+                                {data.archetype_profile.secondary !== 'unknown' && (
+                                    <div className="text-[9px] text-slate-500 uppercase mt-0.5">
+                                        Shadow: {data.archetype_profile.secondary}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Cluster Tendencies */}
+                            <div className="mt-3">
+                                <div className="flex justify-between text-[9px] text-slate-500 mb-1 uppercase">
+                                    <span>Volatility (Under)</span>
+                                    <span>Rigidity (Over)</span>
+                                </div>
+                                <div className="h-1.5 bg-slate-800 rounded-full relative overflow-hidden flex">
+                                    {(() => {
+                                        const over = data.archetype_profile.overcontrolled_tendency || 0;
+                                        const under = data.archetype_profile.undercontrolled_tendency || 0;
+                                        // Normalize for display relative to each other + hybrid drift
+                                        const total = (over + under) * 1.2 || 1;
+                                        const overPct = Math.min(100, (over / total) * 100);
+                                        const underPct = Math.min(100, (under / total) * 100);
+
+                                        return (
+                                            <>
+                                                <div style={{ width: `${underPct}%` }} className="bg-orange-500/70 h-full transition-all duration-700" title={`Undercontrolled: ${under.toFixed(2)}`} />
+                                                <div className="flex-1 bg-slate-700/30 h-full" />
+                                                <div style={{ width: `${overPct}%` }} className="bg-indigo-500/70 h-full transition-all duration-700" title={`Overcontrolled: ${over.toFixed(2)}`} />
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        // Fallback to legacy Wound Profile if Archetype not present
+                        profile.identity && profile.identity.wound_profile && (
+                            <div className="mt-4 border-t border-slate-700 pt-3">
+                                <h4 className="text-[10px] text-slate-500 uppercase flex justify-between items-center">
+                                    <span>Psyche Archetype (Legacy)</span>
+                                    <span className="text-[9px] bg-slate-800 px-1 rounded text-slate-400">
+                                        {(profile.identity.wound_profile.is_revealed || profile.identity.wound_profile.dominant_wound !== 'unknown') ?
+                                            Math.round((profile.identity.wound_profile.revelation_progress || 0) * 100) + '%' : 'Building...'}
+                                    </span>
+                                </h4>
+                                <div className="mt-2 text-center">
+                                    <div className="text-sm font-bold text-fuchsia-400 uppercase tracking-widest">
+                                        {profile.identity.wound_profile.dominant_wound}
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    )}
                 </>
             )}
         </div>

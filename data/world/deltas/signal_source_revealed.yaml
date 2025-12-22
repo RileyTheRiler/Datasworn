@@ -1,0 +1,23 @@
+# World Delta: Signal Source Revealed
+# Applied when truth_discovered flag is set
+
+id: signal_source_revealed
+trigger_flag: truth_discovered
+
+changes:
+  - type: location_description
+    location: bridge
+    new_description: "The bridge displays the signal's origin: a derelict corporate research station."
+  
+  - type: npc_availability
+    npc: mysterious_contact
+    available: true
+  
+  - type: dialogue_unlock
+    dialogue_nodes:
+      - corporate_conspiracy_dialogue
+      - research_station_lore
+  
+  - type: world_state
+    key: signal_origin_known
+    value: true

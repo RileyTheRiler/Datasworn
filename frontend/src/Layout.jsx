@@ -5,7 +5,7 @@ import TypewriterText from './components/TypewriterText';
 import SaveManager from './components/SaveManager';
 import SessionRecap from './components/SessionRecap';
 import SessionTimer from './components/SessionTimer';
-import SoundSettings from './components/SoundSettings';
+import SettingsModal from './components/SettingsModal';
 import AutoSaveIndicator from './components/AutoSaveIndicator';
 import RuleTooltip, { QuickReferencePanel } from './components/RuleTooltip';
 import { useKeyboardShortcuts, KeyboardHelpOverlay } from './components/KeyboardShortcuts';
@@ -23,12 +23,26 @@ import ShipBlueprintViewer from './components/ShipBlueprintViewer';
 import CharacterHUD from './components/CharacterHUD';
 import CombatDashboard from './components/CombatDashboard';
 import StoryThreads from './components/StoryThreads';
+import QuestJournal from './components/QuestJournal';
+import QuestTracker from './components/QuestTracker';
 import PsycheDashboard from './components/PsycheDashboard';
 import WorldEvents from './components/WorldEvents';
 import NPCDebugger from './components/NPCDebugger';
+import MurderRevelationModal from './components/MurderRevelationModal';
+import HeroTragedyChoice from './components/HeroTragedyChoice';
+import ChoiceCrystallizedModal from './components/ChoiceCrystallizedModal';
+import JournalModal from './components/JournalModal';
+import RevelationModal from './components/RevelationModal';
+import PracticeCards from './components/PracticeCards';
+import PortArrivalModal from './components/PortArrivalModal';
+import ChapterIndicator from './components/ChapterIndicator';
+import AreaInfoOverlay from './components/AreaInfoOverlay';
+import CampView from './components/CampView';
+import WorldDashboard from './components/WorldDashboard';
+import SensorRadar from './components/SensorRadar';
 
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = 'http://localhost:8001/api';
 
 // Atmospheric loading messages
 const LOADING_MESSAGES = [
@@ -60,7 +74,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     const [showSaveManager, setShowSaveManager] = useState(false);
     const [showRecap, setShowRecap] = useState(false);
     const [showTimer, setShowTimer] = useState(true);
-    const [showSoundSettings, setShowSoundSettings] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
     const [showQuickReference, setShowQuickReference] = useState(false);
     const [showBlueprint, setShowBlueprint] = useState(false);
     const [showPortraitSettings, setShowPortraitSettings] = useState(false);
@@ -70,14 +84,29 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     const [showShipBlueprint, setShowShipBlueprint] = useState(false);
     const [showCombatDashboard, setShowCombatDashboard] = useState(false);
     const [showStoryThreads, setShowStoryThreads] = useState(false);
+    const [showQuestJournal, setShowQuestJournal] = useState(false);
     const [showWorldEvents, setShowWorldEvents] = useState(false);
     const [showDebugger, setShowDebugger] = useState(false);
+    const [showMurderRevelation, setShowMurderRevelation] = useState(false);
+    const [showHeroTragedyChoice, setShowHeroTragedyChoice] = useState(false);
+    const [showChoiceCrystallized, setShowChoiceCrystallized] = useState(false);
+    const [showJournal, setShowJournal] = useState(false);
+    const [showRevelation, setShowRevelation] = useState(false);
+    const [showPractice, setShowPractice] = useState(false);
+    const [showPortArrival, setShowPortArrival] = useState(false);
+    const [showCamp, setShowCamp] = useState(false);
+    const [showSensorRadar, setShowSensorRadar] = useState(false);
+    const [showWorldDashboard, setShowWorldDashboard] = useState(false);
+    const [revelationStage, setRevelationStage] = useState(null);
+    const [revelationData, setRevelationData] = useState(null);
+    const [revelationQuestion, setRevelationQuestion] = useState('');
+    const [playerWound, setPlayerWound] = useState('');
     const [activeStat, setActiveStat] = useState({ name: 'Iron', value: character.stats.iron });
 
     // Accessibility and sound contexts
     const { highContrast, setHighContrast } = useAccessibility();
     const { toggleMute } = useSoundEffects();
-    const { speak, voiceEnabled, isListening, startListening, stopListening, transcript, setTranscript, supported: voiceSupported } = useVoice();
+    const { speak, voiceEnabled, selectedVoice, isListening, startListening, stopListening, transcript, setTranscript, supported: voiceSupported } = useVoice();
     const [lastSpoken, setLastSpoken] = useState('');
 
     // Update input from voice transcript
@@ -87,11 +116,137 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
 
     // Auto-narrate new text
     useEffect(() => {
-        if (voiceEnabled && narrative.pending_narrative && !isLoading && narrative.pending_narrative !== lastSpoken) {
+        if (voiceEnabled && selectedVoice && narrative.pending_narrative && !isLoading && narrative.pending_narrative !== lastSpoken) {
             speak(narrative.pending_narrative);
             setLastSpoken(narrative.pending_narrative);
         }
-    }, [narrative.pending_narrative, voiceEnabled, isLoading, speak, lastSpoken]);
+    }, [narrative.pending_narrative, voiceEnabled, selectedVoice, isLoading, speak, lastSpoken]);
+
+    // Check for pending revelations
+    useEffect(() => {
+        const checkRevelations = async () => {
+            // Only check if no other major narrative modal is open
+            if (showMurderRevelation || showHeroTragedyChoice || showChoiceCrystallized || showRevelation) return;
+
+            try {
+                const response = await fetch(`${API_URL}/narrative/revelation/check?session_id=default`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.stage) {
+                        // Fetch the full scene data for the stage
+                        let sceneData = null;
+
+                        if (data.stage === 'choice_crystallized') {
+                            setShowChoiceCrystallized(true);
+                        } else if (data.stage === 'mirror_moment') {
+                            const sceneResponse = await fetch(`${API_URL}/narrative/revelation/mirror-moment?session_id=default`, {
+                                method: 'POST'
+                            });
+                            if (sceneResponse.ok) {
+                                sceneData = await sceneResponse.json();
+                                setRevelationStage('mirror_moment');
+                                setRevelationData(sceneData);
+                                setShowRevelation(true);
+                            }
+                        } else if (data.stage === 'cost_revealed') {
+                            const sceneResponse = await fetch(`${API_URL}/narrative/revelation/cost-revealed?session_id=default`, {
+                                method: 'POST'
+                            });
+                            if (sceneResponse.ok) {
+                                sceneData = await sceneResponse.json();
+                                setRevelationStage('cost_revealed');
+                                setRevelationData(sceneData);
+                                setShowRevelation(true);
+                            }
+                        } else if (data.stage === 'origin_glimpsed') {
+                            const sceneResponse = await fetch(`${API_URL}/narrative/revelation/origin-glimpsed?session_id=default`, {
+                                method: 'POST'
+                            });
+                            if (sceneResponse.ok) {
+                                sceneData = await sceneResponse.json();
+                                setRevelationStage('origin_glimpsed');
+                                setRevelationData(sceneData);
+                                setShowRevelation(true);
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to check for revelations:", err);
+            }
+        };
+
+        const interval = setInterval(checkRevelations, 30000); // Check every 30s
+        return () => clearInterval(interval);
+    }, [showMurderRevelation, showHeroTragedyChoice, showChoiceCrystallized, showRevelation]);
+
+    // Auto-trigger ending sequence
+    const [hasTriggeredEnding, setHasTriggeredEnding] = useState(false);
+    useEffect(() => {
+        if (narrative.ending_triggered && !narrative.ending_choice && !hasTriggeredEnding) {
+            setShowMurderRevelation(true);
+            setHasTriggeredEnding(true);
+        }
+    }, [narrative.ending_triggered, narrative.ending_choice, hasTriggeredEnding]);
+
+    // Chapter State Management
+    const [chapterState, setChapterState] = useState({
+        name: "Loading...",
+        number: "1",
+        season: "Winter",
+        progress: 0,
+        total: 1,
+        missions: []
+    });
+
+    useEffect(() => {
+        const fetchChapterState = async () => {
+            try {
+                const response = await fetch(`${API_URL}/chapter/progress?session_id=default`);
+                if (response.ok) {
+                    const data = await response.json();
+
+                    // Format missions for indicator
+                    const missions = data.critical_missions.map(m => ({
+                        name: m,
+                        completed: data.completed_missions.includes(m)
+                    }));
+
+                    // Extract number from ID (e.g. "chapter_1" -> "1")
+                    const num = data.chapter_id.split('_')[1] || "1";
+
+                    setChapterState({
+                        name: data.chapter_name,
+                        number: num,
+                        season: "Winter", // Backend should send this in progress endpoint ideally, or fetch from /chapter/current
+                        progress: data.completed_missions.length,
+                        total: data.critical_missions.length,
+                        missions: missions
+                    });
+
+                    // Also update season more accurately if needed via separate call or just trust default
+                    // Let's do a quick lazy fetch for details if we want season correct
+                    // For MVP optimization, could merge these endpoints
+                }
+
+                // Fetch season detailed info
+                const stateResponse = await fetch(`${API_URL}/chapter/current?session_id=default`);
+                if (stateResponse.ok) {
+                    const stateData = await stateResponse.json();
+                    setChapterState(prev => ({
+                        ...prev,
+                        season: stateData.chapter.season
+                    }));
+                }
+            } catch (err) {
+                console.error("Chapter fetch error", err);
+            }
+        };
+
+        fetchChapterState();
+        const interval = setInterval(fetchChapterState, 15000); // Poll every 15s
+        return () => clearInterval(interval);
+    }, []);
 
     // Stat selection handler for keyboard shortcuts
     const handleStatSelect = useCallback((statName) => {
@@ -116,7 +271,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             setShowHelp(false);
             setShowSaveManager(false);
             setShowRecap(false);
-            setShowSoundSettings(false);
+            setShowSettings(false);
             setShowQuickReference(false);
             setShowBlueprint(false);
             setShowAlbum(false);
@@ -124,6 +279,10 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             setShowShipBlueprint(false);
             setShowCombatDashboard(false);
             setShowDebugger(false);
+            setShowCombatDashboard(false);
+            setShowDebugger(false);
+            setShowPractice(false);
+            setShowCamp(false);
         }, []),
         onShowHelp: useCallback(() => setShowHelp(true), []),
         onToggleMute: toggleMute,
@@ -173,9 +332,63 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
         e.preventDefault();
         if (!input.trim() || isLoading) return;
 
+        // Debug command for Port Arrival
+        if (input.trim().toLowerCase() === '/port') {
+            setShowPortArrival(true);
+            setInput("");
+            return;
+        }
+
         // Check for debug command to open combat dashboard
         if (input.trim().toLowerCase() === '/combat') {
             setShowCombatDashboard(true);
+            setInput("");
+            return;
+        }
+
+        // Check for murder resolution trigger
+        if (input.trim().toLowerCase() === '/murder') {
+            setShowMurderRevelation(true);
+            setInput("");
+            return;
+        }
+
+        // Debug commands for revelation stages
+        if (input.trim().toLowerCase() === '/mirror') {
+            fetch(`${API_URL}/narrative/revelation/mirror-moment?session_id=default`, { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    setRevelationStage('mirror_moment');
+                    setRevelationData(data);
+                    setShowRevelation(true);
+                });
+            setInput("");
+            return;
+        }
+        if (input.trim().toLowerCase() === '/cost') {
+            fetch(`${API_URL}/narrative/revelation/cost-revealed?session_id=default`, { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    setRevelationStage('cost_revealed');
+                    setRevelationData(data);
+                    setShowRevelation(true);
+                });
+            setInput("");
+            return;
+        }
+        if (input.trim().toLowerCase() === '/origin') {
+            fetch(`${API_URL}/narrative/revelation/origin-glimpsed?session_id=default`, { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    setRevelationStage('origin_glimpsed');
+                    setRevelationData(data);
+                    setShowRevelation(true);
+                });
+            setInput("");
+            return;
+        }
+        if (input.trim().toLowerCase() === '/choice') {
+            setShowChoiceCrystallized(true);
             setInput("");
             return;
         }
@@ -184,6 +397,35 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
         onAction(input, conversationMode ? 'cognitive' : 'narrative');
         setInput("");
         setTranscript("");
+    };
+
+    const handleRevelationComplete = () => {
+        // Revelation complete, show choice modal
+        // HeroTragedyChoice component will fetch its own prompt data
+        setShowMurderRevelation(false);
+        setShowHeroTragedyChoice(true);
+    };
+
+    const handleChoiceMade = (choice) => {
+        console.log('Player chose:', choice);
+        // Choice is handled by the HeroTragedyChoice component
+        // After ending narration, player can close the modal
+    };
+
+    const handleInterrogate = (npcData) => {
+        // Map NPC name to ID for interrogation
+        const npcIdMap = {
+            'Torres': 'torres',
+            'Vasquez': 'vasquez',
+            'Kai': 'kai',
+            'Dr. Okonkwo': 'okonkwo',
+            'Ember': 'ember',
+            'Yuki': 'yuki'
+        };
+
+        const npcId = npcIdMap[npcData.name] || npcData.id || npcData.name.toLowerCase();
+        setInterrogationNPC({ id: npcId, name: npcData.name });
+        setShowInterrogation(true);
     };
 
     const handleManualCapture = async () => {
@@ -260,6 +502,11 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                             <span className="w-2 h-2 bg-disco-accent rounded-full animate-pulse"></span>
                             <div className="text-disco-paper/60 font-mono text-xs tracking-[0.2em] uppercase">Sector: The Forge</div>
                         </div>
+                        {/* Area Info Overlay (Rumors/Events) */}
+                        <AreaInfoOverlay
+                            areaId={world.current_location_id || world.current_location?.toLowerCase().replace(/ /g, '_')}
+                            visible={!isLoading}
+                        />
                     </div>
                 </div>
 
@@ -276,6 +523,22 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             <div className="w-2/3 flex flex-col relative bg-disco-panel/60">
                 {/* HUD Corner Brackets - Top Right */}
                 <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-disco-accent/40 z-50" />
+
+                {/* Chapter Indicator */}
+                <div className="absolute top-4 right-12 z-40">
+                    <ChapterIndicator
+                        title={chapterState.name}
+                        number={chapterState.number}
+                        season={chapterState.season}
+                        progress={chapterState.progress}
+                        total={chapterState.total}
+                        missions={chapterState.missions}
+                    />
+                </div>
+
+                {/* Quest Tracker Overlay */}
+                <QuestTracker sessionId="default" />
+
                 {/* Animated grid background */}
                 <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
                     backgroundImage: 'linear-gradient(rgba(107, 228, 227, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(107, 228, 227, 0.1) 1px, transparent 1px)',
@@ -291,6 +554,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                                 characters={gameState.relationships?.crew || {}}
                                 baseSpeed={20}
                                 className="font-mono text-base leading-relaxed tracking-wide"
+                                onInterrogate={handleInterrogate}
                                 onComplete={() => {
                                     // Auto-scroll after typewriter completes
                                     if (scrollRef.current) {
@@ -412,11 +676,11 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                             📖 Rules
                         </button>
                         <button
-                            onClick={() => setShowSoundSettings(true)}
-                            className="text-disco-muted hover:text-disco-paper transition-colors"
-                            title="Sound Settings"
+                            onClick={() => setShowSettings(true)}
+                            className="text-disco-accent hover:text-disco-paper transition-colors"
+                            title="Settings"
                         >
-                            🔊 Sound
+                            ⚙️ Settings
                         </button>
                         <button
                             onClick={() => setShowBlueprint(true)}
@@ -439,6 +703,13 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                             title="Photo Album - Captured Moments"
                         >
                             📸 Album
+                        </button>
+                        <button
+                            onClick={() => setShowPractice(prev => !prev)}
+                            className={`transition-colors flex items-center gap-1 ${showPractice ? 'text-white font-bold' : 'text-disco-cyan hover:text-white'}`}
+                            title="Practice Cards - Master Your Voice"
+                        >
+                            🎤 Practice
                         </button>
                         <div className="w-px h-4 bg-disco-muted/30 mx-2"></div>
                         <MusicPlayer />
@@ -478,147 +749,187 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                             🧶 Story
                         </button>
                         <button
+                            onClick={() => setShowQuestJournal(true)}
+                            className="text-amber-500 hover:text-white transition-colors"
+                            title="Quest Journal"
+                        >
+                            ⚔️ Quests
+                        </button>
+                        <button
+                            onClick={() => setShowSensorRadar(true)}
+                            className="text-cyan-400 hover:text-white transition-colors"
+                            title="Sensor Radar"
+                        >
+                            🛰️ SENSORS
+                        </button>
+                        <button
                             onClick={() => setShowDebugger(true)}
                             className="text-pink-500 hover:text-white transition-colors"
                             title="NPC Cognitive Debugger"
                         >
                             🧠 Brain
                         </button>
+                        <button
+                            onClick={() => setShowWorldDashboard(true)}
+                            className="text-emerald-400 hover:text-white transition-colors"
+                            title="World Simulation Control"
+                        >
+                            🌍 SIM
+                        </button>
+                        <div className="w-px h-4 bg-disco-muted/30 mx-2"></div>
+                        <button
+                            onClick={() => setShowCamp(prev => !prev)}
+                            className={`transition-colors font-bold ${showCamp ? 'text-white' : 'text-green-400 hover:text-white'}`}
+                            title="Living Hub / Camp"
+                        >
+                            🏕️ CAMP
+                        </button>
                     </div>
 
-                    {/* Dice/Skill Check Overlay */}
-                    {showSkillCheck && (
-                        <SkillCheck
-                            stat={character.stats.iron}
-                            statName="Iron"
-                            character={character}
-                            onRollComplete={handleRollComplete}
-                            onClose={() => setShowSkillCheck(false)}
-                        />
-                    )}
-
-                    {/* Keyboard Help Overlay */}
-                    <KeyboardHelpOverlay
-                        isOpen={showHelp}
-                        onClose={() => setShowHelp(false)}
-                    />
-
-                    {/* Save Manager Modal */}
-                    <SaveManager
-                        isOpen={showSaveManager}
-                        onClose={() => setShowSaveManager(false)}
-                        sessionId="default"
-                        onLoadComplete={(loadedState) => {
-                            // For MVP, reload the page to refresh state
-                            window.location.reload();
-                        }}
-                    />
-
-                    {/* Session Recap Modal */}
-                    <SessionRecap
-                        isOpen={showRecap}
-                        onClose={() => setShowRecap(false)}
-                        sessionId="default"
-                    />
-
-                    {/* Sound Settings Modal */}
-                    <SoundSettings
-                        isOpen={showSoundSettings}
-                        onClose={() => setShowSoundSettings(false)}
-                    />
-
-                    {/* Quick Reference Panel */}
-                    <QuickReferencePanel
-                        isOpen={showQuickReference}
-                        onClose={() => setShowQuickReference(false)}
-                    />
-
-                    {/* Tactical Blueprint Modal */}
-                    <TacticalBlueprint
-                        sessionId="default"
-                        visible={showBlueprint}
-                        onClose={() => setShowBlueprint(false)}
-                    />
-
-                    {/* Star Map Modal */}
-                    <StarMap
-                        sessionId="default"
-                        visible={showStarMap}
-                        onClose={() => setShowStarMap(false)}
-                    />
-
-                    {/* Rumor Board Modal */}
-                    <RumorBoard
-                        sessionId="default"
-                        visible={showRumorBoard}
-                        onClose={() => setShowRumorBoard(false)}
-                    />
-
-                    {/* Ship Blueprint Modal */}
-                    <ShipBlueprintViewer
-                        sessionId="default"
-                        visible={showShipBlueprint}
-                        onClose={() => setShowShipBlueprint(false)}
-                    />
-
-                    {/* Photo Album Modal */}
-                    <PhotoAlbum
-                        sessionId="default"
-                        visible={showAlbum}
-                        onClose={() => setShowAlbum(false)}
-                    />
-
-                    {/* Combat Dashboard Modal */}
-                    <CombatDashboard
-                        sessionId="default"
-                        visible={showCombatDashboard}
-                        onClose={() => setShowCombatDashboard(false)}
-                    />
-
-                    {/* Narrative Threads Modal */}
-                    {showStoryThreads && (
-                        <StoryThreads
-                            onClose={() => setShowStoryThreads(false)}
-                        />
-                    )}
-
-                    {/* World Events Modal */}
-                    {showWorldEvents && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setShowWorldEvents(false)}>
-                            <div className="bg-gray-900 border border-amber-900/50 rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-                                <WorldEvents sessionId="default" />
-                                <div className="p-2 text-center border-t border-gray-800">
-                                    <button onClick={() => setShowWorldEvents(false)} className="text-gray-500 hover:text-white text-sm">Close Log</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Photo Album Modal */}
-                    <PhotoAlbum
-                        sessionId="default"
-                        visible={showAlbum}
-                        onClose={() => setShowAlbum(false)}
-                    />
-
-                    {/* Star Map Modal */}
-                    <StarMap
-                        sessionId="default"
-                        visible={showStarMap}
-                        onClose={() => setShowStarMap(false)}
-                    />
-
-                    {/* Rumor Board Modal */}
-                    <RumorBoard
-                        sessionId="default"
-                        visible={showRumorBoard}
-                        onClose={() => setShowRumorBoard(false)}
-                    />
-
-                    {/* Psyche Dashboard (Always On Widget) */}
-                    <PsycheDashboard />
                 </div>
             </div>
+
+            {/* World Dashboard Overlay */}
+            <WorldDashboard
+                visible={showWorldDashboard}
+                onClose={() => setShowWorldDashboard(false)}
+                sessionId="default"
+            />
+
+            {/* Sensor Radar Overlay */}
+            <SensorRadar
+                visible={showSensorRadar}
+                onClose={() => setShowSensorRadar(false)}
+                sessionId="default"
+                playerLocation={{ x: 100, y: 100 }} // Mocked starting location near Engine Room
+            />
+
+            {/* Dice/Skill Check Overlay */}
+            {showSkillCheck && (
+                <SkillCheck
+                    stat={character.stats.iron}
+                    statName="Iron"
+                    character={character}
+                    onRollComplete={handleRollComplete}
+                    onClose={() => setShowSkillCheck(false)}
+                />
+            )}
+
+            {/* Keyboard Help Overlay */}
+            <KeyboardHelpOverlay
+                isOpen={showHelp}
+                onClose={() => setShowHelp(false)}
+            />
+
+            {/* Save Manager Modal */}
+            <SaveManager
+                isOpen={showSaveManager}
+                onClose={() => setShowSaveManager(false)}
+                sessionId="default"
+                onLoadComplete={(loadedState) => {
+                    // For MVP, reload the page to refresh state
+                    window.location.reload();
+                }}
+            />
+
+            {/* Session Recap Modal */}
+            <SessionRecap
+                isOpen={showRecap}
+                onClose={() => setShowRecap(false)}
+                sessionId="default"
+            />
+
+            {/* Settings Modal */}
+            <SettingsModal
+                isOpen={showSettings}
+                onClose={() => setShowSettings(false)}
+                sessionId="default"
+            />
+
+            {/* Quick Reference Panel */}
+            <QuickReferencePanel
+                isOpen={showQuickReference}
+                onClose={() => setShowQuickReference(false)}
+            />
+
+            {/* Tactical Blueprint Modal */}
+            <TacticalBlueprint
+                sessionId="default"
+                visible={showBlueprint}
+                onClose={() => setShowBlueprint(false)}
+            />
+
+            {/* Camp View Overlay */}
+            <CampView
+                visible={showCamp}
+                onClose={() => setShowCamp(false)}
+                gameState={gameState}
+            />
+
+            {/* Star Map Modal */}
+            <StarMap
+                sessionId="default"
+                visible={showStarMap}
+                onClose={() => setShowStarMap(false)}
+            />
+
+            {/* Rumor Board Modal */}
+            <RumorBoard
+                sessionId="default"
+                visible={showRumorBoard}
+                onClose={() => setShowRumorBoard(false)}
+            />
+
+            {/* Ship Blueprint Modal */}
+            <ShipBlueprintViewer
+                sessionId="default"
+                visible={showShipBlueprint}
+                onClose={() => setShowShipBlueprint(false)}
+            />
+
+            {/* Photo Album Modal */}
+            <PhotoAlbum
+                sessionId="default"
+                visible={showAlbum}
+                onClose={() => setShowAlbum(false)}
+            />
+
+            {/* Combat Dashboard Modal */}
+            <CombatDashboard
+                sessionId="default"
+                visible={showCombatDashboard}
+                onClose={() => setShowCombatDashboard(false)}
+            />
+
+            {/* Narrative Threads Modal */}
+            {showStoryThreads && (
+                <StoryThreads
+                    onClose={() => setShowStoryThreads(false)}
+                />
+            )}
+
+            {/* Quest Journal Modal */}
+            {showQuestJournal && (
+                <QuestJournal
+                    onClose={() => setShowQuestJournal(false)}
+                    sessionId="default"
+                />
+            )}
+
+            {/* World Events Modal */}
+            {showWorldEvents && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setShowWorldEvents(false)}>
+                    <div className="bg-gray-900 border border-amber-900/50 rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <WorldEvents sessionId="default" />
+                        <div className="p-2 text-center border-t border-gray-800">
+                            <button onClick={() => setShowWorldEvents(false)} className="text-gray-500 hover:text-white text-sm">Close Log</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Psyche Dashboard (Always On Widget) */}
+            <PsycheDashboard />
 
             {/* Session Timer - Fixed position */}
             <SessionTimer
@@ -638,6 +949,87 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                 sessionId="default"
                 visible={showDebugger}
                 onClose={() => setShowDebugger(false)}
+            />
+
+            {/* Murder Revelation Modal */}
+            <MurderRevelationModal
+                isOpen={showMurderRevelation}
+                onClose={() => setShowMurderRevelation(false)}
+                sessionId="default"
+                onComplete={handleRevelationComplete}
+            />
+
+            {/* Hero/Tragedy Choice Modal */}
+            <HeroTragedyChoice
+                isOpen={showHeroTragedyChoice}
+                onClose={() => setShowHeroTragedyChoice(false)}
+                question={revelationQuestion}
+                playerWound={playerWound}
+                sessionId="default"
+                onChoiceMade={handleChoiceMade}
+                onComplete={() => setShowPortArrival(true)}
+            />
+
+            {/* Practice Cards View */}
+            {showPractice && (
+                <div className="fixed inset-0 z-[150] overflow-hidden">
+                    <PracticeCards onClose={() => setShowPractice(false)} />
+                    <button
+                        onClick={() => setShowPractice(false)}
+                        className="fixed top-8 right-8 z-[160] text-white/40 hover:text-white text-2xl"
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+
+            {/* Interrogation Modal */}
+            <InterrogationModal
+                isOpen={showInterrogation}
+                onClose={() => setShowInterrogation(false)}
+                npcId={interrogationNPC.id}
+                npcName={interrogationNPC.name}
+                sessionId="default"
+            />
+
+            {/* Choice Crystallized Modal */}
+            <ChoiceCrystallizedModal
+                isOpen={showChoiceCrystallized}
+                onClose={() => setShowChoiceCrystallized(false)}
+                sessionId="default"
+                onComplete={() => setShowChoiceCrystallized(false)}
+            />
+
+            {/* Generic Revelation Modal (Stages 1-3) */}
+            <RevelationModal
+                isOpen={showRevelation}
+                onClose={() => {
+                    setShowRevelation(false);
+                    setRevelationStage(null);
+                    setRevelationData(null);
+                }}
+                sessionId="default"
+                stage={revelationStage}
+                data={revelationData}
+                onComplete={() => {
+                    setShowRevelation(false);
+                    setRevelationStage(null);
+                    setRevelationData(null);
+                }}
+            />
+
+            {/* Captain's Journal Modal */}
+            <JournalModal
+                isOpen={showJournal}
+                onClose={() => setShowJournal(false)}
+                sessionId="default"
+            />
+
+            {/* Port Arrival Modal */}
+            <PortArrivalModal
+                isOpen={showPortArrival}
+                onClose={() => setShowPortArrival(false)}
+                sessionId="default"
             />
         </div>
     )

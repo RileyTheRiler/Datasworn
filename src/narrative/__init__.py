@@ -21,7 +21,6 @@ from .multiplayer import NarrativeMultiplayerSystem
 __all__ = [
     "PayoffTracker", 
     "ConsequenceManager", 
-    "ConsequenceManager", 
     "ChoiceEchoSystem",
     "OpeningHookSystem",
     "NPCEmotionalStateMachine",

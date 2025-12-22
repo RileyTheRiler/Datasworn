@@ -1,0 +1,222 @@
+# Merchant Archetype Schedule
+# Shop keeper with business hours and inventory management
+
+archetype: merchant
+description: "Shop owner with regular business hours and customer interactions"
+
+regions:
+  default:
+    tasks:
+      - time: "07:00"
+        duration: 60
+        location: "home"
+        behavior: "morning_routine"
+        description: "Wake up, breakfast, prepare for day"
+        animation: "eating"
+        
+      - time: "08:00"
+        duration: 30
+        location: "shop"
+        behavior: "open_shop"
+        description: "Unlock shop, arrange displays, count inventory"
+        animation: "organizing"
+        props_required: ["shop_key", "ledger"]
+        
+      - time: "08:30"
+        duration: 240
+        location: "shop"
+        behavior: "serve_customers"
+        description: "Open for business, greet customers"
+        animation: "standing_counter"
+        reservation: "shop_counter"
+        interaction_ready: true
+        
+      - time: "12:30"
+        duration: 60
+        location: "shop_back"
+        behavior: "lunch_inventory"
+        description: "Eat while checking stock levels"
+        animation: "eating"
+        
+      - time: "13:30"
+        duration: 270
+        location: "shop"
+        behavior: "serve_customers"
+        description: "Afternoon business hours"
+        animation: "standing_counter"
+        interaction_ready: true
+        
+      - time: "18:00"
+        duration: 30
+        location: "shop"
+        behavior: "close_shop"
+        description: "Count till, lock up, clean"
+        animation: "organizing"
+        
+      - time: "18:30"
+        duration: 90
+        location: "tavern"
+        behavior: "socialize"
+        description: "Network with other merchants"
+        animation: "talking"
+        reservation: "tavern_table_1"
+        
+      - time: "20:00"
+        duration: 120
+        location: "home"
+        behavior: "dinner_bookkeeping"
+        description: "Evening meal and update ledgers"
+        animation: "writing"
+        
+      - time: "22:00"
+        duration: 540
+        location: "home"
+        behavior: "sleep"
+        description: "Rest for next business day"
+        animation: "sleeping"
+
+# Special business days
+special_days:
+  market_day:
+    probability: 0.2  # 20% chance on any given day
+    tasks:
+      - time: "06:00"
+        duration: 60
+        location: "warehouse"
+        behavior: "load_cart"
+        description: "Prepare goods for market"
+        
+      - time: "07:00"
+        duration: 600
+        location: "market_square"
+        behavior: "market_trading"
+        description: "Full day at outdoor market"
+        animation: "trading"
+        reservation: "market_stall_1"
+        
+  restock_day:
+    probability: 0.15
+    tasks:
+      - time: "09:00"
+        duration: 180
+        location: "warehouse_district"
+        behavior: "purchase_inventory"
+        description: "Buy from wholesalers"
+        
+      - time: "12:00"
+        duration: 120
+        location: "shop"
+        behavior: "stock_shelves"
+        description: "Organize new inventory"
+
+# Customer interaction states
+customer_states:
+  browsing:
+    behavior: "watch_customer"
+    animation: "observing"
+    dialogue_ready: true
+    
+  haggling:
+    behavior: "negotiate"
+    animation: "talking_animated"
+    dialogue_context: "merchant_haggle"
+    
+  purchase:
+    behavior: "complete_sale"
+    animation: "exchanging_goods"
+    
+  suspicious:
+    behavior: "watch_closely"
+    animation: "suspicious_glare"
+    dialogue_context: "merchant_suspicious"
+
+# Weather overrides
+weather_overrides:
+  rain:
+    - time: "08:30-18:00"
+      behavior: "indoor_only"
+      description: "Stay in shop, no outdoor market"
+      
+  storm:
+    - time: "all_day"
+      location: "shop"
+      behavior: "closed_early"
+      description: "Close shop during severe weather"
+
+# Interruptions
+interruptions:
+  theft_detected:
+    priority: 10
+    behavior: "confront_thief"
+    dialogue_context: "merchant_angry"
+    duration: 15
+    resume_after: true
+    
+  player_interaction:
+    priority: 5
+    behavior: "greet_customer"
+    dialogue_context: "merchant_greeting"
+    duration: 10
+    resume_after: true
+    
+  supply_delivery:
+    priority: 6
+    behavior: "receive_goods"
+    duration: 20
+    resume_after: true
+
+# Rare variants
+rare_variants:
+  - name: "sale_day"
+    probability: 0.1
+    description: "Special discount day to clear inventory"
+    modifier:
+      dialogue_context: "merchant_sale"
+      prices_multiplier: 0.8
+      
+  - name: "closed_sick"
+    probability: 0.05
+    description: "Merchant is ill, shop closed"
+    override_tasks:
+      - time: "all_day"
+        location: "home"
+        behavior: "sick_in_bed"
+        animation: "laying_down"
+        
+  - name: "traveling_merchant"
+    probability: 0.08
+    description: "Visiting other settlements to trade"
+    override_tasks:
+      - time: "06:00"
+        duration: 720
+        location: "road"
+        behavior: "traveling"
+        animation: "riding_cart"
+
+# Reputation modifiers
+reputation_effects:
+  high_reputation:
+    threshold: 0.7
+    dialogue_context: "merchant_friendly"
+    prices_multiplier: 0.9
+    
+  low_reputation:
+    threshold: 0.3
+    dialogue_context: "merchant_cold"
+    prices_multiplier: 1.2
+    
+  caught_stealing:
+    dialogue_context: "merchant_hostile"
+    behavior: "refuse_service"
+
+# Fallback behaviors
+fallback_behaviors:
+  - condition: "shop_blocked"
+    behavior: "wait_outside"
+    
+  - condition: "counter_occupied"
+    behavior: "organize_back_room"
+    
+  - condition: "no_customers"
+    behavior: "clean_shop"
+    animation: "sweeping"

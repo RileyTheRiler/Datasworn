@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { useNPCCache } from '../contexts/NPCCacheContext';
+import ScheduleVisualizer from './ScheduleVisualizer';
 
 const NPCDebugger = ({ sessionId, visible, onClose }) => {
     const { cache } = useNPCCache();
@@ -122,21 +123,18 @@ const NPCDebugger = ({ sessionId, visible, onClose }) => {
                             ) : <Loading />}
                         </Section>
 
-                        <Section title="Current Plan">
-                            {debugData?.current_plan ? (
-                                <div className="text-sm space-y-2">
-                                    <div className="text-disco-yellow italic">"{debugData.current_plan.goal}"</div>
-                                    <div className="space-y-1 mt-2">
-                                        {debugData.current_plan.entries?.map((entry, i) => (
-                                            <div key={i} className={`flex gap-2 text-xs p-1 rounded ${i === debugData.current_plan.current_entry_index ? 'bg-disco-purple/20 border border-disco-purple/30' : 'opacity-60'}`}>
-                                                <span className="font-mono w-12 shrink-0">{entry.time}</span>
-                                                <span>{entry.activity}</span>
-                                                <span className="ml-auto text-gray-500 text-[10px]">{entry.location}</span>
-                                            </div>
-                                        ))}
-                                    </div>
+                        <Section title="Current Schedule">
+                            {/* Use new visualizer if we have an ID */}
+                            {selectedNPC ? (
+                                <div className="mt-2">
+                                    {/* Note: NPCDebugger needs to import ScheduleVisualizer first */}
+                                    {/* Since I can't import in this block, I need to add import at top */}
+                                    {/* Assuming I'll add the import in next step */}
+                                    <ScheduleVisualizer npcId={selectedNPC} className="text-xs" />
                                 </div>
-                            ) : <div className="text-xs text-gray-600 italic">No active plan.</div>}
+                            ) : (
+                                <div className="text-xs text-gray-600 italic">No active schedule.</div>
+                            )}
                         </Section>
                     </div>
 

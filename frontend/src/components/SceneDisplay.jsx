@@ -135,7 +135,7 @@ const SceneDisplay = ({ imageUrl, isLoading, locationName, weather = 'Clear', ti
             </div>
 
             {/* Weather Overlays */}
-            {weather === 'Rain' && (
+            {(weather === 'Rain' || weather === 'acid_rain') && (
                 <div className="absolute inset-0 z-5 pointer-events-none">
                     <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-900/10 to-blue-900/20" />
                     {[...Array(50)].map((_, i) => (
@@ -154,19 +154,22 @@ const SceneDisplay = ({ imageUrl, isLoading, locationName, weather = 'Clear', ti
                 </div>
             )}
 
-            {weather === 'Fog' && (
+            {(weather === 'Fog' || weather === 'dense_nebula' || weather === 'light_nebula') && (
                 <div className="absolute inset-0 z-5 pointer-events-none">
                     <div className="absolute inset-0 bg-gradient-to-t from-gray-300/40 via-gray-400/20 to-transparent backdrop-blur-sm animate-pulse" />
+                    {weather === 'dense_nebula' && (
+                        <div className="absolute inset-0 bg-purple-900/20 mix-blend-overlay" />
+                    )}
                 </div>
             )}
 
-            {weather === 'Dust Storm' && (
+            {(weather === 'Dust Storm' || weather === 'debris_field') && (
                 <div className="absolute inset-0 z-5 pointer-events-none">
                     <div className="absolute inset-0 bg-gradient-to-br from-orange-900/30 via-yellow-900/20 to-transparent animate-pulse" />
                     {[...Array(30)].map((_, i) => (
                         <div
                             key={i}
-                            className="absolute w-1 h-1 bg-yellow-700/40 rounded-full animate-dust"
+                            className={`absolute rounded-full animate-dust ${weather === 'debris_field' ? 'w-2 h-2 bg-gray-600/60' : 'w-1 h-1 bg-yellow-700/40'}`}
                             style={{
                                 left: `${Math.random() * 100}%`,
                                 top: `${Math.random() * 100}%`,
@@ -178,7 +181,7 @@ const SceneDisplay = ({ imageUrl, isLoading, locationName, weather = 'Clear', ti
                 </div>
             )}
 
-            {weather === 'Snow' && (
+            {(weather === 'Snow' || weather === 'ice_storm') && (
                 <div className="absolute inset-0 z-5 pointer-events-none">
                     {[...Array(40)].map((_, i) => (
                         <div
@@ -195,10 +198,30 @@ const SceneDisplay = ({ imageUrl, isLoading, locationName, weather = 'Clear', ti
                 </div>
             )}
 
-            {weather === 'Storm' && (
+            {(weather === 'Storm' || weather === 'ion_storm' || weather === 'solar_flare') && (
                 <div className="absolute inset-0 z-5 pointer-events-none">
-                    <div className="absolute inset-0 bg-gradient-to-b from-gray-900/40 to-transparent animate-pulse" />
-                    <div className="absolute inset-0 animate-lightning" />
+                    <div className={`absolute inset-0 bg-gradient-to-b animate-pulse ${weather === 'solar_flare' ? 'from-orange-500/20 to-transparent' : 'from-gray-900/40 to-transparent'}`} />
+                    <div className={`absolute inset-0 ${weather === 'solar_flare' ? 'animate-flare' : 'animate-lightning'}`} />
+                </div>
+            )}
+
+            {(weather === 'asteroid_field') && (
+                <div className="absolute inset-0 z-5 pointer-events-none">
+                    {[...Array(15)].map((_, i) => (
+                        <div
+                            key={i}
+                            className="absolute bg-stone-700/80 rounded-full animate-float"
+                            style={{
+                                width: `${4 + Math.random() * 12}px`,
+                                height: `${4 + Math.random() * 12}px`,
+                                left: `${Math.random() * 100}%`,
+                                top: `${Math.random() * 100}%`,
+                                animationDelay: `${Math.random() * 5}s`,
+                                animationDuration: `${10 + Math.random() * 20}s`,
+                                opacity: 0.7
+                            }}
+                        />
+                    ))}
                 </div>
             )}
 

@@ -11,12 +11,13 @@ export const useMusic = () => {
     return context;
 };
 
-const API_URL = 'http://localhost:8001/api';
+const API_URL = 'http://localhost:8000/api';
 
 export const MusicProvider = ({ children }) => {
     const [isPlaying, setIsPlaying] = useState(false);
-    const [currentMood, setCurrentMood] = useState('relaxing');
+    const [currentMood, setCurrentMood] = useState('theme');
     const [playlist, setPlaylist] = useState({
+        theme: [],
         relaxing: [],
         tense: [],
         dramatic: [],
@@ -29,7 +30,9 @@ export const MusicProvider = ({ children }) => {
     });
 
     const soundRef = useRef(null);
+    const hasAudioStarted = useRef(false);
     const playedTracksRef = useRef({
+        theme: new Set(),
         relaxing: new Set(),
         tense: new Set(),
         dramatic: new Set(),
@@ -54,6 +57,15 @@ export const MusicProvider = ({ children }) => {
         }
     }, [volume]);
 
+    // Auto-play theme music on load (fire once)
+    useEffect(() => {
+        if (playlist.theme && playlist.theme.length > 0 && !hasAudioStarted.current) {
+            console.log("Auto-starting theme music...");
+            hasAudioStarted.current = true;
+            playMood('theme');
+        }
+    }, [playlist]);
+
     const playMood = (mood) => {
         if (!playlist[mood] || playlist[mood].length === 0) {
             console.warn(`No music found for mood: ${mood}`);
@@ -77,13 +89,18 @@ export const MusicProvider = ({ children }) => {
         const tracks = playlist[mood];
         if (!tracks || tracks.length === 0) return;
 
-        let available = tracks.filter(t => !playedTracksRef.current[mood].has(t));
+        // Sort tracks alphabetically
+        const sortedTracks = [...tracks].sort();
+
+        // Find tracks that haven't been played yet
+        let available = sortedTracks.filter(t => !playedTracksRef.current[mood].has(t));
         if (available.length === 0) {
             playedTracksRef.current[mood].clear();
-            available = tracks;
+            available = sortedTracks;
         }
 
-        const nextTrack = available[Math.floor(Math.random() * available.length)];
+        // Pick the first available track (alphabetically)
+        const nextTrack = available[0];
         playedTracksRef.current[mood].add(nextTrack);
 
         playTrack(nextTrack);
@@ -94,7 +111,7 @@ export const MusicProvider = ({ children }) => {
             soundRef.current.unload();
         }
 
-        const fullSrc = src.startsWith('http') ? src : `http://localhost:8001${src}`;
+        const fullSrc = src.startsWith('http') ? src : `http://localhost:8000${src}`;
 
         const sound = new Howl({
             src: [fullSrc],
@@ -102,6 +119,11 @@ export const MusicProvider = ({ children }) => {
             volume: volume,
             onend: () => {
                 playNextTrack(currentMood);
+            },
+            onplayerror: function () {
+                sound.once('unlock', function () {
+                    sound.play();
+                });
             },
             onloaderror: (id, err) => {
                 console.error("Music load error:", err);

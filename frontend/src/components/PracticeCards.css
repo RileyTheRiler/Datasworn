@@ -1,0 +1,168 @@
+/* Practice Cards Styling */
+
+.practice-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 24px;
+    padding: 24px;
+}
+
+.card-set-tile {
+    position: relative;
+    border-radius: 20px;
+    height: 380px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+    cursor: pointer;
+    overflow: hidden;
+    color: white;
+}
+
+.card-set-tile:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+.card-set-tile::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+    pointer-events: none;
+}
+
+/* Difficulty Gradients */
+.difficulty-beginner {
+    background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+}
+
+.difficulty-intermediate {
+    background: linear-gradient(135deg, #f43f5e 0%, #fb923c 100%);
+}
+
+.difficulty-advanced {
+    background: linear-gradient(135deg, #3b82f6 0%, #2dd4bf 100%);
+}
+
+.custom-set {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    border: 2px dashed rgba(148, 163, 184, 0.3);
+}
+
+.card-set-title {
+    font-size: 1.75rem;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-top: 40px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    text-align: center;
+}
+
+.card-set-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    padding-top: 16px;
+}
+
+.practice-session-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+}
+
+.active-practice-card {
+    width: 100%;
+    max-width: 800px;
+    height: 500px;
+    background: white;
+    border-radius: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    margin-bottom: 40px;
+    color: #1e293b;
+    font-size: 2.5rem;
+    font-family: 'Outfit', sans-serif;
+    text-align: center;
+    animation: cardEntry 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes cardEntry {
+    from {
+        opacity: 0;
+        transform: translateY(40px) scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.practice-controls {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.btn-practice {
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-weight: 700;
+    transition: all 0.2s ease;
+}
+
+.btn-nav {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-nav:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.record-button-container {
+    padding: 20px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(34, 211, 238, 0.3);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.record-button-container.active {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+    animation: pulseRed 1.5s infinite;
+}
+
+@keyframes pulseRed {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}

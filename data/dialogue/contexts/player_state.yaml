@@ -1,0 +1,273 @@
+# Player State Contextual Dialogue
+# Dialogue variations based on player's current state and actions
+
+contexts:
+  # Weapon Drawn
+  weapon_drawn:
+    conditions:
+      - player_has_weapon_drawn: true
+    
+    greetings:
+      - text: "*Steps back nervously* Easy there, friend..."
+        weight: 1.0
+        npc_mood: "fearful"
+        
+      - text: "Put that away before someone gets hurt!"
+        weight: 0.8
+        npc_mood: "alarmed"
+        npc_trait_required: "brave"
+        
+      - text: "*Raises hands* I don't want any trouble!"
+        weight: 1.0
+        npc_mood: "terrified"
+        
+      - text: "*Hand moves to own weapon* You threatening me?"
+        weight: 0.6
+        npc_mood: "defensive"
+        npc_trait_required: "aggressive"
+    
+    walk_by_barks:
+      - text: "*Whispers* Armed stranger..."
+        weight: 1.0
+        
+      - text: "*Crosses to other side of street*"
+        weight: 0.8
+        animation: "avoid"
+        
+      - text: "*Stares warily*"
+        weight: 0.7
+        
+  # Intoxicated
+  intoxicated:
+    conditions:
+      - player_intoxication: ">= 0.5"
+    
+    greetings:
+      - text: "Had a bit too much, have we?"
+        weight: 1.0
+        npc_mood: "amused"
+        
+      - text: "*Wrinkles nose* You reek of spirits."
+        weight: 0.8
+        npc_mood: "disgusted"
+        
+      - text: "You alright there? Need some water?"
+        weight: 0.7
+        npc_mood: "concerned"
+        npc_trait_required: "kind"
+        
+      - text: "*Laughs* Join the club, friend!"
+        weight: 0.6
+        npc_mood: "jovial"
+        npc_state_required: "also_drunk"
+    
+    walk_by_barks:
+      - text: "*Mutters* Drunk fool..."
+        weight: 1.0
+        
+      - text: "*Chuckles*"
+        weight: 0.5
+        
+  # Stealth Mode
+  stealth:
+    conditions:
+      - player_is_sneaking: true
+    
+    greetings:
+      - text: "What are you skulking about for?"
+        weight: 1.0
+        npc_mood: "suspicious"
+        
+      - text: "*Squints* I see you there..."
+        weight: 0.8
+        npc_mood: "alert"
+        
+      - text: "Trying to sneak past me? Not likely."
+        weight: 0.7
+        npc_mood: "confrontational"
+        npc_trait_required: "perceptive"
+    
+    walk_by_barks:
+      - text: "*Looks around suspiciously*"
+        weight: 1.0
+        animation: "search"
+        
+      - text: "Something's not right..."
+        weight: 0.8
+        
+  # Low Honor/Reputation
+  low_honor:
+    conditions:
+      - player_honor: "< 0.3"
+    
+    greetings:
+      - text: "I know your reputation. Keep moving."
+        weight: 1.0
+        npc_mood: "hostile"
+        
+      - text: "*Spits* We don't serve your kind here."
+        weight: 0.9
+        npc_mood: "contemptuous"
+        location_type: "shop"
+        
+      - text: "Guards! This one's trouble!"
+        weight: 0.7
+        npc_mood: "alarmed"
+        npc_archetype: "guard"
+        
+      - text: "*Clutches belongings tighter*"
+        weight: 0.8
+        npc_mood: "fearful"
+        animation: "protective"
+    
+    walk_by_barks:
+      - text: "*Whispers* That's the one..."
+        weight: 1.0
+        
+      - text: "*Avoids eye contact*"
+        weight: 0.9
+        animation: "look_away"
+        
+  # High Honor/Reputation
+  high_honor:
+    conditions:
+      - player_honor: ">= 0.7"
+    
+    greetings:
+      - text: "An honor to meet you! I've heard the stories."
+        weight: 1.0
+        npc_mood: "respectful"
+        
+      - text: "*Bows slightly* Welcome, friend."
+        weight: 0.8
+        npc_mood: "friendly"
+        animation: "bow"
+        
+      - text: "You're the one who helped the settlement! Thank you!"
+        weight: 0.7
+        npc_mood: "grateful"
+        memory_required: "player_helped_town"
+    
+    walk_by_barks:
+      - text: "*Nods respectfully*"
+        weight: 1.0
+        animation: "nod"
+        
+      - text: "*Smiles warmly*"
+        weight: 0.8
+        
+  # Disguised/Masked
+  disguised:
+    conditions:
+      - player_wearing_mask: true
+    
+    greetings:
+      - text: "Why hide your face? Show yourself!"
+        weight: 1.0
+        npc_mood: "suspicious"
+        
+      - text: "No masks allowed here. Remove it or leave."
+        weight: 0.9
+        npc_mood: "stern"
+        npc_archetype: "guard"
+        
+      - text: "*Eyes narrow* I don't trust anyone who hides..."
+        weight: 0.8
+        npc_mood: "wary"
+    
+  # Recently Committed Crime
+  recent_crime:
+    conditions:
+      - player_crime_timer: "< 300"  # Within 5 minutes
+    
+    greetings:
+      - text: "I saw what you did! Guards!"
+        weight: 1.0
+        npc_mood: "alarmed"
+        memory_required: "witnessed_crime"
+        
+      - text: "*Backs away slowly*"
+        weight: 0.9
+        npc_mood: "fearful"
+        animation: "retreat"
+        memory_required: "witnessed_crime"
+        
+      - text: "You won't get away with this!"
+        weight: 0.7
+        npc_mood: "angry"
+        npc_trait_required: "brave"
+        memory_required: "witnessed_crime"
+    
+    walk_by_barks:
+      - text: "*Whispers urgently to others*"
+        weight: 1.0
+        animation: "whisper"
+        
+      - text: "*Points and shouts*"
+        weight: 0.8
+        animation: "point"
+        
+  # Bribed Recently
+  bribed:
+    conditions:
+      - npc_memory_has: "received_bribe"
+      - memory_age: "< 600"  # Within 10 minutes
+    
+    greetings:
+      - text: "*Nods knowingly* Our little arrangement stands."
+        weight: 1.0
+        npc_mood: "complicit"
+        
+      - text: "*Looks around nervously* Don't make me regret this..."
+        weight: 0.8
+        npc_mood: "anxious"
+        
+      - text: "What do you want now?"
+        weight: 0.7
+        npc_mood: "annoyed"
+    
+  # Riding Mount
+  mounted:
+    conditions:
+      - player_on_mount: true
+    
+    greetings:
+      - text: "Nice beast you've got there."
+        weight: 1.0
+        npc_mood: "impressed"
+        
+      - text: "Dismount if you want to talk properly."
+        weight: 0.8
+        npc_mood: "businesslike"
+        
+      - text: "Watch where you're riding that thing!"
+        weight: 0.7
+        npc_mood: "irritated"
+        location_type: "crowded"
+    
+    walk_by_barks:
+      - text: "*Steps aside for mount*"
+        weight: 1.0
+        animation: "step_aside"
+        
+      - text: "*Admires the animal*"
+        weight: 0.6
+
+# Neutral fallbacks (when no conditions match)
+neutral:
+  greetings:
+    - text: "Greetings, traveler."
+      weight: 1.0
+      
+    - text: "What brings you here?"
+      weight: 0.8
+      
+    - text: "Can I help you?"
+      weight: 0.7
+      
+  walk_by_barks:
+    - text: "*Nods in passing*"
+      weight: 1.0
+      
+    - text: "*Continues about their business*"
+      weight: 0.8

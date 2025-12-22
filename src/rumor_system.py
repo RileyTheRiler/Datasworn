@@ -269,6 +269,29 @@ class RumorNetwork:
             "rumor_counter": self._rumor_counter,
         }
     
+    def generate_rumor(self, source: str, category: str = None) -> Rumor:
+        """Procedurally generate a rumor using RumorGenerator."""
+        generator = RumorGenerator()
+        
+        # Decide type
+        if category == "threat":
+            rtype = RumorType.THREAT
+            content = generator.generate_threat_rumor(system="The Forge")
+        elif category == "opportunity":
+            rtype = RumorType.OPPORTUNITY
+            content = generator.generate_opportunity_rumor(system="The Forge")
+        else:
+            rtype = RumorType.FACTION_NEWS
+            content = generator.generate_faction_rumor(faction="Iron Syndicate")
+            
+        return self.create_rumor(
+            content=content,
+            rumor_type=rtype,
+            location="The Forge",
+            source_reliability=RumorSource.QUESTIONABLE,
+            accuracy=0.5
+        )
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "RumorNetwork":
         network = cls()
