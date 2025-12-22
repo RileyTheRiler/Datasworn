@@ -81,3 +81,27 @@ def test_fixed_rolls_require_single_value_when_advantage_cancels():
     assert result.applied_advantage is False
     assert result.applied_disadvantage is False
     assert result.success is True
+
+
+def test_disco_fixed_dice_respect_critical_overrides():
+    critical_fail = roll_disco_check(skill=20, difficulty=2, fixed_dice=(1, 1))
+    assert critical_fail.success is False
+    assert critical_fail.is_critical_failure is True
+
+    critical_success = roll_disco_check(skill=0, difficulty=20, fixed_dice=(6, 6))
+    assert critical_success.success is True
+    assert critical_success.is_critical_success is True
+
+
+def test_baldurs_gate_fixed_rolls_use_advantage_and_disadvantage_rules():
+    advantaged = roll_baldurs_gate_check(modifier=0, dc=10, advantage=True, fixed_rolls=(2, 18))
+    assert advantaged.dice == (2, 18)
+    assert advantaged.applied_advantage is True
+    assert advantaged.total == 18
+    assert advantaged.success is True
+
+    disadvantaged = roll_baldurs_gate_check(modifier=0, dc=15, disadvantage=True, fixed_rolls=(17, 4))
+    assert disadvantaged.dice == (17, 4)
+    assert disadvantaged.applied_disadvantage is True
+    assert disadvantaged.total == 4
+    assert disadvantaged.success is False
