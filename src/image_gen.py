@@ -142,14 +142,6 @@ class WeatherCondition(str, Enum):
     SNOW = "Snow"
     STORM = "Storm"
 
-class WeatherCondition(str, Enum):
-    CLEAR = "Clear"
-    RAIN = "Rain"
-    DUST_STORM = "Dust Storm"
-    FOG = "Fog"
-    SNOW = "Snow"
-    STORM = "Storm"
-
 class ImageProvider(str, Enum):
     PLACEHOLDER = "placeholder"
     GEMINI = "gemini"

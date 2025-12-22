@@ -1,4 +1,5 @@
 
+import asyncio
 import sys
 import os
 from pathlib import Path
@@ -17,12 +18,14 @@ def test_portrait_prompts():
     # I can inspect the code or just run it and assume it works if no error.
     
     try:
-        url = generate_portrait(
-            "Kaelen", 
-            "A rugged spacer", 
-            style=PortraitStyle.PIXEL_ART, 
-            expression=PortraitExpression.ANGRY,
-            conditions=["scarred", "tired"]
+        url = asyncio.run(
+            generate_portrait(
+                "Kaelen",
+                "A rugged spacer",
+                style=PortraitStyle.PIXEL_ART,
+                expression=PortraitExpression.ANGRY,
+                conditions=["scarred", "tired"],
+            )
         )
         print(f"Generated URL: {url}")
         assert url is not None
@@ -31,11 +34,13 @@ def test_portrait_prompts():
         print(f"FAIL: {e}")
 
     try:
-        url = generate_portrait(
-            "Kaelen", 
-            "A rugged spacer", 
-            style=PortraitStyle.OIL_PAINTING, 
-            expression=PortraitExpression.WEARY
+        url = asyncio.run(
+            generate_portrait(
+                "Kaelen",
+                "A rugged spacer",
+                style=PortraitStyle.OIL_PAINTING,
+                expression=PortraitExpression.WEARY,
+            )
         )
         print(f"Generated URL: {url}")
         assert url is not None
