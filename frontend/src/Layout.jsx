@@ -42,6 +42,8 @@ import WorldDashboard from './components/WorldDashboard';
 import SensorRadar from './components/SensorRadar';
 import PauseMenu from './components/PauseMenu';
 import InterrogationModal from './components/InterrogationModal';
+import { ReactiveStatic, ScanlineTransition } from './components/UXEffects';
+import TextScramble from './components/TextScramble';
 
 
 const API_URL = 'http://localhost:8000/api';
@@ -107,6 +109,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     const [revelationQuestion, setRevelationQuestion] = useState('');
     const [playerWound, setPlayerWound] = useState('');
     const [activeStat, setActiveStat] = useState({ name: 'Iron', value: character.stats.iron });
+    const [activeDrawer, setActiveDrawer] = useState(null); // 'sys' or 'codex'
 
     // Accessibility and sound contexts
     const { highContrast, setHighContrast } = useAccessibility();
@@ -268,7 +271,18 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
         }
     }, [character.stats]);
 
-    // Keyboard shortcuts - expanded
+    // Helper for diegetic click effects
+    const triggerRgbSplit = (e) => {
+        const target = e.currentTarget;
+        // Don't override if already animating or if it's an icon-only button without text might need handling
+        const text = target.innerText || target.title || "CMD";
+        target.setAttribute('data-text', text);
+        target.classList.add('animate-rgb-split');
+        setTimeout(() => target.classList.remove('animate-rgb-split'), 150);
+    };
+
+    // Keyboard shortcuts
+    - expanded
     useKeyboardShortcuts({
         onToggleRoll: useCallback(() => setShowSkillCheck(prev => !prev), []),
         onCloseModal: useCallback(() => {
@@ -485,6 +499,10 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
 
     return (
         <div className="flex h-screen w-full bg-disco-bg bg-grunge bg-blend-multiply overflow-hidden animate-[crtFlicker_0.15s_infinite]">
+            <ReactiveStatic
+                health={character.condition.health}
+                spirit={character.condition.spirit}
+            />
             {/* LEFT: Visual & Stats */}
             <div className={`w-1/3 border-r border-disco-cyan/10 flex flex-col relative bg-black/20 transition-all duration-300 ${isLoading ? 'opacity-80' : 'opacity-100'}`}>
                 {/* HUD Corner Brackets - Top Left */}
@@ -558,7 +576,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                 }} />
                 {/* Log */}
                 <div className="flex-1 overflow-y-auto p-12 scroll-smooth" ref={scrollRef}>
-                    <div className="max-w-3xl mx-auto space-y-12">
+                    <div className="max-w-2xl mx-auto space-y-12">
                         <div className="prose prose-invert prose-lg text-disco-paper/90 fade-in leading-loose">
                             <TypewriterText
                                 text={narrative.pending_narrative}
@@ -588,232 +606,170 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                 </div>
 
                 {/* Input Area - Sticky to Bottom */}
-                <div className={`sticky bottom-0 p-8 pb-12 bg-disco-bg border-t backdrop-blur-sm transition-colors duration-500 ${conversationMode ? 'border-disco-cyan/60 bg-disco-cyan/5' : 'border-disco-muted/30'}`}>
-                    <form onSubmit={handleSubmit} className="max-w-3xl mx-auto relative group flex gap-2">
-                        {/* Conversation Mode Toggle */}
-                        <button
-                            type="button"
-                            onClick={() => setConversationMode(prev => !prev)}
-                            className={`px-4 py-2 border font-serif transition-all duration-300 flex items-center gap-2 ${conversationMode
-                                ? 'bg-disco-cyan text-black border-disco-cyan font-bold shadow-[0_0_15px_rgba(34,211,238,0.4)]'
-                                : 'border-disco-muted text-disco-paper hover:bg-disco-accent hover:text-black'
-                                }`}
-                            title={conversationMode ? "Switch to Narrative Mode" : "Switch to Conversation Mode"}
-                        >
-                            {conversationMode ? "💬 NPC" : "📜 Story"}
-                        </button>
+                {/* Input Area - Command Deck */}
+                <div className={`sticky bottom-0 bg-disco-bg border-t backdrop-blur-md transition-colors duration-500 z-50 ${conversationMode ? 'border-disco-cyan/60 bg-disco-cyan/5' : 'border-disco-muted/30'}`}>
 
-                        {/* Skill Check Toggle */}
-                        <button
-                            type="button"
-                            onClick={() => setShowSkillCheck(true)}
-                            className="px-4 py-2 border border-disco-muted text-disco-paper font-serif hover:bg-disco-accent hover:text-black transition-colors"
-                            title="Make a Move"
-                        >
-                            🎲
-                        </button>
+                    {/* Drawer: System (Left) */}
+                    <div className={`absolute bottom-full left-0 w-64 bg-black/90 border-r border-t border-disco-muted/40 p-4 transform transition-transform duration-300 ${activeDrawer === 'sys' ? 'translate-y-0' : 'translate-y-full opacity-0 pointer-events-none'}`}>
+                        <ScanlineTransition trigger={activeDrawer === 'sys'}>
+                            <div className="flex flex-col gap-2">
+                                <div className="text-xs font-mono text-disco-muted uppercase tracking-widest mb-2 border-b border-disco-muted/20 pb-1">
+                                    <TextScramble text="SYSTEM CONTROLS" />
+                                </div>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowSaveManager(true); }} className="hover-jitter text-left px-3 py-2 text-disco-cyan hover:bg-white/10 text-sm font-mono">💾 Save/Load Terminals</button>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowSettings(true); }} className="hover-jitter text-left px-3 py-2 text-disco-paper hover:bg-white/10 text-sm font-mono">⚙️ Configuration</button>
+                                <div className="px-3 py-1"><MusicPlayer /></div>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowHelp(true); }} className="hover-jitter text-left px-3 py-2 text-disco-paper hover:bg-white/10 text-sm font-mono">❓ Help / Manual</button>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowRecap(true); }} className="hover-jitter text-left px-3 py-2 text-disco-accent hover:bg-white/10 text-sm font-mono">📜 Session Logs</button>
+                                <a href={`${API_URL}/export/story/default`} download className="hover-jitter text-left px-3 py-2 text-disco-yellow hover:bg-white/10 text-sm font-mono block">📤 Export Data</a>
 
-                        <VoiceInput />
+                                <div className="h-px bg-disco-muted/20 my-1"></div>
+                                <div className="text-[10px] font-mono text-disco-muted/50 uppercase tracking-widest mb-1">Dev / Debug</div>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowDebugger(true); }} className="hover-jitter text-left px-3 py-1 text-pink-500 hover:bg-white/10 text-xs font-mono">🧠 Brain</button>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowWorldDashboard(true); }} className="hover-jitter text-left px-3 py-1 text-emerald-500 hover:bg-white/10 text-xs font-mono">🌍 Sim</button>
 
-                        <input
-                            type="text"
-                            className={`flex-1 bg-black/40 border-b-2 font-serif text-xl p-4 focus:outline-none transition-all placeholder:text-disco-muted/30 ${conversationMode
-                                ? 'border-disco-cyan text-disco-cyan focus:border-disco-cyan focus:ring-2 focus:ring-disco-cyan/50'
-                                : 'border-disco-muted text-disco-paper focus:border-disco-accent focus:ring-2 focus:ring-disco-accent/50 focus:animate-[inputPulse_2s_ease-in-out_infinite]'
-                                }`}
-                            placeholder={conversationMode ? "Say something to the NPC..." : "What do you do?"}
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            disabled={isLoading}
-                        />
-                        <button
-                            type="button"
-                            onClick={handleManualCapture}
-                            className="absolute right-16 top-1/2 -translate-y-1/2 text-disco-purple hover:text-disco-paper transition-colors opacity-60 hover:opacity-100"
-                            title="Capture Cinematic Moment"
-                        >
-                            📷
-                        </button>
-                        <button
-                            type="submit"
-                            className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 transition-opacity text-disco-accent font-serif font-bold tracking-wider uppercase"
-                        >
-                            Execute
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleManualCapture}
-                            className="absolute right-24 top-1/2 -translate-y-1/2 text-disco-purple hover:text-disco-paper transition-colors opacity-60 hover:opacity-100"
-                            title="Capture Cinematic Moment"
-                        >
-                            📷
-                        </button>
-                    </form>
-
-                    {/* Keyboard Shortcuts Hint */}
-                    <div className="mt-2 text-center text-[10px] font-mono text-disco-muted/50 uppercase flex justify-center items-center gap-4 flex-wrap">
-                        <span>Press <kbd className="px-1 bg-disco-dark/50 rounded">R</kbd> roll</span>
-                        <span><kbd className="px-1 bg-disco-dark/50 rounded">1-5</kbd> stats</span>
-                        <span><kbd className="px-1 bg-disco-dark/50 rounded">F5</kbd> save</span>
-                        <span><kbd className="px-1 bg-disco-dark/50 rounded">?</kbd> help</span>
-
-                        <div className="h-4 w-px bg-disco-muted/30 mx-2"></div>
-
-                        <button
-                            onClick={() => setShowCombatDashboard(true)}
-                            className="text-disco-red hover:text-disco-paper transition-colors font-bold flex items-center gap-1"
-                            title="Combat Dashboard"
-                        >
-                            ⚔️ TACTICAL
-                        </button>
-
-                        <button
-                            onClick={() => setShowSaveManager(true)}
-                            className="text-disco-cyan hover:text-disco-paper transition-colors"
-                        >
-                            💾 Saves
-                        </button>
-                        <button
-                            onClick={() => setShowRecap(true)}
-                            className="text-disco-accent hover:text-disco-paper transition-colors"
-                        >
-                            📜 Recap
-                        </button>
-                        <button
-                            onClick={() => setShowQuickReference(true)}
-                            className="text-disco-purple hover:text-disco-paper transition-colors"
-                            title="Quick Reference (rules)"
-                        >
-                            📖 Rules
-                        </button>
-                        <button
-                            onClick={() => setShowSettings(true)}
-                            className="text-disco-accent hover:text-disco-paper transition-colors"
-                            title="Settings"
-                        >
-                            ⚙️ Settings
-                        </button>
-                        <button
-                            onClick={() => setShowBlueprint(true)}
-                            className="text-disco-green hover:text-disco-paper transition-colors"
-                            title="Tactical Blueprint (M)"
-                        >
-                            🗺️ Map
-                        </button>
-                        <a
-                            href={`${API_URL}/export/story/default`}
-                            download
-                            className="text-disco-yellow hover:text-disco-paper transition-colors"
-                            title="Export your story as Markdown"
-                        >
-                            📤 Export
-                        </a>
-                        <button
-                            onClick={() => setShowAlbum(true)}
-                            className="text-disco-purple hover:text-disco-paper transition-colors"
-                            title="Photo Album - Captured Moments"
-                        >
-                            📸 Album
-                        </button>
-                        <button
-                            onClick={() => setShowPractice(prev => !prev)}
-                            className={`transition-colors flex items-center gap-1 ${showPractice ? 'text-white font-bold' : 'text-disco-cyan hover:text-white'}`}
-                            title="Practice Cards - Master Your Voice"
-                        >
-                            🎤 Practice
-                        </button>
-                        <div className="w-px h-4 bg-disco-muted/30 mx-2"></div>
-                        <MusicPlayer />
-                        <button
-                            onClick={() => setShowStarMap(true)}
-                            className="text-disco-cyan hover:text-disco-paper transition-colors"
-                            title="Star Map Navigation"
-                        >
-                            🌌 Star Map
-                        </button>
-                        <button
-                            onClick={() => setShowRumorBoard(true)}
-                            className="text-disco-orange hover:text-disco-paper transition-colors"
-                            title="Rumor Network"
-                        >
-                            📡 Rumors
-                        </button>
-                        <button
-                            onClick={() => setShowShipBlueprint(true)}
-                            className="text-disco-red hover:text-disco-paper transition-colors"
-                            title="Ship Schematic & Condition"
-                        >
-                            🚀 Ship
-                        </button>
-                        <button
-                            onClick={() => setShowWorldEvents(true)}
-                            className="text-amber-500 hover:text-white transition-colors"
-                            title="Sector Intelligence & Events"
-                        >
-                            🌍 Log
-                        </button>
-                        <button
-                            onClick={() => setShowStoryThreads(true)}
-                            className="text-cyan-400 hover:text-white transition-colors"
-                            title="Narrative Threads & Tension"
-                        >
-                            🧶 Story
-                        </button>
-                        <button
-                            onClick={() => setShowQuestJournal(true)}
-                            className="text-amber-500 hover:text-white transition-colors"
-                            title="Quest Journal"
-                        >
-                            ⚔️ Quests
-                        </button>
-                        <button
-                            onClick={() => setShowSensorRadar(true)}
-                            className="text-cyan-400 hover:text-white transition-colors"
-                            title="Sensor Radar"
-                        >
-                            🛰️ SENSORS
-                        </button>
-                        <button
-                            onClick={() => setShowDebugger(true)}
-                            className="text-pink-500 hover:text-white transition-colors"
-                            title="NPC Cognitive Debugger"
-                        >
-                            🧠 Brain
-                        </button>
-                        <button
-                            onClick={() => setShowWorldDashboard(true)}
-                            className="text-emerald-400 hover:text-white transition-colors"
-                            title="World Simulation Control"
-                        >
-                            🌍 SIM
-                        </button>
-                        <div className="w-px h-4 bg-disco-muted/30 mx-2"></div>
-                        <button
-                            onClick={() => setShowCamp(prev => !prev)}
-                            className={`transition-colors font-bold ${showCamp ? 'text-white' : 'text-green-400 hover:text-white'}`}
-                            title="Living Hub / Camp"
-                        >
-                            🏕️ CAMP
-                        </button>
-                        <div className="w-px h-4 bg-disco-muted/30 mx-2"></div>
-                        <button
-                            onClick={async () => {
-                                if (confirm('Exit game and stop all servers?')) {
-                                    try {
-                                        await fetch('http://localhost:8000/api/shutdown', { method: 'POST' });
-                                    } catch (e) {
-                                        console.log('Server already stopped');
-                                    }
-                                    window.close();
-                                }
-                            }}
-                            className="text-red-500 hover:text-white transition-colors font-bold"
-                            title="Exit Game"
-                        >
-                            🚪 EXIT
-                        </button>
+                                <div className="h-px bg-disco-muted/20 my-1"></div>
+                                <button
+                                    onClick={async (e) => {
+                                        triggerRgbSplit(e);
+                                        if (confirm('Terminate uplink?')) {
+                                            try { await fetch('http://localhost:8000/api/shutdown', { method: 'POST' }); } catch (e) { }
+                                            window.close();
+                                        }
+                                    }}
+                                    className="hover-jitter text-left px-3 py-2 text-disco-red hover:bg-red-900/20 text-sm font-mono font-bold">🛑 TERMINATE UPLINK</button>
+                            </div>
+                        </ScanlineTransition>
                     </div>
 
+                    {/* Drawer: Codex (Right) */}
+                    <div className={`absolute bottom-full right-0 w-64 bg-black/90 border-l border-t border-disco-muted/40 p-4 transform transition-transform duration-300 ${activeDrawer === 'codex' ? 'translate-y-0' : 'translate-y-full opacity-0 pointer-events-none'}`}>
+                        <ScanlineTransition trigger={activeDrawer === 'codex'}>
+                            <div className="flex flex-col gap-2">
+                                <div className="text-xs font-mono text-disco-muted uppercase tracking-widest mb-2 border-b border-disco-muted/20 pb-1">
+                                    <TextScramble text="DATABASE ACCESS" />
+                                </div>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowQuestJournal(true); }} className="hover-jitter text-left px-3 py-2 text-amber-500 hover:bg-white/10 text-sm font-mono">⚔️ Active Missions</button>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowStoryThreads(true); }} className="hover-jitter text-left px-3 py-2 text-cyan-400 hover:bg-white/10 text-sm font-mono">🧶 Narrative Threads</button>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowRumorBoard(true); }} className="hover-jitter text-left px-3 py-2 text-disco-orange hover:bg-white/10 text-sm font-mono">📡 Rumor Network</button>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowWorldEvents(true); }} className="hover-jitter text-left px-3 py-2 text-emerald-400 hover:bg-white/10 text-sm font-mono">🌍 Sector News</button>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowAlbum(true); }} className="hover-jitter text-left px-3 py-2 text-disco-purple hover:bg-white/10 text-sm font-mono">📸 Visual Records</button>
+                                <div className="h-px bg-disco-muted/20 my-1"></div>
+                                <button onClick={(e) => { triggerRgbSplit(e); setShowSensorRadar(true); }} className="hover-jitter text-left px-3 py-2 text-cyan-400 hover:bg-white/10 text-sm font-mono">🛰️ Sensor Array</button>
+                            </div>
+                        </ScanlineTransition>
+                    </div>
+
+                    <div className="max-w-7xl mx-auto px-6 py-4 grid grid-cols-12 gap-6 items-end">
+
+                        {/* Zone A: Tactical & System (Left) - Col 1-3 */}
+                        <div className="col-span-3 flex items-center justify-start gap-3">
+                            <button
+                                onClick={(e) => { triggerRgbSplit(e); setActiveDrawer(prev => prev === 'sys' ? null : 'sys'); }}
+                                className={`hover-jitter h-12 w-12 flex items-center justify-center border transition-all duration-200 ${activeDrawer === 'sys' ? 'bg-disco-cyan text-black border-disco-cyan' : 'border-disco-muted text-disco-muted hover:border-disco-cyan hover:text-disco-cyan'}`}
+                                title="System Menu"
+                            >
+                                <span className="font-mono font-bold text-sm">SYS</span>
+                            </button>
+
+                            <div className="h-8 w-px bg-disco-muted/30 mx-1"></div>
+
+                            <button
+                                onClick={(e) => { triggerRgbSplit(e); setShowCombatDashboard(true); }}
+                                className="hover-jitter h-10 px-3 flex items-center gap-2 border border-disco-red/50 text-disco-red hover:bg-disco-red hover:text-black transition-colors"
+                                title="Tactical Dashboard"
+                            >
+                                <span className="text-lg">⚔️</span>
+                                <span className="font-mono text-xs font-bold hidden xl:inline">TAC</span>
+                            </button>
+
+                            <button
+                                onClick={(e) => { triggerRgbSplit(e); setShowCamp(prev => !prev); }}
+                                className={`hover-jitter h-10 px-3 flex items-center gap-2 border transition-colors ${showCamp ? 'bg-white text-black border-white' : 'border-disco-muted text-disco-green hover:border-disco-green hover:text-disco-green'}`}
+                                title="Camp / Living Hub"
+                            >
+                                <span className="text-lg">🏕️</span>
+                            </button>
+                        </div>
+
+                        {/* Zone B: Action Hub (Center) - Col 4-9 */}
+                        <div className="col-span-6 relative">
+                            {/* Decorative Brackets */}
+                            <div className="absolute -left-4 top-0 bottom-0 w-2 border-l border-t border-b border-disco-muted/30 opacity-50"></div>
+                            <div className="absolute -right-4 top-0 bottom-0 w-2 border-r border-t border-b border-disco-muted/30 opacity-50"></div>
+
+                            <form onSubmit={handleSubmit} className="relative group w-full">
+                                <VoiceInput />
+
+                                <div className="relative flex items-center">
+                                    <div className={`absolute left-0 pl-4 font-mono text-xs pointer-events-none transition-colors ${conversationMode ? 'text-disco-cyan' : 'text-disco-accent'}`}>
+                                        {conversationMode ? 'MSG_OUT >>' : 'CMD_IN >>'}
+                                    </div>
+                                    <input
+                                        type="text"
+                                        className={`w-full bg-black/80 border-2 font-serif text-xl py-4 pl-24 pr-16 focus:outline-none transition-all placeholder:text-disco-muted/20 ${conversationMode
+                                            ? 'border-disco-cyan text-disco-cyan focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]'
+                                            : 'border-disco-muted text-disco-paper focus:border-disco-accent focus:shadow-[0_0_20px_rgba(253,224,71,0.1)]'
+                                            }`}
+                                        placeholder={conversationMode ? "Speak to them..." : "What do you do?"}
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        disabled={isLoading}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setConversationMode(prev => !prev)}
+                                        className={`absolute right-2 p-2 rounded hover:bg-white/10 transition-colors ${conversationMode ? 'text-disco-cyan' : 'text-disco-muted'}`}
+                                        title={conversationMode ? "Switch to Narrative Mode" : "Switch to Conversation Mode"}
+                                    >
+                                        {conversationMode ? "💬" : "📜"}
+                                    </button>
+                                </div>
+                            </form>
+
+                            {/* Context Action Bar (Below Input) */}
+                            <div className="flex justify-between mt-2 px-1">
+                                <div className="flex gap-2">
+                                    <button onClick={(e) => { triggerRgbSplit(e); setShowSkillCheck(true); }} className="hover-jitter text-[10px] font-mono text-disco-muted hover:text-disco-accent uppercase tracking-wider">[R]oll</button>
+                                    <button onClick={(e) => { triggerRgbSplit(e); setShowPractice(prev => !prev); }} className="hover-jitter text-[10px] font-mono text-disco-muted hover:text-disco-cyan uppercase tracking-wider">[P]ractice</button>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={(e) => { triggerRgbSplit(e); handleManualCapture(); }} className="hover-jitter text-[10px] font-mono text-disco-muted hover:text-disco-purple uppercase tracking-wider">[C]apture Frame</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Zone C: Data & Map (Right) - Col 10-12 */}
+                        <div className="col-span-3 flex items-center justify-end gap-3">
+                            <button
+                                onClick={(e) => { triggerRgbSplit(e); setShowStarMap(true); }}
+                                className="hover-jitter h-10 px-3 flex items-center gap-2 border border-disco-cyan/30 text-disco-cyan hover:bg-disco-cyan/10 transition-colors"
+                                title="Star Map"
+                            >
+                                <span className="text-lg">🌌</span>
+                                <span className="font-mono text-xs font-bold hidden xl:inline">NAV</span>
+                            </button>
+
+                            <button
+                                onClick={(e) => { triggerRgbSplit(e); setShowBlueprint(true); }}
+                                className="hover-jitter h-10 px-3 flex items-center gap-2 border border-disco-green/30 text-disco-green hover:bg-disco-green/10 transition-colors"
+                                title="Local Map"
+                            >
+                                <span className="text-lg">🗺️</span>
+                            </button>
+
+                            <div className="h-8 w-px bg-disco-muted/30 mx-1"></div>
+
+                            <button
+                                onClick={(e) => { triggerRgbSplit(e); setActiveDrawer(prev => prev === 'codex' ? null : 'codex'); }}
+                                className={`hover-jitter h-12 w-12 flex items-center justify-center border transition-all duration-200 ${activeDrawer === 'codex' ? 'bg-amber-500 text-black border-amber-500' : 'border-disco-muted text-disco-muted hover:border-amber-500 hover:text-amber-500'}`}
+                                title="Codex / Database"
+                            >
+                                <span className="font-mono font-bold text-sm">DAT</span>
+                            </button>
+                        </div>
+
+                    </div>
                 </div>
             </div>
 

@@ -37,7 +37,7 @@ VOICE_PROFILES = {
         "description": "Passionate, energetic, inspiring"
     },
     "enigmatic_oracle": {
-        "voice_id": "MF3mGyEYCl7XYWbV9V6O",  # Example: Elli
+        "voice_id": "21m00Tcm4TlvDq8ikWAM",  # Rachel - Clear, professional female voice
         "description": "Mysterious, calm, otherworldly"
     },
     "default": {

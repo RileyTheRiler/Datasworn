@@ -832,3 +832,154 @@
 .large-text span {
   font-size: 1.25rem !important;
 }
+
+/* Quantum Jitter (Hover State) */
+.hover-jitter:hover {
+  animation: jitter 0.2s steps(2) infinite;
+}
+
+@keyframes jitter {
+  0% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-2px);
+  }
+
+  50% {
+    transform: translateX(2px);
+  }
+
+  75% {
+    transform: translateX(-1px);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/* Chromatic Aberration Flash (Click) */
+.animate-rgb-split {
+  animation: rgbSplit 0.15s steps(3);
+  position: relative;
+}
+
+.animate-rgb-split::before,
+.animate-rgb-split::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.8;
+}
+
+.animate-rgb-split::before {
+  color: #ff0000;
+  z-index: -1;
+  animation: rgbSplitRed 0.15s steps(3);
+}
+
+.animate-rgb-split::after {
+  color: #0000ff;
+  z-index: -2;
+  animation: rgbSplitBlue 0.15s steps(3);
+}
+
+@keyframes rgbSplit {
+  0% {
+    transform: translate(0);
+  }
+
+  20% {
+    transform: translate(-2px, 2px);
+  }
+
+  40% {
+    transform: translate(-2px, -2px);
+  }
+
+  60% {
+    transform: translate(2px, 2px);
+  }
+
+  80% {
+    transform: translate(2px, -2px);
+  }
+
+  100% {
+    transform: translate(0);
+  }
+}
+
+@keyframes rgbSplitRed {
+  0% {
+    transform: translate(0);
+    opacity: 0;
+  }
+
+  20% {
+    transform: translate(-4px, 0);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translate(0);
+    opacity: 0;
+  }
+}
+
+@keyframes rgbSplitBlue {
+  0% {
+    transform: translate(0);
+    opacity: 0;
+  }
+
+  20% {
+    transform: translate(4px, 0);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translate(0);
+    opacity: 0;
+  }
+}
+
+/* Scanline Wipe */
+.animate-scanline {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-scanline::after {
+  content: '';
+  position: absolute;
+  top: -100%;
+  left: 0;
+  width: 100%;
+  height: 20%;
+  background: linear-gradient(to bottom, transparent, rgba(107, 228, 227, 0.4), transparent);
+  animation: scanlineWipe 0.6s ease-out forwards;
+  pointer-events: none;
+  z-index: 50;
+}
+
+@keyframes scanlineWipe {
+  0% {
+    top: -20%;
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  100% {
+    top: 120%;
+    opacity: 0;
+  }
+}

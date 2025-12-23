@@ -33,7 +33,7 @@ const MainMenu = ({ onNewGame, onLoadGame, onExit }) => {
                 {/* Title Section */}
                 <div className="text-center space-y-4">
                     <h1 className="text-8xl font-serif tracking-widest text-transparent bg-clip-text bg-gradient-to-b from-disco-paper via-gray-400 to-gray-600 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
-                        DISTANT SKIES
+                        IN WHAT DISTANT DEEPS OR SKIES
                     </h1>
                     <div className="h-px w-full bg-gradient-to-r from-transparent via-disco-cyan/50 to-transparent"></div>
                 </div>

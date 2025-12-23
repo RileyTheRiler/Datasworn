@@ -69,6 +69,21 @@ export const SoundEffectsProvider = ({ children }) => {
                 src: ['/assets/audio/sfx/whoosh.mp3', '/assets/audio/sfx/whoosh.ogg', '/assets/audio/sfx/whoosh.wav'],
                 volume: 0.4,
                 fallback: () => playBeep(300, 0.2, 'sine')
+            },
+            glitch_1: {
+                src: ['/assets/audio/sfx/glitch_1.wav', '/assets/audio/sfx/glitch_1.mp3', '/assets/audio/sfx/glitch_1.ogg'],
+                volume: 0.4,
+                fallback: () => playBeep(1200, 0.05, 'sawtooth')
+            },
+            glitch_2: {
+                src: ['/assets/audio/sfx/glitch_2.wav', '/assets/audio/sfx/glitch_2.mp3', '/assets/audio/sfx/glitch_2.ogg'],
+                volume: 0.4,
+                fallback: () => playBeep(900, 0.05, 'square')
+            },
+            glitch_3: {
+                src: ['/assets/audio/sfx/glitch_3.wav', '/assets/audio/sfx/glitch_3.mp3', '/assets/audio/sfx/glitch_3.ogg'],
+                volume: 0.4,
+                fallback: () => playBeep(1500, 0.05, 'sawtooth')
             }
         };
 
@@ -167,8 +182,18 @@ export const SoundEffectsProvider = ({ children }) => {
 
     const toggleMute = () => setIsMuted(prev => !prev);
 
+    /**
+     * Play a random glitch sound from the registered variations
+     */
+    const playRandomGlitch = (options = {}) => {
+        const glitchVariations = ['glitch_1', 'glitch_2', 'glitch_3'];
+        const randomName = glitchVariations[Math.floor(Math.random() * glitchVariations.length)];
+        playSound(randomName, options);
+    };
+
     const value = {
         playSound,
+        playRandomGlitch,
         isMuted,
         setIsMuted,
         toggleMute,

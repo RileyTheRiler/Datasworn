@@ -28,7 +28,7 @@ const StatBar = ({ label, value, max, color, isMomentum }) => {
                 </span>
             </div>
 
-            <div className={`h-1.5 bg-black/60 border ${isBurning ? 'border-disco-accent' : 'border-disco-cyan/20'} relative overflow-hidden transition-colors duration-500`}>
+            <div className={`h-2.5 bg-black/60 border ${isBurning ? 'border-disco-accent' : 'border-disco-cyan/20'} relative overflow-hidden transition-colors duration-500 shadow-[0_0_10px_rgba(0,0,0,0.5)]`}>
                 {/* Animated background grid */}
                 <div className="absolute inset-0 opacity-20" style={{
                     backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(107, 228, 227, 0.1) 2px, rgba(107, 228, 227, 0.1) 4px)'
@@ -76,6 +76,9 @@ const CharacterHUD = ({ character, assets, onAssetsUpdate, className = "" }) => 
 
             <div className="flex items-start gap-6 mb-6 relative z-10">
                 <div className="w-24 h-32 bg-disco-dark border-2 border-disco-paper/20 shadow-hard rotate-[-1deg] relative overflow-hidden group transition-transform hover:rotate-0">
+                    {/* Static ID Badge Filter Overlay */}
+                    <div className="absolute inset-0 bg-[url('/assets/noise.png')] opacity-10 mix-blend-overlay pointer-events-none z-10"></div>
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/60 z-10 pointer-events-none"></div>
                     {/* Portrait */}
                     <img
                         src={assets?.portrait || "/assets/defaults/avatar_wireframe.svg"}

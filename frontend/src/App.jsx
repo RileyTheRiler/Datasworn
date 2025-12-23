@@ -200,7 +200,7 @@ function GameContent() {
         {/* Title - Hidden in Wizard if transitioning from Menu? Keep for now */}
         <div className="pt-8 text-center">
           <h1 className="text-5xl font-serif text-disco-paper tracking-wider">
-            DISTANT SKIES
+            IN WHAT DISTANT DEEPS OR SKIES
           </h1>
         </div>
 

@@ -253,6 +253,55 @@ export const MomentumBurst = ({ trigger, isPositive = true }) => {
     );
 };
 
+// ============================================================================
+// REACTIVE STATIC (Health/Spirit Warning)
+// ============================================================================
+export const ReactiveStatic = ({ health = 5, spirit = 5, max = 5 }) => {
+    // Calculate critical status (below 20% = 1/5)
+    // 0 = no static, 1 = full static
+    const healthFactor = Math.max(0, (1 - (health / max)) * 2); // Starts ramping up at 50% health, severe at 0
+    const spiritFactor = Math.max(0, (1 - (spirit / max)) * 2);
+
+    const intensity = Math.max(0, (healthFactor + spiritFactor) - 1.5); // Only show if critically low (e.g. sum > 1.5)
+
+    // Or simpler logic: if either is <= 1 (20%), show static
+    const isCritical = health <= 1 || spirit <= 1;
+    const staticOpacity = isCritical ? 0.15 : 0;
+
+    if (!isCritical) return null;
+
+    return (
+        <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden mix-blend-screen">
+            <div
+                className="absolute inset-0 bg-noise animate-static"
+                style={{ opacity: staticOpacity }}
+            />
+            {/* Occasional flicker handled by parent or CSS animation keyframes variation */}
+        </div>
+    );
+};
+
+// ============================================================================
+// SCANLINE TRANSITION WRAPPER
+// ============================================================================
+export const ScanlineTransition = ({ children, trigger }) => {
+    const [active, setActive] = useState(false);
+
+    useEffect(() => {
+        if (trigger) {
+            setActive(true);
+            const timer = setTimeout(() => setActive(false), 600);
+            return () => clearTimeout(timer);
+        }
+    }, [trigger]);
+
+    return (
+        <div className={`relative ${active ? 'animate-scanline' : ''}`}>
+            {children}
+        </div>
+    );
+};
+
 export default {
     ScreenShake,
     TensionVignette,
@@ -260,4 +309,6 @@ export default {
     HijackOverlay,
     AmbientParticles,
     MomentumBurst,
+    ReactiveStatic,
+    ScanlineTransition
 };
