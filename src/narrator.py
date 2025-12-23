@@ -5,8 +5,7 @@ Generates narrative prose using Ollama for local LLM inference.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Generator
-import ollama
+from typing import Any, Generator, Optional
 from src.psych_profile import PsychologicalProfile, PsychologicalEngine
 from src.style_profile import StyleProfile, load_style_profile
 from src.guardrails import GuardrailFactStore, build_guardrail_prompt, sanitize_and_verify
@@ -275,8 +274,29 @@ class NarratorConfig:
 @dataclass
 class OllamaClient:
     """Wrapper for Ollama API."""
+
     model: str = "llama3.1"
-    _client: ollama.Client = field(default_factory=ollama.Client, repr=False)
+    _client: Any = field(default=None, repr=False, init=False)
+    _ollama: Any = field(default=None, repr=False, init=False)
+    _availability_error: str | None = field(default=None, repr=False, init=False)
+    ResponseError: type = Exception
+
+    def __post_init__(self):
+        try:
+            import ollama
+
+            self._ollama = ollama
+            self.ResponseError = ollama.ResponseError
+            self._client = ollama.Client()
+        except ImportError:
+            self._availability_error = (
+                "[Ollama unavailable: The 'ollama' package is not installed. Install it to use this backend.]"
+            )
+        except Exception as e:
+            self._availability_error = (
+                "[Ollama unavailable: Unable to initialize Ollama client. "
+                f"Details: {e}]"
+            )
 
     def generate(
         self,
@@ -296,6 +316,10 @@ class OllamaClient:
             Text chunks as they're generated.
         """
         config = config or NarratorConfig()
+
+        if not self._client:
+            yield self._availability_error or "[Ollama unavailable: Client not initialized.]"
+            return
 
         try:
             stream = self._client.chat(
@@ -318,7 +342,7 @@ class OllamaClient:
                 if chunk.get("message", {}).get("content"):
                     yield chunk["message"]["content"]
 
-        except ollama.ResponseError as e:
+        except self.ResponseError as e:
             yield f"[Error communicating with Ollama: {e}]"
         except Exception as e:
             yield f"[Ollama error: {e}]"
@@ -339,6 +363,9 @@ class OllamaClient:
 
     def get_model_info(self) -> dict:
         """Get information about the current model."""
+        if not self._client:
+            return {"error": self._availability_error or "Ollama client unavailable."}
+
         try:
             return self._client.show(self.model)
         except Exception as e:
@@ -346,6 +373,9 @@ class OllamaClient:
 
     def is_available(self) -> bool:
         """Check if Ollama is available and model is loaded."""
+        if not self._client:
+            return False
+
         try:
             models = self._client.list()
             model_names = [m.get("name", "").split(":")[0] for m in models.get("models", [])]
