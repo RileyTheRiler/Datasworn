@@ -27,6 +27,7 @@ class ActionRollResult:
     challenge_dice: tuple[int, int]
     result: RollResult
     is_match: bool
+    rule_citation: str = "Action Roll: d6 + stat + adds vs. two d10s"
 
     def __str__(self) -> str:
         match_str = " (MATCH!)" if self.is_match else ""
@@ -35,6 +36,20 @@ class ActionRollResult:
             f"Action: d6({self.action_die}) + {self.stat} + {self.adds} = {self.action_score}\n"
             f"Challenge: d10({self.challenge_dice[0]}) vs d10({self.challenge_dice[1]})"
         )
+
+    def breakdown(self) -> dict:
+        """Structured breakdown for UI/CLI explanation panels."""
+
+        return {
+            "action_die": self.action_die,
+            "stat": self.stat,
+            "adds": self.adds,
+            "action_score": self.action_score,
+            "challenge": list(self.challenge_dice),
+            "result": self.result.value,
+            "is_match": self.is_match,
+            "rule": self.rule_citation,
+        }
 
 
 @dataclass
