@@ -19,9 +19,7 @@ import PhotoAlbum from './components/PhotoAlbum';
 import StarMap from './components/StarMap';
 import RumorBoard from './components/RumorBoard';
 import ShipBlueprintViewer from './components/ShipBlueprintViewer';
-
-
-const API_URL = 'http://localhost:8000/api';
+import api from './utils/api';
 
 // Atmospheric loading messages
 const LOADING_MESSAGES = [
@@ -85,7 +83,7 @@ const StatBar = ({ label, value, max, color }) => {
     );
 }
 
-const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
+const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate, isLoading }) => {
     const { character, narrative, world, session } = gameState;
     const scrollRef = useRef(null);
     const [input, setInput] = React.useState("");
@@ -231,54 +229,41 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     };
 
     const handleRollComplete = async () => {
-        // This needs to be a real API call.
-        // Since we don't have session ID easily here without refactoring App.jsx heavily to pass it,
-        // We will hacky-fetch it or assume onAction can handle a special object?
-        // No, let's just use the `fetch` here, assuming we need to grab session ID.
-        // Actually, let's assume valid session for now or mock it if strictly visual.
-        // But we want it to work.
-        // Let's add session_id to `gameState` in `server.py`? 
-        // Good idea.
-
-        const sessionId = "default"; // Hardcoded in server.py MVP
-
-        const res = await fetch(`${API_URL}/roll/commit`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                session_id: sessionId,
+        try {
+            const data = await api.post('/roll/commit', {
+                session_id: session || "default",
                 stat_name: activeStat.name,
                 stat_val: activeStat.value,
                 adds: 0,
                 move_name: "Action Roll"
-            })
-        });
-        const data = await res.json();
-        // Update global state via parent?
-        // The parent `onAction` updates state. We should probably trigger a state update here too.
-        // Let's reload state? or pass a refresh callback?
-        // For MVP, we'll just reload the page/state via a "look" action or similar invisible update?
-        // Better: App.jsx should pass a `setGameState` equivalent.
-        // Using `onAction` with a special string is a hack.
-        // Let's just do `onAction("Checking " + activeStat.name)`... 
-        // Wait, that generates text narrative. 
-        // `data` contains the new state and narrative!
-        // We can't update state effortlessly without lifting state up or a callback.
-        // Let's cheat and reload via window for the "Verification" phase if needed, 
-        // OR better: Assume the user sees the output in the component, and then the narrative updates on next action.
+            });
 
-        return data;
+            // Update game state if callback is provided
+            if (onGameStateUpdate && data.state) {
+                onGameStateUpdate(data.state);
+            }
+
+            // Update assets if returned
+            if (onAssetsUpdate && data.assets) {
+                onAssetsUpdate(prev => ({ ...prev, ...data.assets }));
+            }
+
+            return data;
+        } catch (error) {
+            console.error("Roll commit failed:", error);
+            throw error;
+        }
     }
 
     return (
-        <div className="flex h-screen w-full bg-disco-bg bg-grunge bg-blend-multiply overflow-hidden animate-[crtFlicker_0.15s_infinite]">
+        <div className="flex flex-col lg:flex-row h-screen w-full bg-disco-bg bg-grunge bg-blend-multiply overflow-hidden animate-[crtFlicker_0.15s_infinite]">
             {/* LEFT: Visual & Stats */}
-            <div className="w-1/3 border-r border-disco-cyan/10 flex flex-col relative bg-black/20">
+            <div className="w-full lg:w-1/3 border-b lg:border-b-0 lg:border-r border-disco-cyan/10 flex flex-col relative bg-black/20">
                 {/* HUD Corner Brackets - Top Left */}
                 <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-disco-cyan/40 z-50" />
                 <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-disco-cyan/40 z-50" />
                 {/* Isometric Viewport */}
-                <div className="flex-1 bg-black/80 relative overflow-hidden group">
+                <div className="viewport-container flex-1 bg-black/80 relative overflow-hidden group">
                     {/* Scene Display */}
                     <div className="absolute inset-0 z-0 group-hover:shadow-glow transition-shadow duration-300">
                         <SceneDisplay
@@ -304,7 +289,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                 </div>
 
                 {/* Character HUD */}
-                <div className="h-1/3 bg-disco-panel p-6 border-t border-disco-muted/20 flex flex-col relative overflow-hidden">
+                <div className="stats-panel h-1/3 bg-disco-panel p-6 border-t border-disco-muted/20 flex flex-col relative overflow-hidden">
                     {/* Grunge Overlay for Panel */}
                     <div className="absolute inset-0 bg-grunge opacity-20 pointer-events-none"></div>
 
@@ -344,7 +329,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             </div>
 
             {/* RIGHT: Narrative Flow */}
-            <div className="w-2/3 flex flex-col relative bg-disco-panel/60">
+            <div className="w-full lg:w-2/3 flex flex-col relative bg-disco-panel/60">
                 {/* HUD Corner Brackets - Top Right */}
                 <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-disco-accent/40 z-50" />
                 {/* Animated grid background */}
@@ -354,7 +339,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                     animation: 'gridScroll 20s linear infinite'
                 }} />
                 {/* Log */}
-                <div className="flex-1 overflow-y-auto p-12 scroll-smooth" ref={scrollRef}>
+                <div className="narrative-scroll flex-1 overflow-y-auto p-12 scroll-smooth" ref={scrollRef}>
                     <div className="max-w-3xl mx-auto space-y-12">
                         <div className="prose prose-invert prose-lg text-disco-paper/90 fade-in leading-loose">
                             <TypewriterText
@@ -400,7 +385,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
 
                         <input
                             type="text"
-                            className="flex-1 bg-black/40 border-b-2 border-disco-muted text-disco-paper font-serif text-xl p-4 focus:outline-none focus:border-disco-accent focus:ring-2 focus:ring-disco-accent/50 focus:animate-[inputPulse_2s_ease-in-out_infinite] transition-all placeholder:text-disco-muted/30"
+                            className="action-input flex-1 bg-black/40 border-b-2 border-disco-muted text-disco-paper font-serif text-xl p-4 focus:outline-none focus:border-disco-accent focus:ring-2 focus:ring-disco-accent/50 focus:animate-[inputPulse_2s_ease-in-out_infinite] transition-all placeholder:text-disco-muted/30"
                             placeholder="What do you do?"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}

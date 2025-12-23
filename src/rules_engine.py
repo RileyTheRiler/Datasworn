@@ -238,3 +238,91 @@ def calculate_probability(stat: int, adds: int = 0) -> dict[str, float]:
         "miss": round(misses / total_combinations, 3)
     }
 
+
+def calculate_2d6_probability(modifier: int = 0) -> dict[str, float]:
+    """
+    Calculate PbtA-style probabilities for a 2d6 + modifier roll.
+
+    Returns strong hits (10+), weak hits (7-9), and misses (6-).
+    """
+    strong_hits = 0
+    weak_hits = 0
+    misses = 0
+    total_combinations = 6 * 6
+
+    for d1 in range(1, 7):
+        for d2 in range(1, 7):
+            total = d1 + d2 + modifier
+            if total >= 10:
+                strong_hits += 1
+            elif total >= 7:
+                weak_hits += 1
+            else:
+                misses += 1
+
+    return {
+        "strong_hit": round(strong_hits / total_combinations, 3),
+        "weak_hit": round(weak_hits / total_combinations, 3),
+        "miss": round(misses / total_combinations, 3),
+    }
+
+
+def calculate_d20_probability(
+    dc: int,
+    modifier: int = 0,
+    advantage: bool = False,
+    disadvantage: bool = False,
+    fixed_roll: int | None = None,
+) -> dict[str, float]:
+    """
+    Calculate the probability of meeting/exceeding a DC on a d20 roll.
+
+    Supports advantage/disadvantage and tracks natural 20/1 critical bands.
+    When fixed_roll is provided, advantage/disadvantage are ignored and the
+    function reports deterministic outcomes for that die result.
+    """
+    if advantage and disadvantage:
+        raise ValueError("Cannot have both advantage and disadvantage")
+
+    if fixed_roll is not None:
+        rolls = [(fixed_roll, fixed_roll)] if (advantage or disadvantage) else [(fixed_roll,)]
+    elif advantage or disadvantage:
+        rolls = [
+            (r1, r2)
+            for r1 in range(1, 21)
+            for r2 in range(1, 21)
+        ]
+    else:
+        rolls = [(r,) for r in range(1, 21)]
+
+    success = 0
+    failure = 0
+    crit_success = 0
+    crit_failure = 0
+    total_combinations = len(rolls)
+
+    for result in rolls:
+        if advantage:
+            final = max(result)
+        elif disadvantage:
+            final = min(result)
+        else:
+            final = result[0]
+
+        if final == 20:
+            crit_success += 1
+        if final == 1:
+            crit_failure += 1
+
+        if final + modifier >= dc:
+            success += 1
+        else:
+            failure += 1
+
+    return {
+        "success": round(success / total_combinations, 3),
+        "failure": round(failure / total_combinations, 3),
+        "critical_success": round(crit_success / total_combinations, 3),
+        "critical_failure": round(crit_failure / total_combinations, 3),
+    }
+

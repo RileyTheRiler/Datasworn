@@ -26,7 +26,7 @@ from src.world_coherence import WorldStateCoherence, WorldFactType
 from src.moral_dilemma import DilemmaGenerator, DilemmaType
 from src.narrative import (
     PayoffTracker, NPCMemoryBank, ConsequenceManager, ChoiceEchoSystem,
-    OpeningHookSystem, NPCEmotionalStateMachine, MoralReputationSystem, DramaticIronyTracker,
+    OpeningHookSystem, NPCEmotionalStateMachine, MoralReputationSystem, DramaticIronyTracker, ReputationLedger,
     StoryBeatGenerator, PlotManager, BranchingNarrativeSystem, NPCGoalPursuitSystem,
     EndingPreparationSystem, ImpossibleChoiceGenerator, EnvironmentalStoryteller, FlashbackSystem,
     EndingPreparationSystem, ImpossibleChoiceGenerator, EnvironmentalStoryteller, FlashbackSystem,
@@ -62,6 +62,7 @@ class NarrativeOrchestrator:
     opening_hooks: OpeningHookSystem = field(default_factory=OpeningHookSystem)
     npc_emotions: NPCEmotionalStateMachine = field(default_factory=NPCEmotionalStateMachine)
     reputation: MoralReputationSystem = field(default_factory=MoralReputationSystem)
+    social_reputation: ReputationLedger = field(default_factory=ReputationLedger)
     irony_tracker: DramaticIronyTracker = field(default_factory=DramaticIronyTracker)
     
     # Phase 3 Systems
@@ -362,15 +363,36 @@ class NarrativeOrchestrator:
         for npc in active_npcs:
             if npc not in self.npc_memories:
                 self.npc_memories[npc] = NPCMemoryBank(npc_id=npc)
-            
+            memory_bank = self.npc_memories[npc]
+
             # Record that this interaction happened
-            # We assume a general "interaction" topic for now unless parsed
-            self.npc_memories[npc].record_interaction(
+            memory_bank.record_interaction(
                 scene_num=self.current_scene,
                 topic="general_interaction",
                 content=narrative_output[:100], # Store brief snippet
                 emotion="NEUTRAL" # Todo: derive from sentiment analysis
             )
+
+            lowered_input = player_input.lower()
+            if "promise" in lowered_input:
+                memory_bank.record_promise(
+                    description="Player made a promise",
+                    scene_num=self.current_scene,
+                )
+
+            if any(keyword in lowered_input for keyword in ["betray", "lie", "break"]):
+                memory_bank.resolve_promise(
+                    description="Player made a promise",
+                    kept=False,
+                    resolution_scene=self.current_scene,
+                )
+
+            if "help" in lowered_input or "save" in lowered_input:
+                memory_bank.record_notable_event("Player assisted recently", self.current_scene)
+                self.social_reputation.adjust_npc(npc, trust_delta=5)
+            if any(kw in lowered_input for kw in ["attack", "threat", "steal"]):
+                memory_bank.record_notable_event("Player acted aggressively", self.current_scene)
+                self.social_reputation.adjust_npc(npc, trust_delta=-8, fear_delta=5)
             
         # 7. Update Reputation (Phase 2)
         # Rough heuristic for now - real system would use LLM analysis of player_action
@@ -378,6 +400,14 @@ class NarrativeOrchestrator:
             self.reputation.record_choice("Violence used", mercy_delta=-5)
         elif "save" in player_input.lower() or "help" in player_input.lower():
             self.reputation.record_choice("Altruism shown", mercy_delta=5, selfless_delta=5)
+
+        # 7b. Update social reputation vectors for factions (basic heuristic)
+        if location:
+            faction_key = location.split(":")[0] if ":" in location else location
+            if "help" in player_input.lower():
+                self.social_reputation.adjust_faction(faction_key, trust_delta=3)
+            if "attack" in player_input.lower():
+                self.social_reputation.adjust_faction(faction_key, trust_delta=-5, fear_delta=4)
             
         # 8. Update Emotions (Phase 2)
         # Decay old emotions first
@@ -410,6 +440,7 @@ class NarrativeOrchestrator:
             # Phase 2 Persistence
             "npc_emotions": self.npc_emotions.to_dict(),
             "reputation": self.reputation.to_dict(),
+            "social_reputation": self.social_reputation.to_dict(),
             "irony_tracker": self.irony_tracker.to_dict(),
             # Phase 3 Persistence
             "story_beats": self.story_beats.to_dict(),
@@ -483,10 +514,13 @@ class NarrativeOrchestrator:
         # Phase 2 Rehydration
         if "npc_emotions" in data:
             orchestrator.npc_emotions = NPCEmotionalStateMachine.from_dict(data["npc_emotions"])
-            
+
         if "reputation" in data:
             orchestrator.reputation = MoralReputationSystem.from_dict(data["reputation"])
-            
+
+        if "social_reputation" in data:
+            orchestrator.social_reputation = ReputationLedger.from_dict(data["social_reputation"])
+
         if "irony_tracker" in data:
             orchestrator.irony_tracker = DramaticIronyTracker.from_dict(data["irony_tracker"])
             
