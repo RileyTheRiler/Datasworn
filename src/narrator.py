@@ -9,6 +9,7 @@ from typing import Generator
 import ollama
 from src.psych_profile import PsychologicalProfile, PsychologicalEngine
 from src.style_profile import StyleProfile, load_style_profile
+from src.guardrails import GuardrailFactStore, build_guardrail_prompt, sanitize_and_verify
 
 
 # ============================================================================
@@ -534,6 +535,37 @@ def get_llm_client(config: NarratorConfig = None):
         return OllamaClient(model=config.model)
 
 
+def build_guardrail_store(
+    player_input: str,
+    character_name: str,
+    location: str,
+    context: str = "",
+    roll_result: str = "",
+    psych_profile: PsychologicalProfile | None = None,
+) -> GuardrailFactStore:
+    """Prepare the fact store used for guardrails."""
+    facts = [
+        f"Player: {character_name}",
+        f"Location: {location}",
+        f"Stated action: {player_input}",
+    ]
+
+    if context:
+        facts.append(f"Recent context: {context}")
+    if roll_result:
+        facts.append(f"Dice result: {roll_result}")
+
+    emotional_state = getattr(psych_profile, "current_emotion", "") if psych_profile else ""
+    personality_tone = "gritty, grounded Starforged tone"
+
+    return GuardrailFactStore(
+        high_confidence_facts=facts,
+        current_goal="Advance the scene without inventing unsupported lore.",
+        emotional_state=emotional_state or "steady focus",
+        personality_tone=personality_tone,
+    )
+
+
 # ============================================================================
 # Narrative Generation
 # ============================================================================
@@ -548,6 +580,8 @@ def build_narrative_prompt(
     psych_profile: PsychologicalProfile | None = None,
     hijack: str | None = None,
     style_profile: StyleProfile | None = None,
+    guardrail_packet: str = "",
+    guardrail_rules: str = "",
 ) -> str:
     """
     Build the full prompt for narrative generation.
@@ -567,6 +601,12 @@ def build_narrative_prompt(
 
     if context:
         parts.append(f"[Previous scene]\n{context}\n")
+
+    if guardrail_packet:
+        parts.append(guardrail_packet)
+
+    if guardrail_rules:
+        parts.append(guardrail_rules)
 
     parts.append(f"[Current location: {location}]")
     parts.append(f"[Character: {character_name}]")
@@ -672,6 +712,15 @@ def generate_narrative(
     """
     config = config or NarratorConfig()
 
+    guardrail_store = build_guardrail_store(
+        player_input=player_input,
+        character_name=character_name,
+        location=location,
+        context=context,
+        roll_result=roll_result,
+        psych_profile=psych_profile,
+    )
+
     prompt = build_narrative_prompt(
         player_input=player_input,
         roll_result=roll_result,
@@ -682,6 +731,8 @@ def generate_narrative(
         psych_profile=psych_profile,
         hijack=hijack,
         style_profile=load_style_profile(config.style_profile_name) if config.style_profile_name else None,
+        guardrail_packet=guardrail_store.build_context_packet(),
+        guardrail_rules=guardrail_store.guardrail_rules(),
     )
 
     client = get_llm_client(config)
@@ -694,7 +745,8 @@ def generate_narrative(
             f"*Placeholder narrative for: {player_input}*"
         )
 
-    return client.generate_sync(prompt, config=config)
+    narrative = client.generate_sync(prompt, config=config)
+    return sanitize_and_verify(narrative, guardrail_store)
 
 
 def generate_narrative_stream(
@@ -715,6 +767,15 @@ def generate_narrative_stream(
     """
     config = config or NarratorConfig()
 
+    guardrail_store = build_guardrail_store(
+        player_input=player_input,
+        character_name=character_name,
+        location=location,
+        context=context,
+        roll_result=roll_result,
+        psych_profile=psych_profile,
+    )
+
     prompt = build_narrative_prompt(
         player_input=player_input,
         roll_result=roll_result,
@@ -725,6 +786,8 @@ def generate_narrative_stream(
         psych_profile=psych_profile,
         hijack=hijack,
         style_profile=load_style_profile(config.style_profile_name) if config.style_profile_name else None,
+        guardrail_packet=guardrail_store.build_context_packet(),
+        guardrail_rules=guardrail_store.guardrail_rules(),
     )
 
     client = get_llm_client(config)
@@ -733,4 +796,5 @@ def generate_narrative_stream(
         yield f"[{config.backend} model '{config.model}' is not available.]"
         return
 
-    yield from client.generate(prompt, config=config)
+    raw_text = "".join(client.generate(prompt, config=config))
+    yield sanitize_and_verify(raw_text, guardrail_store)

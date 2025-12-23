@@ -25,6 +25,7 @@ def test_portrait_prompts():
                 style=PortraitStyle.PIXEL_ART,
                 expression=PortraitExpression.ANGRY,
                 conditions=["scarred", "tired"],
+                conditions=["scarred", "tired"]
             )
         )
         print(f"Generated URL: {url}")
@@ -40,6 +41,7 @@ def test_portrait_prompts():
                 "A rugged spacer",
                 style=PortraitStyle.OIL_PAINTING,
                 expression=PortraitExpression.WEARY,
+                expression=PortraitExpression.WEARY
             )
         )
         print(f"Generated URL: {url}")

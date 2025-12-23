@@ -311,6 +311,18 @@ def format_quests(quest_lore_state) -> str:
     try:
         engine = QuestLoreEngine.from_dict(data)
         quests_dict = engine.quests.quests
+        
+        # Get simplified text representation
+        lines = []
+        for q_id, quest in engine.quests.quests.items():
+            if quest.status.value != "completed":
+                lines.append(f"**{quest.title}**")
+                for obj in quest.objectives:
+                    completed = getattr(obj, "is_completed", getattr(obj, "completed", False))
+                    status = "☑️" if completed else "⬜"
+                    lines.append(f"{status} {obj.description}")
+        
+        return "\n".join(lines) if lines else "*No active quests*"
     except Exception:
         # Fall back to raw dict traversal if dataclass parsing fails
         quests_dict = data.get("quests", {}).get("quests", {}) if isinstance(data, dict) else {}

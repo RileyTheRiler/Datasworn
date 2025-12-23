@@ -279,7 +279,15 @@ def get_psyche(session_id: str):
     guilt = orchestrator.moral_injury_system.total_guilt
     
     # Merge into response
-    response = dict(psyche) if isinstance(psyche, dict) else psyche.dict() if hasattr(psyche, 'dict') else {}
+    if isinstance(psyche, dict):
+        response = dict(psyche)
+    elif hasattr(psyche, "model_dump"):
+        response = psyche.model_dump()
+    elif hasattr(psyche, "dict"):
+        # Backward compatibility for Pydantic v1-style models
+        response = psyche.dict()
+    else:
+        response = {}
     response["phobias"] = phobias
     response["addictions"] = addictions
     response["guilt"] = guilt

@@ -161,11 +161,11 @@ def calculate_npc_grid_position(
 def calculate_movement_range(character_speed: int = 30, grid_size: int = 40) -> int:
     """
     Calculate movement range in pixels.
-    
+
     Args:
         character_speed: Character movement speed in feet (default 30ft)
         grid_size: Size of one grid square in pixels (default 40px = 5ft)
-        
+
     Returns:
         Movement range radius in pixels
     """
@@ -494,4 +494,5 @@ def generate_cache_key(game_state: dict[str, Any]) -> str:
     import hashlib
     combined = f"{location}_{npc_fingerprint}"
     return f"tactical_{hashlib.md5(combined.encode()).hexdigest()}"
+# Remove legacy duplicate definitions (kept earlier versions with grid size support)
 

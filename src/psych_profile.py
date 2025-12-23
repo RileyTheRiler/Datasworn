@@ -677,12 +677,33 @@ TASK:
         
         return modifier
 
-    def generate_hallucination(self, profile: PsychologicalProfile) -> str | None:
+    def generate_hallucination(
+        self,
+        profile: PsychologicalProfile,
+        policy: "HallucinationPolicy | None" = None,
+        hallucination_confidence: float = 1.0,
+        hallucinations_this_scene: int = 0,
+        director_approved: bool = False,
+    ) -> str | None:
         """
         If sanity is critically low, generate a false detail to inject into the narrative.
+
+        A HallucinationPolicy can be provided to enforce designer-tunable
+        guardrails (scene limits, confidence gates, or director approval).
         """
-        if profile.sanity >= 0.3:
-            return None
+        from src.ai_tuning import HallucinationPolicy
+
+        if policy is None:
+            if profile.sanity >= 0.3:
+                return None
+        elif isinstance(policy, HallucinationPolicy):
+            if not policy.allows(
+                sanity=profile.sanity,
+                hallucinations_this_scene=hallucinations_this_scene,
+                hallucination_confidence=hallucination_confidence,
+                director_approved=director_approved,
+            ):
+                return None
             
         # Pool of hallucinations based on emotional state
         hallucinations = {

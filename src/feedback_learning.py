@@ -22,6 +22,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
 from pathlib import Path
 import hashlib
+import uuid
 import re
 from uuid import uuid4
 from collections import defaultdict, Counter
@@ -779,6 +780,8 @@ class FeedbackLearningEngine:
         
         # Generate unique ID to preserve all samples, even repeated text
         para_id = uuid4().hex
+        # Generate a unique ID for each feedback entry to preserve all decisions
+        para_id = uuid.uuid4().hex[:12]
         
         paragraph = GeneratedParagraph(
             paragraph_id=para_id,
@@ -806,6 +809,7 @@ class FeedbackLearningEngine:
         return self.current_profile
 
     # Backwards-compatible alias expected by tests/legacy callers
+    # Backwards compatibility alias
     def analyze_preferences(self) -> PreferenceProfile:
         return self.run_preference_analysis()
     
