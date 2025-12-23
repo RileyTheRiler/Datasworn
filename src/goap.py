@@ -177,11 +177,19 @@ class GOAPPlanner:
     Plans action sequences to achieve goals using backward chaining.
     Uses A* search to find lowest-cost valid plan.
     """
-    
-    def __init__(self, available_actions: list[GOAPAction]):
+
+    def __init__(
+        self,
+        available_actions: list[GOAPAction],
+        *,
+        action_heuristic=None,
+        decision_log: list[str] | None = None,
+    ):
         self.actions = available_actions
         self.max_depth = 10
         self.max_iterations = 1000
+        self.action_heuristic = action_heuristic
+        self.decision_log = decision_log
         self._state_pool = WorldStatePool()
     
     def plan(
@@ -239,6 +247,22 @@ class GOAPPlanner:
             # Try each action
             for action in self.actions:
                 if action.is_valid(current.state):
+                    new_state = action.apply(current.state)
+                    action_cost = action.get_cost(current.state)
+
+                    heuristic_bonus = 0.0
+                    heuristic_reason = ""
+                    if self.action_heuristic:
+                        heuristic_bonus, heuristic_reason = self.action_heuristic(action, current.state)
+                        if heuristic_bonus:
+                            action_cost *= max(0.2, 1.0 - heuristic_bonus)
+                    if self.decision_log is not None and heuristic_reason:
+                        self.decision_log.append(
+                            f"{action.name}: {heuristic_reason} (bonus={heuristic_bonus:.2f})"
+                        )
+
+                    new_cost = current.cost + action_cost
+                    
                     new_state = action.apply(current.state, pool=self._state_pool)
                     new_cost = current.cost + action.get_cost(current.state)
 
@@ -320,10 +344,17 @@ COMBAT_ACTIONS = [
     ),
     GOAPAction(
         name="take_cover",
-        cost=2.5,
-        preconditions={"cover_available": True},
+        cost=2.0,
+        preconditions={"has_cover": True, "in_cover": False},
         effects={"in_cover": True},
         description="takes cover",
+    ),
+    GOAPAction(
+        name="regroup",
+        cost=2.2,
+        preconditions={"has_allies": True},
+        effects={"grouped_up": True, "in_cover": True},
+        description="falls back toward allies and stabilizes",
     ),
     GOAPAction(
         name="flee",
@@ -417,9 +448,16 @@ SOCIAL_ACTIONS = [
 # Convenience Functions
 # ============================================================================
 
-def create_combat_planner() -> GOAPPlanner:
-    """Create a planner with combat actions."""
-    return GOAPPlanner(COMBAT_ACTIONS)
+def create_combat_planner(
+    *, action_heuristic=None, decision_log: list[str] | None = None
+) -> GOAPPlanner:
+    """Create a planner with combat actions and optional heuristics."""
+
+    return GOAPPlanner(
+        COMBAT_ACTIONS,
+        action_heuristic=action_heuristic,
+        decision_log=decision_log,
+    )
 
 
 def create_resource_planner() -> GOAPPlanner:
@@ -437,6 +475,9 @@ def plan_npc_action(
     goal_conditions: dict[str, Any],
     current_state: dict[str, Any],
     action_type: str = "combat",
+    *,
+    action_heuristic=None,
+    decision_log: list[str] | None = None,
 ) -> list[dict]:
     """
     Quick function to plan NPC actions.
@@ -452,7 +493,9 @@ def plan_npc_action(
     """
     # Select planner
     if action_type == "combat":
-        planner = create_combat_planner()
+        planner = create_combat_planner(
+            action_heuristic=action_heuristic, decision_log=decision_log
+        )
     elif action_type == "resource":
         planner = create_resource_planner()
     else:
