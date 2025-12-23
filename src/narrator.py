@@ -435,88 +435,22 @@ def check_provider_availability(
 ) -> tuple[bool, str]:
     """Check provider availability and return a user-facing status message."""
     provider = provider or get_llm_provider_for_config(config)
-    available = provider.is_available()
+
+    try:
+        available = provider.is_available()
+    except Exception as exc:  # pragma: no cover - defensive guard
+        return False, f"[{provider.name} availability check failed: {exc}]"
+
+    if available:
+        return True, ""
+
+    return False, f"[{provider.name} is not available.]"
+
 
 def _get_provider(config: NarratorConfig) -> LLMProvider:
     """Resolve an LLM provider using narrator configuration."""
 
     return get_llm_provider(provider_type=config.backend, model=config.model)
-        except Exception as e:
-            if "429" in str(e) or "Quota exceeded" in str(e):
-                yield "[System: Neural Link Unstable (Rate Limit Reached). Retrying...]"
-            else:
-                yield f"[Gemini error: {e}]"
-
-    def generate_sync(
-        self,
-        prompt: str,
-        system: str = SYSTEM_PROMPT,
-        config: NarratorConfig | None = None,
-    ) -> str:
-        """
-        Generate text synchronously (non-streaming).
-        """
-        config = config or NarratorConfig()
-
-        try:
-            self._ensure_initialized()
-            
-            import google.generativeai as genai
-            
-            full_prompt = f"{system}\n\n---\n\n{prompt}"
-            
-            generation_config = genai.GenerationConfig(
-                temperature=config.temperature,
-                top_p=config.top_p,
-                top_k=config.top_k,
-                max_output_tokens=config.max_tokens,
-            )
-            
-            # Define safety settings to prevent over-blocking of gritty sci-fi content
-            safety_settings = {
-                "HARM_CATEGORY_HARASSMENT": "BLOCK_ONLY_HIGH",
-                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_ONLY_HIGH",
-                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_ONLY_HIGH",
-                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_ONLY_HIGH",
-            }
-            
-            response = self._retry_with_backoff(
-                self._client.generate_content,
-                full_prompt,
-                generation_config=generation_config,
-                safety_settings=safety_settings
-            )
-            
-            try:
-                return response.text
-            except Exception:
-                # Handle cases where feedback is blocked or empty (Finish Reason 2/3/Other)
-                candidates = getattr(response, 'candidates', [])
-                if candidates:
-                    finish_reason = candidates[0].finish_reason
-                    return f"[Gemini Error: Generation stopped (Reason: {finish_reason}). Try a different action.]"
-                
-                if response.prompt_feedback:
-                    return f"[Gemini Error: Prompt blocked. {response.prompt_feedback}]"
-                    
-                return "[Gemini Error: No content returned. The Oracle is silent.]"
-
-        except Exception as e:
-            if "429" in str(e) or "Quota exceeded" in str(e):
-                 return (
-                     "[System: Rate Limit Exceeded. The Oracle is momentarily silent.]\n\n"
-                     "*(You can try your action again in a few moments, or describe the outcome yourself for now.)*"
-                 )
-            return f"[Gemini error: {e}]"
-
-    def is_available(self) -> bool:
-        """Check if Gemini API is available."""
-        try:
-            self._ensure_initialized()
-            # Simple check call? No, saving quota. Just check client exists.
-            return self._client is not None
-        except Exception:
-            return False
 
 
 
@@ -746,23 +680,6 @@ def generate_narrative(
     )
 
     provider = _get_provider(config)
-
-    # Check if Client is available
-    if not provider.is_available():
-        return (
-            f"[{provider.name} is not available. "
-            f"Check configuration.]\n\n"
-            f"*Placeholder narrative for: {player_input}*"
-        )
-
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
-    ]
-
-    response = provider.chat(
-        messages,
-    provider = get_llm_provider_for_config(config)
     available, status_message = check_provider_availability(config, provider)
 
     if not available:
@@ -831,19 +748,6 @@ def generate_narrative_stream(
     )
 
     provider = _get_provider(config)
-
-    if not provider.is_available():
-        yield f"[{provider.name} is not available.]"
-        return
-
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
-    ]
-
-    response = provider.chat(
-        messages,
-    provider = get_llm_provider_for_config(config)
     available, status_message = check_provider_availability(config, provider)
 
     if not available:
