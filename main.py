@@ -15,23 +15,16 @@ import os
 sys.path.insert(0, str(Path(__file__).parent))
 
 
-def check_ollama() -> bool:
-    """Check if Ollama is available."""
-    try:
-        import ollama
-        client = ollama.Client()
-        models = client.list()
-        if models.get("models"):
-            print(f"✓ Ollama is running. Available models: {[m['name'] for m in models['models']]}")
-            return True
-        else:
-            print("⚠ Ollama is running but no models are available.")
-            print("  Run: ollama pull llama3.1")
-            return False
-    except Exception as e:
-        print(f"✗ Ollama is not available: {e}")
-        print("  Please ensure Ollama is installed and running: ollama serve")
-        return False
+def check_llm_provider() -> bool:
+    """Check if the configured LLM provider is available."""
+    from src.narrator import NarratorConfig, check_provider_availability, get_llm_provider_for_config
+
+    config = NarratorConfig()
+    provider = get_llm_provider_for_config(config)
+    available, status_message = check_provider_availability(config, provider)
+
+    print(status_message)
+    return available
 
 
 def check_datasworn() -> bool:
@@ -79,20 +72,28 @@ def onboarding_wizard(env_path: Path) -> Dict[str, str]:
     """
 
     print("\n[Onboarding Wizard]\n")
-    provider = input("Choose provider (ollama/openai/none) [ollama]: ").strip() or "ollama"
-    if provider not in {"ollama", "openai", "none"}:
-        print("Unrecognized provider, defaulting to ollama")
+    allowed_providers = {"ollama", "gemini"}
+    default_provider = os.environ.get("LLM_PROVIDER", "ollama").lower()
+
+    provider_prompt = f"Choose provider (ollama/gemini) [{default_provider}]: "
+    provider = input(provider_prompt).strip().lower() or default_provider
+    if provider not in allowed_providers:
+        print("Unsupported provider. Please choose 'ollama' or 'gemini'. Defaulting to ollama.")
         provider = "ollama"
 
-    model = input("Preferred model (e.g., llama3.1, gpt-4o) [llama3.1]: ").strip() or "llama3.1"
+    default_model = os.environ.get("GEMINI_MODEL" if provider == "gemini" else "OLLAMA_MODEL", "")
+    default_model = default_model or ("gemini-2.0-flash" if provider == "gemini" else "llama3.1")
+    model_prompt = "Gemini model" if provider == "gemini" else "Ollama model"
+    model = input(f"Preferred {model_prompt} [{default_model}]: ").strip() or default_model
     voice = input("Enable voice features? (y/n) [n]: ").strip().lower() or "n"
     enable_voice = voice.startswith("y")
 
-    env_values = {
-        "PROVIDER": provider,
-        "MODEL": model,
-        "VOICE_ENABLED": "true" if enable_voice else "false",
-    }
+    env_values = {"LLM_PROVIDER": provider, "VOICE_ENABLED": "true" if enable_voice else "false"}
+
+    if provider == "gemini":
+        env_values["GEMINI_MODEL"] = model
+    else:
+        env_values["OLLAMA_MODEL"] = model
 
     env_lines = [f"{key}={value}\n" for key, value in env_values.items()]
     env_path.write_text("".join(env_lines), encoding="utf-8")
@@ -122,6 +123,15 @@ def run_cli():
     print("\n" + "=" * 60)
     print("  STARFORGED AI GAME MASTER - CLI MODE")
     print("=" * 60 + "\n")
+    from src.cli_runner import bootstrap_cli
+
+    name = input("Enter your character's name: ").strip() or "Test Pilot"
+    cli = bootstrap_cli(name)
+
+    print(
+        "\nCommands: !status, !vows, !help.  Type actions and the rules engine will\n"
+        "pick an Ironsworn move, roll it, and update your progress.\n",
+    )
 
     from src.auto_save import AutoSaveSystem
     from src.narrator import generate_narrative, NarratorConfig
@@ -192,6 +202,9 @@ def run_cli():
                 print_status(state)
                 continue
 
+            response = cli.handle_input(action)
+            if response:
+                print(f"\n{response}\n")
             print("\n[Generating narrative...]\n")
             narrative = generate_narrative(
                 player_input=action,
@@ -265,9 +278,9 @@ Examples:
 
     if args.check:
         print("\n[Checking system requirements...]\n")
-        ollama_ok = check_ollama()
+        provider_ok = check_llm_provider()
         datasworn_ok = check_datasworn()
-        if ollama_ok and datasworn_ok:
+        if provider_ok and datasworn_ok:
             print("\n✓ All systems ready!")
         else:
             print("\n⚠ Some requirements are missing.")
@@ -289,10 +302,10 @@ Examples:
         print("\n⚠ Continuing without Datasworn data...")
 
     if args.cli:
-        check_ollama()
+        check_llm_provider()
         run_cli()
     else:
-        check_ollama()
+        check_llm_provider()
         run_ui(share=args.share, port=args.port)
 
 
