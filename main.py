@@ -128,10 +128,38 @@ def run_cli():
     name = input("Enter your character's name: ").strip() or "Test Pilot"
     cli = bootstrap_cli(name)
 
-    print(
-        "\nCommands: !status, !vows, !help.  Type actions and the rules engine will\n"
-        "pick an Ironsworn move, roll it, and update your progress.\n",
+    tab_completion_enabled = False
+    try:
+        import readline
+
+        def _tab_complete(text: str, state_idx: int) -> str | None:
+            commands = [
+                "!status",
+                "!assets",
+                "!vows",
+                "!help",
+                "!help moves",
+                "!oracle ",
+            ]
+            if cli.data:
+                commands.extend([f"!oracle {key}" for key in sorted(cli.data.get_oracle_keys())])
+
+            matches = [cmd for cmd in commands if cmd.startswith(text)]
+            return matches[state_idx] if state_idx < len(matches) else None
+
+        readline.set_completer(_tab_complete)
+        readline.parse_and_bind("tab: complete")
+        tab_completion_enabled = True
+    except Exception:
+        tab_completion_enabled = False
+
+    help_text = (
+        "\nCommands: !status, !assets, !vows, !oracle <name>, !help moves.\n"
+        "Type actions and the rules engine will pick an Ironsworn move, roll it, and update your progress.\n"
     )
+    if tab_completion_enabled:
+        help_text += "Tab-completion enabled for commands and oracle paths.\n"
+    print(help_text)
 
     from src.auto_save import AutoSaveSystem
     from src.narrator import generate_narrative, NarratorConfig
@@ -157,10 +185,9 @@ def run_cli():
 
     if resume_state:
         state = resume_state
-        name = state.get("character", {}).get("name", "Traveler")
+        name = state.get("character", {}).get("name", name)
         print(f"\nWelcome back, {name}. Resuming your journey...\n")
     else:
-        name = input("Enter your character's name: ").strip() or "Test Pilot"
         state = {
             "character": {"name": name},
             "world": {"current_location": "The Forge"},
@@ -169,26 +196,11 @@ def run_cli():
         }
         print(f"\nWelcome, {name}. Your journey through the Forge begins...\n")
 
+    state.setdefault("world", {}).setdefault("current_location", "The Forge")
+    state.setdefault("session", {}).setdefault("turn_count", 0)
+
     config = NarratorConfig()
     auto_save.mark_session_start()
-
-    def print_status(game_state: dict):
-        world = game_state.get("world", {})
-        session = game_state.get("session", {})
-        director = game_state.get("director", {})
-        tension = director.get("tension_level", 0.0) or 0.0
-        try:
-            tension = float(tension)
-        except (TypeError, ValueError):
-            tension = 0.0
-
-        print("\n[Status]")
-        print(f"Location: {world.get('current_location', 'Unknown')}")
-        print(f"Turns: {session.get('turn_count', 0)}")
-        print(
-            f"Tension: {tension:.2f} | "
-            f"Pacing: {director.get('last_pacing', 'standard')}"
-        )
 
     while True:
         try:
@@ -198,13 +210,20 @@ def run_cli():
             if action.lower() in ["quit", "exit", "q"]:
                 print("\nUntil next time, Ironsworn.")
                 break
-            if action.lower() in ["!status", "status"]:
-                print_status(state)
-                continue
+            normalized_action = action
+            lower_action = action.lower()
+            if lower_action in {"status", "assets", "vows", "help"} or lower_action.startswith("help"):
+                normalized_action = f"!{lower_action}"
+            elif lower_action.startswith("oracle") and not lower_action.startswith("!"):
+                normalized_action = f"!{action}"
 
-            response = cli.handle_input(action)
+            is_command = normalized_action.startswith("!")
+            response = cli.handle_input(normalized_action)
             if response:
                 print(f"\n{response}\n")
+            if is_command:
+                continue
+
             print("\n[Generating narrative...]\n")
             narrative = generate_narrative(
                 player_input=action,

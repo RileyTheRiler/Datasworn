@@ -197,6 +197,17 @@ class DataswornData:
         """Get all assets."""
         return list(self._assets.values())
 
+    def get_oracle_keys(self) -> list[str]:
+        """Return the keys for all oracle tables."""
+        return list(self._oracles.keys())
+
+    def get_oracle_key(self, oracle: OracleTable) -> str | None:
+        """Find the key used to store a specific oracle table."""
+        for key, table in self._oracles.items():
+            if table is oracle:
+                return key
+        return None
+
     def get_assets_by_type(self, asset_type: str) -> list[Asset]:
         """Get assets by type (e.g., 'Path', 'Companion')."""
         asset_type_lower = asset_type.lower()

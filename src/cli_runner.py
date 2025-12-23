@@ -72,17 +72,35 @@ class CLIRunner:
     # Commands
     # ------------------------------------------------------------------
     def _handle_command(self, command_text: str) -> str:
-        cmd = command_text.lower().strip()
-        if cmd in {"status", "debug"}:
+        """Dispatch CLI bang-commands."""
+
+        cmd = command_text.strip()
+        if not cmd:
+            return "Unknown command. Try !help for the list."
+
+        name, *rest = cmd.split(maxsplit=1)
+        name = name.lower()
+        arg = rest[0].strip() if rest else ""
+
+        if name in {"status", "debug"}:
             return self._render_status()
-        if cmd == "vows":
+        if name == "assets":
+            return self._render_assets()
+        if name == "vows":
             return self._render_vows()
-        if cmd in {"help", "?"}:
+        if name == "oracle":
+            return self._roll_oracle(arg)
+        if name in {"help", "?"}:
+            if arg == "moves":
+                return self._render_move_help()
             return (
                 "Available commands:\n"
-                "!status - Show stats, momentum, and conditions\n"
-                "!vows   - List active vows and progress\n"
-                "!help   - Show this list"
+                "!status       - Show stats, momentum, and conditions\n"
+                "!assets       - List equipped assets and abilities\n"
+                "!vows         - List active vows and progress\n"
+                "!oracle NAME  - Roll an oracle by path or keyword\n"
+                "!help moves   - List move prompts and examples\n"
+                "!help         - Show this list"
             )
         return "Unknown command. Try !help for the list."
 
@@ -96,6 +114,29 @@ class CLIRunner:
             f"Momentum: {char.momentum.value}\n"
             f"Condition - Health {condition.health}/5, Spirit {condition.spirit}/5, Supply {condition.supply}/5"
         )
+
+    def _render_assets(self) -> str:
+        char: Character = self.state["character"]
+        if not char.assets:
+            return "No assets equipped."
+
+        lines = ["Equipped assets:"]
+        for asset_state in char.assets:
+            asset_details = self.data.get_asset(asset_state.name) if self.data else None
+            type_label = f" ({asset_details.asset_type})" if asset_details else ""
+            lines.append(f"- {asset_state.name}{type_label}")
+
+            if asset_details and asset_details.abilities:
+                for idx, ability_text in enumerate(asset_details.abilities):
+                    enabled = asset_state.abilities_enabled[idx] if idx < len(asset_state.abilities_enabled) else False
+                    checkbox = "[x]" if enabled else "[ ]"
+                    lines.append(f"  {checkbox} {ability_text}")
+            elif asset_details:
+                lines.append("  No abilities listed.")
+            else:
+                lines.append("  (Asset details unavailable without Datasworn data.)")
+
+        return "\n".join(lines)
 
     def _render_vows(self) -> str:
         char: Character = self.state["character"]
@@ -157,6 +198,53 @@ class CLIRunner:
             parts.append(f"{vow.name} is now fulfilled!")
 
         return "\n".join(parts)
+
+    def _render_move_help(self) -> str:
+        if not self.data:
+            return "Move reference is unavailable until Datasworn data is loaded."
+
+        moves = sorted({move.name for move in self.data.get_all_moves()})
+        examples = ", ".join(moves[:8])
+        return (
+            f"{len(moves)} moves loaded. Name a move in your action to roll it (e.g., 'Secure an Advantage').\n"
+            "If you just describe intent, I'll pick a fitting move for you.\n"
+            f"Examples: {examples}..."
+        )
+
+    def _roll_oracle(self, oracle_query: str) -> str:
+        if not self.data:
+            return "No Datasworn data loaded. Place dataforged.json to use oracles."
+
+        if not oracle_query:
+            return (
+                "Usage: !oracle <category/table>. Examples:\n"
+                "!oracle Space/Planets\n"
+                "!oracle Derelicts/Zone Form\n"
+                "!oracle character"  # keyword search
+            )
+
+        # Try an exact path first
+        direct = self.data.roll_oracle(oracle_query)
+        if direct:
+            return f"{oracle_query}: {direct}"
+
+        # Fallback to keyword search
+        matches = self.data.search_oracles(oracle_query)
+        if not matches:
+            return "No matching oracle found. Try a broader keyword."
+
+        if len(matches) > 1:
+            names: list[str] = []
+            for table in matches[:5]:
+                key = self.data.get_oracle_key(table)
+                label = f"{table.name} ({key})" if key else table.name
+                names.append(label)
+            return f"Multiple oracles match '{oracle_query}'. Narrow it down: {', '.join(names)}"
+
+        oracle = matches[0]
+        key = self.data.get_oracle_key(oracle)
+        result = self.data.roll_oracle(key or oracle_query)
+        return f"{oracle.name}: {result}"
 
     def _outcome_text(self, move: Move, result: RollResult) -> str:
         if result == RollResult.STRONG_HIT:
