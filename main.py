@@ -50,16 +50,16 @@ def run_cli():
     print("\n" + "=" * 60)
     print("  STARFORGED AI GAME MASTER - CLI MODE")
     print("=" * 60 + "\n")
+    from src.cli_runner import bootstrap_cli
 
-    from src.game_state import create_initial_state, Character
-    from src.narrator import generate_narrative, NarratorConfig
-
-    # Create a test character
     name = input("Enter your character's name: ").strip() or "Test Pilot"
-    print(f"\nWelcome, {name}. Your journey through the Forge begins...\n")
+    cli = bootstrap_cli(name)
 
-    # Simple game loop
-    config = NarratorConfig()
+    print(
+        "\nCommands: !status, !vows, !help.  Type actions and the rules engine will\n"
+        "pick an Ironsworn move, roll it, and update your progress.\n",
+    )
+
     while True:
         try:
             action = input("\n> What do you do? ").strip()
@@ -69,15 +69,9 @@ def run_cli():
                 print("\nUntil next time, Ironsworn.")
                 break
 
-            print("\n[Generating narrative...]\n")
-            narrative = generate_narrative(
-                player_input=action,
-                character_name=name,
-                location="the Forge",
-                config=config,
-            )
-            print(narrative)
-            print("\n" + "-" * 40)
+            response = cli.handle_input(action)
+            if response:
+                print(f"\n{response}\n")
 
         except KeyboardInterrupt:
             print("\n\nFarewell, traveler.")
