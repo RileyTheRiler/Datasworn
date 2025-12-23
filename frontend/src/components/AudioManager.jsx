@@ -43,9 +43,10 @@ const AudioManager = ({ sessionId }) => {
                     updateAmbient(directives.ambient);
                 }
 
-                if (directives.music?.track_id !== currentMusic) {
-                    updateMusic(directives.music);
-                }
+                // Music is now handled by MusicContext, not AudioManager
+                // if (directives.music?.track_id !== currentMusic) {
+                //     updateMusic(directives.music);
+                // }
             }
 
             // 2. Fetch psyche-based audio cues (heartbeat, whispers, etc.)

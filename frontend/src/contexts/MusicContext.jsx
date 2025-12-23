@@ -181,6 +181,16 @@ export const MusicProvider = ({ children }) => {
         }
     };
 
+    const stopAll = () => {
+        if (soundRef.current) {
+            soundRef.current.stop();
+            soundRef.current.unload();
+            soundRef.current = null;
+        }
+        setIsPlaying(false);
+        setCurrentTrack(null);
+    };
+
     const value = {
         isPlaying,
         currentMood,
@@ -190,7 +200,8 @@ export const MusicProvider = ({ children }) => {
         playMood,
         togglePlay,
         setVolume,
-        skipTrack
+        skipTrack,
+        stopAll
     };
 
     return (

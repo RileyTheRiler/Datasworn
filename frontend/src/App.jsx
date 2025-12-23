@@ -27,6 +27,7 @@ function GameContent() {
   const [showCharacterCreation, setShowCharacterCreation] = useState(false); // Default false, triggered by New Game
 
   const { populateFromGameState } = useNPCCache();
+  const { stopAll: stopMenuMusic } = useMusic();
 
   // Monitor online status
   useEffect(() => {
@@ -81,6 +82,8 @@ function GameContent() {
     if (data.assets) setAssets(prev => ({ ...prev, ...data.assets }));
     setShowCharacterCreation(false);
     setIsOnline(true);
+    // Stop menu music before starting gameplay
+    stopMenuMusic();
   };
 
   // Quick start for returning players (skip wizard)
@@ -155,6 +158,8 @@ function GameContent() {
     setSession("default"); // Assuming default session for MVP
     setShowMenu(false);
     setShowCharacterCreation(false);
+    // Stop menu music before starting gameplay
+    stopMenuMusic();
   };
 
   const handleExit = async () => {
@@ -190,21 +195,29 @@ function GameContent() {
   if (showCharacterCreation) {
     return (
       <AccessibilityProvider>
-        <div className="min-h-screen bg-disco-bg">
-          <AmbientParticles type="dust" count={20} />
+        <AudioProvider>
+          <VoiceProvider>
+            <SoundEffectsProvider>
+              <MusicProvider>
+                <div className="min-h-screen bg-disco-bg">
+                  <AmbientParticles type="dust" count={20} />
 
-          {/* Title - Hidden in Wizard if transitioning from Menu? Keep for now */}
-          <div className="pt-8 text-center">
-            <h1 className="text-5xl font-serif text-disco-paper tracking-wider">
-              DISTANT SKIES
-            </h1>
-          </div>
+                  {/* Title - Hidden in Wizard if transitioning from Menu? Keep for now */}
+                  <div className="pt-8 text-center">
+                    <h1 className="text-5xl font-serif text-disco-paper tracking-wider">
+                      DISTANT SKIES
+                    </h1>
+                  </div>
 
-          <CharacterCreation
-            onComplete={handleCharacterCreated}
-            onCancel={handleQuickStart}
-          />
-        </div>
+                  <CharacterCreation
+                    onComplete={handleCharacterCreated}
+                    onCancel={handleQuickStart}
+                  />
+                </div>
+              </MusicProvider>
+            </SoundEffectsProvider>
+          </VoiceProvider>
+        </AudioProvider>
       </AccessibilityProvider>
     );
   }
@@ -230,54 +243,42 @@ function GameContent() {
   )
 
   return (
-    <AccessibilityProvider>
-      <AudioProvider>
-        <VoiceProvider>
-          <SoundEffectsProvider>
-            <MusicProvider>
-              <NPCCacheProvider>
-                <ToastProvider>
-                  {/* Connection Status Indicator */}
-                  {!isOnline && (
-                    <div className="fixed top-4 right-4 z-[200] bg-disco-red/90 text-white px-4 py-2 rounded-lg font-mono text-sm border border-disco-red shadow-lg">
-                      ⚠ Offline Mode
-                    </div>
-                  )}
+    <>
+      {/* Connection Status Indicator */}
+      {!isOnline && (
+        <div className="fixed top-4 right-4 z-[200] bg-disco-red/90 text-white px-4 py-2 rounded-lg font-mono text-sm border border-disco-red shadow-lg">
+          ⚠ Offline Mode
+        </div>
+      )}
 
-                  {/* Ambient Particles - subtle floating dust */}
-                  <AmbientParticles type="dust" count={15} />
+      {/* Ambient Particles - subtle floating dust */}
+      <AmbientParticles type="dust" count={15} />
 
-                  {/* Tension Vignette - intensifies with stress */}
-                  <TensionVignette tension={tension} isActive={true} />
+      {/* Tension Vignette - intensifies with stress */}
+      <TensionVignette tension={tension} isActive={true} />
 
-                  {/* Hijack Overlay - full takeover on psychological hijack */}
-                  <HijackOverlay
-                    isActive={hijackActive}
-                    aspect={hijackAspect}
-                    onComplete={handleHijackComplete}
-                  />
+      {/* Hijack Overlay - full takeover on psychological hijack */}
+      <HijackOverlay
+        isActive={hijackActive}
+        aspect={hijackAspect}
+        onComplete={handleHijackComplete}
+      />
 
-                  {/* Main Game Layout */}
-                  <Layout
-                    gameState={gameState}
-                    assets={assets}
-                    onAssetsUpdate={setAssets}
-                    onAction={handleAction}
-                    isLoading={loading}
-                  />
+      {/* Main Game Layout */}
+      <Layout
+        gameState={gameState}
+        assets={assets}
+        onAssetsUpdate={setAssets}
+        onAction={handleAction}
+        isLoading={loading}
+      />
 
-                  {/* Psyche Dashboard - shows psychological state */}
-                  <PsycheDashboard />
+      {/* Psyche Dashboard - shows psychological state */}
+      <PsycheDashboard />
 
-                  {/* Audio Manager - handles all audio playback */}
-                  <AudioManager sessionId={session} />
-                </ToastProvider>
-              </NPCCacheProvider>
-            </MusicProvider>
-          </SoundEffectsProvider>
-        </VoiceProvider>
-      </AudioProvider>
-    </AccessibilityProvider>
+      {/* Audio Manager - handles all audio playback */}
+      <AudioManager sessionId={session} />
+    </>
   )
 }
 

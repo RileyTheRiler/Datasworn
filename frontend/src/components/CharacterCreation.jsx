@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import CalibrationStep from './CalibrationStep';
 import TTSButton from './TTSButton';
+import MusicPlayer from './MusicPlayer';
 
 const API_URL = 'http://localhost:8000/api';
 
@@ -247,7 +248,7 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="text-xs text-disco-muted line-clamp-2">{template.description}</div>
+                                    <div className={`text-xs text-disco-muted ${selectedStoryTemplate?.id === template.id ? 'whitespace-pre-wrap' : 'line-clamp-2'}`}>{template.description}</div>
                                     <div className="flex gap-2 mt-2">
                                         <span className="text-xs px-2 py-0.5 border border-disco-muted/30 text-disco-muted">
                                             {template.tone}
@@ -644,6 +645,11 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                         </button>
                     )}
                 </div>
+            </div>
+
+            {/* Music Player - Bottom Right */}
+            <div className="absolute bottom-8 right-8 z-20">
+                <MusicPlayer />
             </div>
         </div>
     );
