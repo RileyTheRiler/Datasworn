@@ -10,9 +10,12 @@ from pathlib import Path
 from typing import Dict
 import json
 import os
+import logging
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
+
+from src.logging_config import setup_logging, get_logger
 
 
 def check_llm_provider() -> bool:
@@ -382,12 +385,31 @@ Examples:
         help="Print per-turn tactical decision rationales",
     )
     parser.add_argument("--port", type=int, default=7860, help="UI port (default: 7860)")
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default=None,
+        help="Set logging level (default: INFO, or from LOG_LEVEL env var)",
+    )
+    parser.add_argument("--log-file", type=str, default=None, help="Write logs to file")
 
     args = parser.parse_args()
+
+    # Configure logging FIRST
+    log_level_name = args.log_level or os.getenv("LOG_LEVEL", "INFO")
+    log_level = getattr(logging, log_level_name.upper())
+    debug_mode = log_level == logging.DEBUG
+
+    setup_logging(level=log_level, log_file=args.log_file, debug_mode=debug_mode)
+    logger = get_logger("main")
+
+    logger.info("Starting Starforged AI Game Master")
+    logger.debug(f"Log level: {log_level_name}, Debug mode: {debug_mode}")
 
     env_file = Path(__file__).parent / ".env"
     prefs = load_preferences(env_file)
     if prefs:
+        logger.info(f"Loaded preferences: {json.dumps(prefs)}")
         print("Loaded preferences: " + json.dumps(prefs))
 
     print("\n🚀 Starforged AI Game Master")

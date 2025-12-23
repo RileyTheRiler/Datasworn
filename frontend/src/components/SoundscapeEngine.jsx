@@ -52,7 +52,10 @@ const SoundscapeEngine = () => {
             }
         };
 
-        const interval = setInterval(fetchData, 2000);
+        // Reduced from 2s to 10s to save battery and reduce server load
+        const interval = setInterval(() => {
+            if (!document.hidden) fetchData(); // Pause when tab inactive
+        }, 10000);
         return () => clearInterval(interval);
     }, []);
 

@@ -473,7 +473,7 @@ async def director_node(state: GameState) -> dict[str, Any]:
                         scene_id=world.current_location
                     )
              except Exception as e:
-                print(f"Failed to auto-capture cinematic: {e}")
+                logger.warning(f"Photo album auto-capture failed: {e}")
 
     return {
         "director": updated_director,
@@ -740,7 +740,7 @@ def narrator_node(state: GameState) -> dict[str, Any]:
     
     except Exception as e:
         # Graceful fallback if feedback learning fails
-        print(f"Feedback learning injection error: {e}")
+        logger.warning(f"Feedback learning injection failed: {e}")
     
     # Narrative Craft Engine - genre, McKee structure, archetypes
     craft_state = state.get("narrative_craft", {})
@@ -1522,7 +1522,7 @@ def approval_node(state: GameState) -> dict[str, Any]:
             feedback_engine.record_feedback(pending, accepted=False, context=feedback_context)
     except Exception as e:
         # Graceful fallback if feedback system fails
-        print(f"Feedback learning error: {e}")
+        logger.warning(f"Feedback recording failed: {e}")
 
     # This will resume when user provides decision
     if decision.get("decision") == "accept":

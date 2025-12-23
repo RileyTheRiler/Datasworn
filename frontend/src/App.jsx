@@ -3,7 +3,7 @@ import Layout from './Layout'
 import PsycheDashboard from './components/PsycheDashboard'
 import CharacterCreation from './components/CharacterCreation'
 import Tutorial from './components/Tutorial'
-import { ToastProvider } from './components/ToastProvider'
+import { ToastProvider, useToast } from './components/ToastProvider'
 import { TensionVignette, AmbientParticles, HijackOverlay } from './components/UXEffects'
 import AudioManager from './components/AudioManager'
 import { SoundEffectsProvider } from './contexts/SoundEffectsContext'
@@ -14,6 +14,7 @@ import { VoiceProvider } from './contexts/VoiceContext'
 import api from './utils/api'
 import { ErrorBoundary } from './components/ErrorStates'
 import { LoadingText, LoadingDots } from './components/LoadingStates'
+import ErrorBanner from './components/ErrorBanner'
 
 function App() {
   const [session, setSession] = useState(null)
@@ -25,6 +26,8 @@ function App() {
   const [hijackAspect, setHijackAspect] = useState(null)
   const [isOnline, setIsOnline] = useState(true)
   const [showCharacterCreation, setShowCharacterCreation] = useState(true) // Start with creation
+  const [error, setError] = useState(null) // Error state for ErrorBanner
+  const [lastAction, setLastAction] = useState(null) // Store last action for retry
 
   // Monitor online status
   useEffect(() => {
@@ -43,7 +46,7 @@ function App() {
   // Poll for psyche state to update tension
   useEffect(() => {
     const fetchPsyche = async () => {
-      if (!session) return;
+      if (!session || document.hidden) return; // Pause when tab is inactive
       try {
         const data = await api.get(`/psyche/${session}`);
         // Update tension based on stress level
@@ -61,7 +64,8 @@ function App() {
       }
     };
 
-    const interval = setInterval(fetchPsyche, 2000);
+    // Reduced from 2s to 10s to improve battery life and reduce server load
+    const interval = setInterval(fetchPsyche, 10000);
     return () => clearInterval(interval);
   }, [session, hijackActive]);
 
@@ -95,6 +99,9 @@ function App() {
     if (!session) return;
 
     setLoading(true)
+    setError(null) // Clear previous errors
+    setLastAction(actionText) // Store for retry
+
     try {
       const data = await api.post('/chat', {
         session_id: session,
@@ -111,6 +118,14 @@ function App() {
     } catch (err) {
       console.error("Action failed:", err)
       setIsOnline(false)
+
+      // Show user-friendly error message
+      const errorMessage = err.response?.data?.detail || err.message || "Unknown error";
+      setError({
+        message: "Failed to process your action",
+        details: errorMessage,
+        retryable: true
+      });
     } finally {
       setLoading(false)
     }
@@ -175,6 +190,13 @@ function App() {
             <VoiceProvider>
               <NPCCacheProvider>
                 <ToastProvider>
+              {/* Error Banner - show errors with retry option */}
+              <ErrorBanner
+                error={error}
+                onRetry={() => lastAction && handleAction(lastAction)}
+                onDismiss={() => setError(null)}
+              />
+
               {/* Connection Status Indicator */}
               {!isOnline && (
                 <div className="fixed top-4 right-4 z-[200] bg-disco-red/90 text-white px-4 py-2 rounded-lg font-mono text-sm border border-disco-red shadow-lg">
