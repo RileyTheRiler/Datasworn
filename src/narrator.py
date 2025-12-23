@@ -436,6 +436,20 @@ def check_provider_availability(
     """Check provider availability and return a user-facing status message."""
     provider = provider or get_llm_provider_for_config(config)
 
+    backend_hint = ""
+    if config.backend == "ollama":
+        backend_hint = "Ensure Ollama is installed, running, and the model is pulled."
+    elif config.backend == "gemini":
+        backend_hint = "Set GEMINI_API_KEY and install google-generativeai."
+
+    available = provider.is_available()
+    status = f"{provider.name} is available." if available else (
+        f"[{provider.name} unavailable. {backend_hint or 'Check configuration.'}]"
+    )
+
+    return available, status
+
+
     try:
         available = provider.is_available()
     except Exception as exc:  # pragma: no cover - defensive guard
@@ -451,8 +465,110 @@ def _get_provider(config: NarratorConfig) -> LLMProvider:
     """Resolve an LLM provider using narrator configuration."""
 
     return get_llm_provider(provider_type=config.backend, model=config.model)
+    return get_llm_provider(provider_type=config.backend, model=config.model)
 
 
+@dataclass
+class GeminiClient:
+    """Lightweight Gemini wrapper used by narrator generation."""
+
+    model: str = "gemini-2.0-flash"
+    _client: Any = field(default=None, repr=False, init=False)
+
+    def _ensure_initialized(self):
+        if self._client:
+            return
+
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        if not api_key:
+            return
+
+        try:
+            import google.generativeai as genai
+
+            genai.configure(api_key=api_key)
+            self._client = genai.GenerativeModel(self.model)
+        except ImportError:
+            self._client = None
+
+    def _retry_with_backoff(self, func, *args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            raise e
+
+    def generate_sync(
+        self,
+        prompt: str,
+        system: str = SYSTEM_PROMPT,
+        config: NarratorConfig | None = None,
+    ) -> str:
+        """Generate text synchronously (non-streaming)."""
+
+        config = config or NarratorConfig()
+
+        try:
+            self._ensure_initialized()
+
+            import google.generativeai as genai
+
+            full_prompt = f"{system}\n\n---\n\n{prompt}"
+
+            generation_config = genai.GenerationConfig(
+                temperature=config.temperature,
+                top_p=config.top_p,
+                top_k=config.top_k,
+                max_output_tokens=config.max_tokens,
+            )
+
+            safety_settings = {
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_ONLY_HIGH",
+            }
+
+            response = self._retry_with_backoff(
+                self._client.generate_content,
+                full_prompt,
+                generation_config=generation_config,
+                safety_settings=safety_settings,
+            )
+
+            try:
+                return response.text
+            except Exception:
+                candidates = getattr(response, "candidates", [])
+                if candidates:
+                    finish_reason = candidates[0].finish_reason
+                    return (
+                        "[Gemini Error: Generation stopped (Reason: "
+                        f"{finish_reason}). Try a different action.]"
+                    )
+
+                if getattr(response, "prompt_feedback", None):
+                    return (
+                        "[Gemini Error: Prompt blocked. "
+                        f"{response.prompt_feedback}]"
+                    )
+
+                return "[Gemini Error: No content returned. The Oracle is silent.]"
+
+        except Exception as e:
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                return (
+                    "[System: Rate Limit Exceeded. The Oracle is momentarily silent.]\n\n"
+                    "*(You can try your action again in a few moments, or describe the outcome yourself for now.)*"
+                )
+            return f"[Gemini error: {e}]"
+
+    def is_available(self) -> bool:
+        """Check if Gemini API is available."""
+        try:
+            self._ensure_initialized()
+            return self._client is not None
+        except Exception:
+            return False
 
 def get_llm_client(config: NarratorConfig = None):
     """Get the appropriate LLM client based on configuration."""
@@ -462,17 +578,6 @@ def get_llm_client(config: NarratorConfig = None):
         return GeminiClient(model=config.model)
     if config.backend == "ollama":
         return OllamaClient(model=config.model)
-    backend_hint = ""
-    if config.backend == "ollama":
-        backend_hint = "Ensure Ollama is installed, running, and the model is pulled."
-    elif config.backend == "gemini":
-        backend_hint = "Set GEMINI_API_KEY and install google-generativeai."
-
-    status = f"{provider.name} is available." if available else (
-        f"[{provider.name} unavailable. {backend_hint or 'Check configuration.'}]"
-    )
-
-    return available, status
 
     raise ValueError(
         f"Unsupported LLM provider '{config.backend}'. Set LLM_PROVIDER to 'gemini' or 'ollama'."
@@ -693,6 +798,22 @@ def generate_narrative(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
+
+    # Check if Client is available
+    if not provider.is_available():
+        return (
+            f"[{provider.name} is not available. "
+            f"Check configuration.]\n\n"
+            f"*Placeholder narrative for: {player_input}*"
+        )
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    response = provider.chat(
+        messages=messages,
         temperature=config.temperature,
         max_tokens=config.max_tokens,
         stream=False,
@@ -759,6 +880,18 @@ def generate_narrative_stream(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
+
+    if not provider.is_available():
+        yield f"[{provider.name} is not available.]"
+        return
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    response = provider.chat(
+        messages=messages,
         temperature=config.temperature,
         max_tokens=config.max_tokens,
         stream=True,

@@ -16,6 +16,7 @@ from src.game_state import Character
 from src.narrator import generate_narrative_stream, NarratorConfig
 from src.game_state import Character, create_initial_state
 from src.narrator import generate_narrative_stream, NarratorConfig, check_provider_availability
+from src.persistence import CURRENT_SCHEMA_VERSION, PersistenceLayer
 
 
 # ============================================================================
@@ -221,6 +222,7 @@ class SessionStore:
 
 
 SESSION_STORE = SessionStore(Path("saves/ui_sessions.json"))
+PERSISTENCE = PersistenceLayer(Path("saves/game_state.db"))
 
 
 # ============================================================================
@@ -595,6 +597,40 @@ def restore_session(session_id: Optional[str], request: gr.Request | None = None
     return (*_render_session(session), session.session_id)
 
 
+def save_character_state(session_id: Optional[str], request: gr.Request | None = None):
+    """Persist the current character to disk using the shared persistence layer."""
+
+    session = _get_or_create_session(session_id, request)
+    if not session.character:
+        return "No character available to save."
+
+    PERSISTENCE.save_character(session.character)
+    return f"Saved {session.character.name} (schema v{CURRENT_SCHEMA_VERSION})."
+
+
+def load_character_state(uploaded_file, session_id: Optional[str], request: gr.Request | None = None):
+    """Load a character from an uploaded JSON snapshot."""
+
+    session = _get_or_create_session(session_id, request)
+    if not uploaded_file:
+        return (*_render_session(session), session.session_id, "No file provided.")
+
+    try:
+        payload = json.loads(Path(uploaded_file.name).read_text())
+
+        if "characters" in payload and payload.get("characters"):
+            entry = payload["characters"][0]
+            character = PersistenceLayer.parse_character_payload(entry)
+        else:
+            character = PersistenceLayer.parse_character_payload(payload)
+
+        session.character = character
+        SESSION_STORE.save_session(session)
+        return (*_render_session(session), session.session_id, f"Loaded {character.name} from file.")
+    except Exception as exc:  # noqa: BLE001 - Surface error to the UI
+        return (*_render_session(session), session.session_id, f"Load failed: {exc}")
+
+
 # ============================================================================
 # Main UI
 # ============================================================================
@@ -691,6 +727,7 @@ def create_ui() -> gr.Blocks:
                         with gr.Row():
                             save_btn = gr.Button("💾 Save", size="sm")
                             load_btn = gr.UploadButton("📂 Load", file_types=[".json"], size="sm")
+                        save_status = gr.Markdown("")
 
 
         # Event handlers
@@ -750,6 +787,24 @@ def create_ui() -> gr.Blocks:
 
         edit_btn.click(show_edit, outputs=[edit_box, save_edit_btn])
         save_edit_btn.click(edit_narrative, inputs=[edit_box, session_state], outputs=[chatbot])
+
+        save_btn.click(save_character_state, inputs=[session_state], outputs=[save_status])
+        load_btn.upload(
+            load_character_state,
+            inputs=[load_btn, session_state],
+            outputs=[
+                chatbot,
+                stats_display,
+                momentum_display,
+                condition_display,
+                vows_display,
+                quests_display,
+                combat_display,
+                companion_display,
+                session_state,
+                save_status,
+            ],
+        )
 
         demo.load(
             restore_session,
