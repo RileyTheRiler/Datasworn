@@ -44,6 +44,10 @@ from src.photo_album import PhotoAlbumManager
 from src.psychology_api_models import *
 from src.additional_api import register_starmap_routes, register_rumor_routes, register_audio_routes  # Added import
 from src.lore import LoreRegistry
+from src.session_store import SessionStore, get_session_store
+from src.logging_config import get_logger
+
+logger = get_logger("api")
 
 app = FastAPI(title="Starforged AI GM")
 
@@ -56,9 +60,49 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory session store (simple dict for single user for now)
+# Session storage with database persistence
+session_store = get_session_store()
+
+# In-memory cache for active sessions (performance optimization)
 # Key: session_id, Value: GameState
 SESSIONS: Dict[str, GameState] = {}
+
+# Helper functions for session management with persistence
+def save_session(session_id: str, state: GameState) -> None:
+    """Save session to both memory cache and database."""
+    SESSIONS[session_id] = state
+    try:
+        session_store.save_session(session_id, state)
+        logger.debug(f"Session {session_id} saved to database")
+    except Exception as e:
+        logger.error(f"Failed to persist session {session_id}: {e}")
+
+def load_session(session_id: str) -> Optional[GameState]:
+    """Load session from memory cache or database."""
+    # Check memory cache first
+    if session_id in SESSIONS:
+        return SESSIONS[session_id]
+
+    # Try loading from database
+    try:
+        state = session_store.load_session(session_id)
+        if state:
+            SESSIONS[session_id] = state  # Cache it
+            logger.info(f"Session {session_id} loaded from database")
+        return state
+    except Exception as e:
+        logger.error(f"Failed to load session {session_id}: {e}")
+        return None
+
+def session_exists(session_id: str) -> bool:
+    """Check if session exists in memory or database."""
+    if session_id in SESSIONS:
+        return True
+    try:
+        return session_store.session_exists(session_id)
+    except Exception as e:
+        logger.error(f"Error checking session {session_id}: {e}")
+        return False
 
 # Mount Assets Directory
 ASSETS_DIR = Path("data/assets")
@@ -224,9 +268,10 @@ async def start_session(req: InitRequest):
             print(f"Failed to generate portrait for {crew_member.name}: {e}")
     
     state['relationships'].crew = {k: v.to_dict() for k, v in relationships.crew.items()}
-    
-    SESSIONS[session_id] = state
-    
+
+    # Save session to memory and database
+    save_session(session_id, state)
+
     # Build personalized intro context
     asset_names = [a.name for a in state['character'].assets] if state['character'].assets else []
     asset_context = f"You are equipped with: {', '.join(asset_names)}." if asset_names else ""
@@ -651,6 +696,9 @@ async def chat(req: ActionRequest):
                 break # Only generate one voice clip per turn for now
     except Exception as e:
         print(f"Voice synthesis failed in chat: {e}")
+
+    # Save updated session to database
+    save_session(req.session_id, state)
 
     return {
         "narrative": narrative,
@@ -2041,6 +2089,77 @@ def toggle_mute(session_id: str):
     state['audio'] = engine.state
     
     return {"muted": muted}
+
+
+# ============================================================================
+# Session Recovery Endpoints
+# ============================================================================
+
+@app.get("/api/sessions/list")
+def list_available_sessions():
+    """List all available sessions for recovery."""
+    try:
+        sessions = session_store.list_sessions()
+        return {"sessions": sessions, "count": len(sessions)}
+    except Exception as e:
+        logger.error(f"Failed to list sessions: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list sessions")
+
+
+@app.post("/api/sessions/recover/{session_id}")
+def recover_session(session_id: str):
+    """
+    Recover a previous session from database.
+
+    This loads a session that may have been lost when server restarted.
+    """
+    try:
+        state = load_session(session_id)
+        if not state:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        logger.info(f"Recovered session {session_id}")
+        return {
+            "status": "recovered",
+            "session_id": session_id,
+            "state": state,
+            "message": f"Session '{session_id}' successfully recovered"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to recover session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Recovery failed: {str(e)}")
+
+
+@app.delete("/api/sessions/{session_id}")
+def delete_saved_session(session_id: str):
+    """Delete a saved session from database."""
+    try:
+        deleted = session_store.delete_session(session_id)
+        if deleted:
+            # Also remove from memory cache
+            SESSIONS.pop(session_id, None)
+            logger.info(f"Deleted session {session_id}")
+            return {"status": "deleted", "session_id": session_id}
+        else:
+            raise HTTPException(status_code=404, detail="Session not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Deletion failed: {str(e)}")
+
+
+@app.get("/api/sessions/count")
+def get_session_count():
+    """Get total number of saved sessions."""
+    try:
+        count = session_store.get_session_count()
+        return {"count": count}
+    except Exception as e:
+        logger.error(f"Failed to count sessions: {e}")
+        raise HTTPException(status_code=500, detail="Failed to count sessions")
 
 
 def run():
