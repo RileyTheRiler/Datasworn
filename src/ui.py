@@ -4,11 +4,18 @@ Dark sci-fi themed interface with chat, sidebar, and action buttons.
 """
 
 from __future__ import annotations
-import gradio as gr
-from typing import Generator
+import json
+import threading
+from pathlib import Path
+from typing import Generator, Optional
+from uuid import uuid4
 
-from src.game_state import Character, create_initial_state
+import gradio as gr
+
+from src.game_state import Character
 from src.narrator import generate_narrative_stream, NarratorConfig
+from src.game_state import Character, create_initial_state
+from src.narrator import generate_narrative_stream, NarratorConfig, check_provider_availability
 
 
 # ============================================================================
@@ -134,40 +141,144 @@ CUSTOM_CSS = """
 class GameSession:
     """Manages game session state for the UI."""
 
-    def __init__(self):
+    def __init__(self, session_id: Optional[str] = None):
         self.character: Character | None = None
-        self.session_id: str = ""
+        self.session_id: str = session_id or ""
         self.pending_narrative: str = ""
         self.last_roll: str = ""
         self.awaiting_approval: bool = False
         self.chat_history: list[tuple[str, str]] = []
-        
+
         # New System States
         self.quest_lore: dict | None = None
         self.world: dict | None = None
         self.companions: dict | None = None
 
-    def reset(self):
+    def reset(self, session_id: Optional[str] = None):
         """Reset session state."""
-        self.__init__()
+        self.__init__(session_id=session_id or self.session_id)
+
+    def to_dict(self) -> dict:
+        """Serialize the session for persistence."""
+        return {
+            "session_id": self.session_id,
+            "character": self.character.model_dump() if self.character else None,
+            "pending_narrative": self.pending_narrative,
+            "last_roll": self.last_roll,
+            "awaiting_approval": self.awaiting_approval,
+            "chat_history": [list(item) for item in self.chat_history],
+            "quest_lore": self.quest_lore,
+            "world": self.world,
+            "companions": self.companions,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "GameSession":
+        session = cls(session_id=data.get("session_id", ""))
+        if data.get("character"):
+            session.character = Character.model_validate(data["character"])
+        session.pending_narrative = data.get("pending_narrative", "")
+        session.last_roll = data.get("last_roll", "")
+        session.awaiting_approval = data.get("awaiting_approval", False)
+        session.chat_history = [tuple(item) for item in data.get("chat_history", [])]
+        session.quest_lore = data.get("quest_lore")
+        session.world = data.get("world")
+        session.companions = data.get("companions")
+        return session
 
 
-# Global session (will be replaced with proper state management)
-_session = GameSession()
+class SessionStore:
+    """Lightweight JSON persistence for UI sessions."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self._lock = threading.Lock()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _read_all(self) -> dict:
+        if not self.path.exists():
+            return {}
+        try:
+            return json.loads(self.path.read_text())
+        except json.JSONDecodeError:
+            return {}
+
+    def _write_all(self, data: dict):
+        self.path.write_text(json.dumps(data, indent=2))
+
+    def load_session(self, session_id: str) -> GameSession:
+        with self._lock:
+            data = self._read_all()
+            if session_id in data:
+                return GameSession.from_dict(data[session_id])
+        return GameSession(session_id=session_id)
+
+    def save_session(self, session: GameSession):
+        with self._lock:
+            data = self._read_all()
+            data[session.session_id] = session.to_dict()
+            self._write_all(data)
+
+
+SESSION_STORE = SessionStore(Path("saves/ui_sessions.json"))
 
 
 # ============================================================================
 # UI Functions
 # ============================================================================
 
-def create_character(name: str, edge: int, heart: int, iron: int, shadow: int, wits: int):
+def _get_or_create_session(session_id: Optional[str], request: Optional[gr.Request]) -> GameSession:
+    """Resolve the active session using the request session hash when needed."""
+    resolved_id = session_id or getattr(request, "session_hash", None) or f"session_{uuid4().hex}"
+    session = SESSION_STORE.load_session(resolved_id)
+    if not session.session_id:
+        session.session_id = resolved_id
+    return session
+
+
+def _render_session(session: GameSession):
+    """Return UI-friendly values for the current session state."""
+    if not session.character:
+        return (
+            session.chat_history,
+            "*Create a character to begin*",
+            "*—*",
+            "*—*",
+            "*No active vows*",
+            "*No active quests*",
+            "*Safe*",
+            "*Solo*",
+        )
+
+    return (
+        session.chat_history,
+        format_stats(session.character),
+        format_momentum(session.character.momentum.value),
+        format_condition(session.character.condition),
+        format_vows(session.character.vows),
+        format_quests(session.quest_lore),
+        format_combat(session.world),
+        format_companions(session.companions),
+    )
+
+
+def create_character(
+    name: str,
+    edge: int,
+    heart: int,
+    iron: int,
+    shadow: int,
+    wits: int,
+    session_id: Optional[str],
+    request: gr.Request | None = None,
+):
     """Create a new character and start the game."""
     from src.game_state import Character, CharacterStats, CharacterCondition, MomentumState, VowState
 
-    _session.reset()
-    _session.session_id = f"session_{hash(name)}"
+    session = _get_or_create_session(session_id, request)
+    session.reset(session.session_id or f"session_{hash(name)}")
 
-    _session.character = Character(
+    session.character = Character(
         name=name,
         stats=CharacterStats(edge=edge, heart=heart, iron=iron, shadow=shadow, wits=wits),
         condition=CharacterCondition(),
@@ -176,22 +287,18 @@ def create_character(name: str, edge: int, heart: int, iron: int, shadow: int, w
     )
 
     intro = f"Welcome, {name}. Your journey through the Forge begins..."
-    _session.chat_history.append(("System", intro))
+    session.chat_history.append(("System", intro))
+    SESSION_STORE.save_session(session)
 
-    return (
-        _session.chat_history,
-        format_stats(_session.character),
-        format_momentum(_session.character.momentum.value),
-        format_condition(_session.character.condition),
-        format_vows(_session.character.vows),
-        format_quests(_session.quest_lore),
-        format_combat(_session.world),
-        format_companions(_session.companions),
-    )
+    rendered = _render_session(session)
+    return (*rendered, session.session_id)
 
 
-def format_stats(character: Character) -> str:
+def format_stats(character: Character | None) -> str:
     """Format character stats for display."""
+    if not character:
+        return "*Create a character to begin*"
+
     stats = character.stats
     return f"""
 **Edge:** {stats.edge} | **Heart:** {stats.heart} | **Iron:** {stats.iron}
@@ -208,6 +315,9 @@ def format_momentum(value: int) -> str:
 
 def format_condition(condition) -> str:
     """Format condition meters."""
+    if not condition:
+        return "*No condition data*"
+
     health_bar = "●" * condition.health + "○" * (5 - condition.health)
     spirit_bar = "●" * condition.spirit + "○" * (5 - condition.spirit)
     supply_bar = "●" * condition.supply + "○" * (5 - condition.supply)
@@ -218,7 +328,7 @@ def format_condition(condition) -> str:
     """.strip()
 
 
-def format_vows(vows: list) -> str:
+def format_vows(vows: list | None) -> str:
     """Format active vows."""
     if not vows:
         return "*No active vows*"
@@ -399,68 +509,97 @@ Loyalty: {loyalty}/10
     """.strip()
 
 
-def process_player_input(message: str, history: list) -> Generator:
+def process_player_input(message: str, history: list, session_id: Optional[str], request: gr.Request | None = None) -> Generator:
     """Process player input and generate narrative response."""
-    if not _session.character:
-        yield history + [("System", "Please create a character first.")], "", "", "", "", "", "", ""
+    session = _get_or_create_session(session_id, request)
+    history = session.chat_history or history
+
+    if not session.character:
+        updated_history = history + [("System", "Please create a character first.")]
+        session.chat_history = updated_history
+        SESSION_STORE.save_session(session)
+        yield (*_render_session(session), session.session_id)
         return
 
     # Add player message to history
     history = history + [(message, None)]
-    yield history, "", "", "", "", "", "", ""
+    session.chat_history = history
+    SESSION_STORE.save_session(session)
+    yield (*_render_session(session), session.session_id)
 
     # Generate narrative response
     config = NarratorConfig()
+    available, status_message = check_provider_availability(config)
     narrative = ""
 
-    for chunk in generate_narrative_stream(
-        player_input=message,
-        roll_result=_session.last_roll,
-        outcome="",
-        character_name=_session.character.name,
-        location="the Forge",
-    ):
-        narrative += chunk
+    if not available:
+        narrative = status_message
         history[-1] = (message, narrative)
         yield (
-            history, 
-            format_stats(_session.character), 
-            format_momentum(_session.character.momentum.value), 
-            format_condition(_session.character.condition), 
+            history,
+            format_stats(_session.character),
+            format_momentum(_session.character.momentum.value),
+            format_condition(_session.character.condition),
             format_vows(_session.character.vows),
             format_quests(_session.quest_lore),
             format_combat(_session.world),
             format_companions(_session.companions),
         )
+        return
 
-    _session.pending_narrative = narrative
-    _session.awaiting_approval = True
-    _session.chat_history = history
+    for chunk in generate_narrative_stream(
+        player_input=message,
+        roll_result=session.last_roll,
+        outcome="",
+        character_name=session.character.name,
+        location="the Forge",
+    ):
+        narrative += chunk
+        history[-1] = (message, narrative)
+        session.chat_history = history
+        yield (*_render_session(session), session.session_id)
+
+    session.pending_narrative = narrative
+    session.awaiting_approval = True
+    SESSION_STORE.save_session(session)
+    yield (*_render_session(session), session.session_id)
 
 
-def accept_narrative():
+def accept_narrative(session_id: Optional[str], request: gr.Request | None = None):
     """Accept the pending narrative."""
-    _session.awaiting_approval = False
-    _session.pending_narrative = ""
+    session = _get_or_create_session(session_id, request)
+    session.awaiting_approval = False
+    session.pending_narrative = ""
+    SESSION_STORE.save_session(session)
     return "✓ Narrative accepted"
 
 
-def retry_narrative():
+def retry_narrative(session_id: Optional[str], request: gr.Request | None = None):
     """Request a new narrative."""
-    if _session.chat_history:
-        last_input = _session.chat_history[-1][0]
-        _session.chat_history = _session.chat_history[:-1]
-        # This would trigger regeneration
+    session = _get_or_create_session(session_id, request)
+    if session.chat_history:
+        _ = session.chat_history[-1][0]
+        session.chat_history = session.chat_history[:-1]
+    SESSION_STORE.save_session(session)
     return "Regenerating..."
 
 
-def edit_narrative(edited_text: str):
+def edit_narrative(edited_text: str, session_id: Optional[str], request: gr.Request | None = None):
     """Apply edited narrative."""
-    if _session.chat_history:
-        msg, _ = _session.chat_history[-1]
-        _session.chat_history[-1] = (msg, edited_text)
-    _session.awaiting_approval = False
-    return _session.chat_history
+    session = _get_or_create_session(session_id, request)
+    if session.chat_history:
+        msg, _ = session.chat_history[-1]
+        session.chat_history[-1] = (msg, edited_text)
+    session.awaiting_approval = False
+    SESSION_STORE.save_session(session)
+    return session.chat_history
+
+
+def restore_session(session_id: Optional[str], request: gr.Request | None = None):
+    """Load a persisted session when the UI initializes."""
+    session = _get_or_create_session(session_id, request)
+    SESSION_STORE.save_session(session)
+    return (*_render_session(session), session.session_id)
 
 
 # ============================================================================
@@ -472,6 +611,9 @@ def create_ui() -> gr.Blocks:
 
     with gr.Blocks(css=CUSTOM_CSS, title="Starforged AI Game Master", theme=gr.themes.Base()) as demo:
         gr.Markdown("# ⚔️ Starforged AI Game Master", elem_classes=["section-header"])
+
+        session_state = gr.State()
+
 
         with gr.Tabs():
             # Character Creation Tab
@@ -536,19 +678,19 @@ def create_ui() -> gr.Blocks:
 
                         gr.Markdown("### Vows", elem_classes=["section-header"])
                         vows_display = gr.Markdown("*—*")
-                        
+
                         gr.Markdown("### Director", elem_classes=["section-header"])
                         director_display = gr.Markdown("*Awaiting...*")
-                        
+
                         gr.Markdown("### Upcoming Events", elem_classes=["section-header"])
                         beats_display = gr.Markdown("*No delayed beats*")
-                        
+
                         gr.Markdown("### Quests", elem_classes=["section-header"])
                         quests_display = gr.Markdown("*No active quests*")
-                        
+
                         gr.Markdown("### Combat Status", elem_classes=["section-header"])
                         combat_display = gr.Markdown("*Safe*")
-                        
+
                         gr.Markdown("### Companions", elem_classes=["section-header"])
                         companion_display = gr.Markdown("*Solo*")
 
@@ -557,33 +699,80 @@ def create_ui() -> gr.Blocks:
                             save_btn = gr.Button("💾 Save", size="sm")
                             load_btn = gr.UploadButton("📂 Load", file_types=[".json"], size="sm")
 
+
         # Event handlers
         create_btn.click(
             create_character,
-            inputs=[char_name, edge_stat, heart_stat, iron_stat, shadow_stat, wits_stat],
-            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display, quests_display, combat_display, companion_display],
+            inputs=[char_name, edge_stat, heart_stat, iron_stat, shadow_stat, wits_stat, session_state],
+            outputs=[
+                chatbot,
+                stats_display,
+                momentum_display,
+                condition_display,
+                vows_display,
+                quests_display,
+                combat_display,
+                companion_display,
+                session_state,
+            ],
         )
 
         submit_btn.click(
             process_player_input,
-            inputs=[player_input, chatbot],
-            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display, quests_display, combat_display, companion_display],
+            inputs=[player_input, chatbot, session_state],
+            outputs=[
+                chatbot,
+                stats_display,
+                momentum_display,
+                condition_display,
+                vows_display,
+                quests_display,
+                combat_display,
+                companion_display,
+                session_state,
+            ],
         ).then(lambda: "", outputs=player_input)
 
         player_input.submit(
             process_player_input,
-            inputs=[player_input, chatbot],
-            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display, quests_display, combat_display, companion_display],
+            inputs=[player_input, chatbot, session_state],
+            outputs=[
+                chatbot,
+                stats_display,
+                momentum_display,
+                condition_display,
+                vows_display,
+                quests_display,
+                combat_display,
+                companion_display,
+                session_state,
+            ],
         ).then(lambda: "", outputs=player_input)
 
-        accept_btn.click(accept_narrative)
-        retry_btn.click(retry_narrative)
+        accept_btn.click(accept_narrative, inputs=[session_state])
+        retry_btn.click(retry_narrative, inputs=[session_state])
 
         def show_edit():
             return gr.update(visible=True), gr.update(visible=True)
 
         edit_btn.click(show_edit, outputs=[edit_box, save_edit_btn])
-        save_edit_btn.click(edit_narrative, inputs=[edit_box], outputs=[chatbot])
+        save_edit_btn.click(edit_narrative, inputs=[edit_box, session_state], outputs=[chatbot])
+
+        demo.load(
+            restore_session,
+            inputs=[session_state],
+            outputs=[
+                chatbot,
+                stats_display,
+                momentum_display,
+                condition_display,
+                vows_display,
+                quests_display,
+                combat_display,
+                companion_display,
+                session_state,
+            ],
+        )
 
     return demo
 
