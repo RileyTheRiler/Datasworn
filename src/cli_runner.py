@@ -10,6 +10,9 @@ import re
 from pathlib import Path
 from src.datasworn import DataswornData, Move
 from src.game_state import Character, CharacterCondition, CharacterStats, MomentumState, VowState, create_initial_state
+from src.photo_album import PhotoAlbumManager
+from src.session_recap import SessionRecapEngine
+from src.config import config
 from src.intent_predictor import INTENT_KEYWORDS, IntentCategory
 from src.persistence import PersistenceLayer
 from src.rules_engine import ProgressTrack, RollResult, action_roll
@@ -57,6 +60,9 @@ class CLIRunner:
         self.data = DataswornData(path) if path.exists() else None
         self.state = create_initial_state(character_name)
         self.persistence = persistence or PersistenceLayer(save_path or Path("saves/game_state.db"))
+        self.recap_engine = SessionRecapEngine()
+        self.album_manager = PhotoAlbumManager(self.state["album"])
+        self.recap_engine.start_session()
 
     # ------------------------------------------------------------------
     # High-level flow
@@ -96,8 +102,16 @@ class CLIRunner:
             return self._render_assets()
         if name == "vows":
             return self._render_vows()
+        if name in {"review", "reviewvows"}:
+            return self._render_vows(include_header=True)
+        if name in {"memory", "memories"}:
+            return self._render_memory()
         if name == "oracle":
             return self._roll_oracle(arg)
+        if name in {"rest", "sojourn"}:
+            return self._command_rest()
+        if name in {"recap", "what", "digest"}:
+            return self._render_recap_digest()
         if name == "save":
             return self._command_save()
         if name == "load":
@@ -111,6 +125,10 @@ class CLIRunner:
                 "!status       - Show stats, momentum, and conditions\n"
                 "!assets       - List equipped assets and abilities\n"
                 "!vows         - List active vows and progress\n"
+                "!review vows  - Highlight sworn oaths and progress\n"
+                "!memory       - Summarize recent scenes, choices, and NPCs\n"
+                "!rest         - Take a breather and regain condition\n"
+                "!recap        - Show 'What happened?' digest with highlights\n"
                 "!oracle NAME  - Roll an oracle by path or keyword\n"
                 "!save         - Persist the current character\n"
                 "!load [NAME]  - Load a saved character by name\n"
@@ -164,6 +182,96 @@ class CLIRunner:
             lines.append(f"- {vow.name} ({vow.rank}) {track.display}")
         return "\n".join(lines)
 
+    def _render_memory(self) -> str:
+        memory = self.state.get("memory")
+        if not memory:
+            return "No memories recorded yet."
+
+        lines = ["Recent memory log:"]
+        if memory.scene_summaries:
+            lines.append("Scenes:")
+            for summary in memory.scene_summaries[-3:]:
+                lines.append(f"  - {summary}")
+        if memory.decisions_made:
+            lines.append("Decisions:")
+            for decision in memory.decisions_made[-3:]:
+                lines.append(f"  - {decision}")
+        if memory.npcs_encountered:
+            lines.append("NPCs encountered:")
+            for name, note in list(memory.npcs_encountered.items())[-3:]:
+                lines.append(f"  - {name}: {note}")
+
+        return "\n".join(lines)
+
+    def _command_rest(self) -> str:
+        char: Character = self.state["character"]
+        condition: CharacterCondition = char.condition
+        before = (condition.health, condition.spirit, condition.supply)
+
+        condition.health = min(5, condition.health + 1)
+        condition.spirit = min(5, condition.spirit + 1)
+        condition.supply = min(5, condition.supply + 1)
+
+        self.album_manager.capture_moment(
+            image_url="cli://rest",
+            caption=f"{char.name} caught their breath at {self.state['world'].current_location}",
+            tags=["Rest", "Recovery"],
+            scene_id=self.state["world"].current_location or "camp",
+        )
+        self.recap_engine.record_event(
+            description="Took time to rest and regroup",
+            importance=4,
+            characters=[char.name],
+            location=self.state["world"].current_location,
+            emotional_tone="relief",
+        )
+
+        after = (condition.health, condition.spirit, condition.supply)
+        return (
+            "Rested and regrouped."
+            f"\nHealth: {before[0]} → {after[0]}"
+            f"\nSpirit: {before[1]} → {after[1]}"
+            f"\nSupply: {before[2]} → {after[2]}"
+            "\nUse the recap panel for highlights and vows."
+        )
+
+    def _render_recap_digest(self) -> str:
+        char: Character = self.state["character"]
+        digest = self.recap_engine.build_digest(
+            protagonist_name=char.name,
+            album_state=self.state.get("album"),
+            memory_state=self.state.get("memory"),
+            vow_state=char.vows,
+            current_location=self.state.get("world").current_location,
+        )
+
+        lines = [digest.get("title", "What happened?"), ""]
+        lines.append(digest.get("recap", ""))
+
+        if digest.get("highlights"):
+            lines.append("\nHighlights:")
+            for photo in digest["highlights"]:
+                lines.append(f"- {photo.get('caption')} ({', '.join(photo.get('tags', []))})")
+
+        memory = digest.get("memory") or {}
+        if memory:
+            lines.append("\nMemory anchors:")
+            for summary in memory.get("recent_summaries", []):
+                lines.append(f"- {summary}")
+            for decision in memory.get("recent_decisions", []):
+                lines.append(f"- Decision: {decision}")
+
+        if digest.get("vows"):
+            lines.append("\nVows:")
+            for vow in digest["vows"]:
+                lines.append(f"- {vow['name']} ({vow['rank']}) {vow['progress']}")
+
+        tooltip = config.ui.mechanic_tooltips.get("recap", {})
+        if tooltip:
+            lines.append(f"\nTip: {tooltip.get('summary', '')}")
+
+        return "\n".join(lines)
+
     def _command_save(self) -> str:
         char: Character = self.state["character"]
         self.persistence.save_character(char)
@@ -204,6 +312,14 @@ class CLIRunner:
         ]
         if progress_note:
             parts.append(progress_note)
+
+        self.recap_engine.record_event(
+            description=f"{move.name}: {roll.result.value}",
+            importance=6,
+            characters=[char.name],
+            location=self.state.get("world").current_location,
+            emotional_tone=roll.result.value,
+        )
 
         return "\n".join(parts)
 
