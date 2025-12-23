@@ -298,18 +298,19 @@ def format_delayed_beats(consequence_state) -> str:
 
 def format_quests(quest_lore_state) -> str:
     """Format active quests and objectives."""
+    from src.quest_lore import QuestLoreEngine
+
+    # Safely handle Dict or Pydantic model
+    if hasattr(quest_lore_state, 'model_dump'):
+        data = quest_lore_state.model_dump()
+    elif isinstance(quest_lore_state, dict):
+        data = quest_lore_state
+    else:
+        return "*No active quests*"
+
     try:
-        from src.quest_lore import QuestLoreEngine
-        
-        # Safely handle Dict or Pydantic model
-        if hasattr(quest_lore_state, 'model_dump'):
-            data = quest_lore_state.model_dump()
-        elif isinstance(quest_lore_state, dict):
-            data = quest_lore_state
-        else:
-            return "*No active quests*"
-            
         engine = QuestLoreEngine.from_dict(data)
+        quests_dict = engine.quests.quests
         
         # Get simplified text representation
         lines = []
@@ -323,7 +324,39 @@ def format_quests(quest_lore_state) -> str:
         
         return "\n".join(lines) if lines else "*No active quests*"
     except Exception:
-        return "*No active quests*"
+        # Fall back to raw dict traversal if dataclass parsing fails
+        quests_dict = data.get("quests", {}).get("quests", {}) if isinstance(data, dict) else {}
+
+    lines = []
+    for quest in quests_dict.values():
+        if isinstance(quest, dict):
+            title = quest.get("title")
+            status = quest.get("status", "")
+            objectives = quest.get("objectives", [])
+        else:
+            title = getattr(quest, "title", None)
+            status_val = getattr(quest, "status", "")
+            status = status_val.value if hasattr(status_val, "value") else status_val
+            objectives = getattr(quest, "objectives", [])
+
+        if status == "completed":
+            continue
+
+        if title:
+            lines.append(f"**{title}**")
+
+        for obj in objectives:
+            if isinstance(obj, dict):
+                completed = obj.get("is_completed", False) or obj.get("completed", False)
+                desc = obj.get("description", "")
+            else:
+                completed = getattr(obj, "is_completed", False)
+                desc = getattr(obj, "description", "")
+
+            status_icon = "☑️" if completed else "⬜"
+            lines.append(f"{status_icon} {desc}")
+
+    return "\n".join(lines) if lines else "*No active quests*"
 
 
 def format_combat(world_state) -> str:
