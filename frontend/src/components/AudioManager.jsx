@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Howl, Howler } from 'howler';
 import { useAudio } from '../contexts/AudioContext';
+import { useMusic } from '../contexts/MusicContext';
 
 /**
  * AudioManager - Manages all audio playback using Howler.js
@@ -8,6 +9,7 @@ import { useAudio } from '../contexts/AudioContext';
  */
 const AudioManager = ({ sessionId }) => {
     const { volumes, muted, audioEnabled } = useAudio();
+    const { isPlaying: musicIsPlaying } = useMusic();
 
     // Howl instances for each channel
     const ambientRef = useRef(null);
@@ -43,10 +45,9 @@ const AudioManager = ({ sessionId }) => {
                     updateAmbient(directives.ambient);
                 }
 
-                // Music is now handled by MusicContext, not AudioManager
-                // if (directives.music?.track_id !== currentMusic) {
-                //     updateMusic(directives.music);
-                // }
+                if (directives.music?.track_id !== currentMusic) {
+                    updateMusic(directives.music);
+                }
             }
 
             // 2. Fetch psyche-based audio cues (heartbeat, whispers, etc.)
@@ -236,6 +237,21 @@ const AudioManager = ({ sessionId }) => {
             voiceRef.current.volume(volumes.voice);
         }
     }, [volumes]);
+
+    // Sync music playback with MusicContext
+    useEffect(() => {
+        if (musicRef.current) {
+            if (musicIsPlaying) {
+                if (!musicRef.current.playing()) {
+                    musicRef.current.play();
+                }
+            } else {
+                if (musicRef.current.playing()) {
+                    musicRef.current.pause();
+                }
+            }
+        }
+    }, [musicIsPlaying]);
 
     // Poll for audio state changes
     useEffect(() => {

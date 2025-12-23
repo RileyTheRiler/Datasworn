@@ -194,31 +194,21 @@ function GameContent() {
   // Show character creation wizard
   if (showCharacterCreation) {
     return (
-      <AccessibilityProvider>
-        <AudioProvider>
-          <VoiceProvider>
-            <SoundEffectsProvider>
-              <MusicProvider>
-                <div className="min-h-screen bg-disco-bg">
-                  <AmbientParticles type="dust" count={20} />
+      <div className="min-h-screen bg-disco-bg">
+        <AmbientParticles type="dust" count={20} />
 
-                  {/* Title - Hidden in Wizard if transitioning from Menu? Keep for now */}
-                  <div className="pt-8 text-center">
-                    <h1 className="text-5xl font-serif text-disco-paper tracking-wider">
-                      DISTANT SKIES
-                    </h1>
-                  </div>
+        {/* Title - Hidden in Wizard if transitioning from Menu? Keep for now */}
+        <div className="pt-8 text-center">
+          <h1 className="text-5xl font-serif text-disco-paper tracking-wider">
+            DISTANT SKIES
+          </h1>
+        </div>
 
-                  <CharacterCreation
-                    onComplete={handleCharacterCreated}
-                    onCancel={handleQuickStart}
-                  />
-                </div>
-              </MusicProvider>
-            </SoundEffectsProvider>
-          </VoiceProvider>
-        </AudioProvider>
-      </AccessibilityProvider>
+        <CharacterCreation
+          onComplete={handleCharacterCreated}
+          onCancel={handleQuickStart}
+        />
+      </div>
     );
   }
 

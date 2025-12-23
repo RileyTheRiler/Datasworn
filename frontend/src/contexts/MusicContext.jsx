@@ -174,11 +174,14 @@ export const MusicProvider = ({ children }) => {
     };
 
     const togglePlay = () => {
-        if (isPlaying) {
-            pauseMusic();
-        } else {
-            resumeMusic();
+        if (soundRef.current) {
+            if (isPlaying) {
+                soundRef.current.pause();
+            } else {
+                soundRef.current.play();
+            }
         }
+        setIsPlaying(!isPlaying);
     };
 
     const stopAll = () => {

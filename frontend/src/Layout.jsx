@@ -41,9 +41,10 @@ import CampView from './components/CampView';
 import WorldDashboard from './components/WorldDashboard';
 import SensorRadar from './components/SensorRadar';
 import PauseMenu from './components/PauseMenu';
+import InterrogationModal from './components/InterrogationModal';
 
 
-const API_URL = 'http://localhost:8001/api';
+const API_URL = 'http://localhost:8000/api';
 
 // Atmospheric loading messages
 const LOADING_MESSAGES = [
@@ -99,6 +100,8 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     const [showSensorRadar, setShowSensorRadar] = useState(false);
     const [showWorldDashboard, setShowWorldDashboard] = useState(false);
     const [showPauseMenu, setShowPauseMenu] = useState(false);
+    const [showInterrogation, setShowInterrogation] = useState(false);
+    const [interrogationNPC, setInterrogationNPC] = useState({ id: '', name: '' });
     const [revelationStage, setRevelationStage] = useState(null);
     const [revelationData, setRevelationData] = useState(null);
     const [revelationQuestion, setRevelationQuestion] = useState('');

@@ -594,7 +594,21 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                     {createdSessionId ? (
                         <CalibrationStep
                             sessionId={createdSessionId}
-                            onComplete={() => onComplete({ session_id: createdSessionId })}
+                            onComplete={async () => {
+                                // Fetch the full game state after calibration
+                                try {
+                                    const res = await fetch(`${API_URL}/state/${createdSessionId}`);
+                                    const state = await res.json();
+                                    onComplete({
+                                        session_id: createdSessionId,
+                                        state: state
+                                    });
+                                } catch (err) {
+                                    console.error("Failed to fetch state after calibration:", err);
+                                    // Fallback: pass just session_id
+                                    onComplete({ session_id: createdSessionId });
+                                }
+                            }}
                         />
                     ) : (
                         renderStep()
