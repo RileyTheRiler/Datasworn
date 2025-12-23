@@ -4,6 +4,10 @@ Generates narrative prose using configurable LLM providers.
 """
 
 from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import Generator
+import os
+import ollama
 from dataclasses import dataclass
 from typing import Generator, Optional
 from src.llm_provider import get_llm_provider, LLMProvider
@@ -258,14 +262,34 @@ def get_examples_for_tone(tone: str, pacing: str, count: int = 2) -> list[dict]:
 @dataclass
 class NarratorConfig:
     """Configuration for narrative generation."""
-    backend: str = "gemini"  # "ollama" or "gemini"
-    model: str = "gemini-flash-latest"  # Switched to Flash for reliability
+
+    backend: str | None = None  # "ollama" or "gemini"
+    model: str | None = None
     temperature: float = 0.85
     top_p: float = 0.90
     top_k: int = 50
     repeat_penalty: float = 1.15  # Slightly increased for variety
     max_tokens: int = 2000  # Increased to prevent premature truncation
     style_profile_name: Optional[str] = None
+
+    def __post_init__(self):
+        allowed_backends = {"gemini", "ollama"}
+
+        resolved_backend = (self.backend or os.environ.get("LLM_PROVIDER") or "ollama").lower()
+        if resolved_backend not in allowed_backends:
+            raise ValueError(
+                f"Unsupported LLM provider '{resolved_backend}'. Set LLM_PROVIDER to 'gemini' or 'ollama'."
+            )
+        self.backend = resolved_backend
+
+        if not self.model:
+            universal_model = os.environ.get("LLM_MODEL")
+            if universal_model:
+                self.model = universal_model
+            elif self.backend == "gemini":
+                self.model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+            else:
+                self.model = os.environ.get("OLLAMA_MODEL", "llama3.1")
 
 
 # ============================================================================
@@ -286,6 +310,181 @@ def check_provider_availability(
     provider = provider or get_llm_provider_for_config(config)
     available = provider.is_available()
 
+@dataclass
+class GeminiClient:
+    """Wrapper for Google Gemini API."""
+    model: str = "gemini-2.0-flash"
+    _client: any = field(default=None, repr=False)
+    _initialized: bool = field(default=False, repr=False)
+
+    def _ensure_initialized(self):
+        """Lazy initialize the Gemini client."""
+        if self._initialized:
+            return
+        
+        try:
+            import google.generativeai as genai
+            import os
+            
+            # Try to get API key from environment
+            api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            if api_key:
+                genai.configure(api_key=api_key)
+            
+            self._client = genai.GenerativeModel(self.model)
+            self._initialized = True
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Gemini: {e}")
+
+    def _retry_with_backoff(self, func, *args, **kwargs):
+        """Execute a function with exponential backoff for rate limits."""
+        import time
+        max_retries = 3
+        base_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                is_rate_limit = "429" in str(e) or "ResourceExhausted" in str(e) or "Quota exceeded" in str(e)
+                
+                if is_rate_limit and attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    print(f"Rate limit hit. Retrying in {delay}s...")
+                    time.sleep(delay)
+                else:
+                    raise e
+
+    def generate(
+        self,
+        prompt: str,
+        system: str = SYSTEM_PROMPT,
+        config: NarratorConfig | None = None,
+    ) -> Generator[str, None, None]:
+        """
+        Generate text with streaming.
+        """
+        config = config or NarratorConfig()
+
+        try:
+            self._ensure_initialized()
+            
+            import google.generativeai as genai
+            
+            # Combine system prompt and user prompt
+            full_prompt = f"{system}\n\n---\n\n{prompt}"
+            
+            generation_config = genai.GenerationConfig(
+                temperature=config.temperature,
+                top_p=config.top_p,
+                top_k=config.top_k,
+                max_output_tokens=config.max_tokens,
+            )
+            
+            # Helper for stream iteration to handle errors during the stream
+            def stream_generator():
+                response = self._client.generate_content(
+                    full_prompt,
+                    generation_config=generation_config,
+                    stream=True,
+                )
+                for chunk in response:
+                    if chunk.text:
+                        yield chunk.text
+
+            # We can't easily retry a stream once started, but we can retry the connection
+            # For simplicity in streaming, we just try to start it.
+            # If it fails mid-stream, that's harder, but 429 usually happens at start.
+            
+            yield from self._retry_with_backoff(stream_generator)
+
+        except Exception as e:
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                yield "[System: Neural Link Unstable (Rate Limit Reached). Retrying...]"
+            else:
+                yield f"[Gemini error: {e}]"
+
+    def generate_sync(
+        self,
+        prompt: str,
+        system: str = SYSTEM_PROMPT,
+        config: NarratorConfig | None = None,
+    ) -> str:
+        """
+        Generate text synchronously (non-streaming).
+        """
+        config = config or NarratorConfig()
+
+        try:
+            self._ensure_initialized()
+            
+            import google.generativeai as genai
+            
+            full_prompt = f"{system}\n\n---\n\n{prompt}"
+            
+            generation_config = genai.GenerationConfig(
+                temperature=config.temperature,
+                top_p=config.top_p,
+                top_k=config.top_k,
+                max_output_tokens=config.max_tokens,
+            )
+            
+            # Define safety settings to prevent over-blocking of gritty sci-fi content
+            safety_settings = {
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_ONLY_HIGH",
+            }
+            
+            response = self._retry_with_backoff(
+                self._client.generate_content,
+                full_prompt,
+                generation_config=generation_config,
+                safety_settings=safety_settings
+            )
+            
+            try:
+                return response.text
+            except Exception:
+                # Handle cases where feedback is blocked or empty (Finish Reason 2/3/Other)
+                candidates = getattr(response, 'candidates', [])
+                if candidates:
+                    finish_reason = candidates[0].finish_reason
+                    return f"[Gemini Error: Generation stopped (Reason: {finish_reason}). Try a different action.]"
+                
+                if response.prompt_feedback:
+                    return f"[Gemini Error: Prompt blocked. {response.prompt_feedback}]"
+                    
+                return "[Gemini Error: No content returned. The Oracle is silent.]"
+
+        except Exception as e:
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                 return (
+                     "[System: Rate Limit Exceeded. The Oracle is momentarily silent.]\n\n"
+                     "*(You can try your action again in a few moments, or describe the outcome yourself for now.)*"
+                 )
+            return f"[Gemini error: {e}]"
+
+    def is_available(self) -> bool:
+        """Check if Gemini API is available."""
+        try:
+            self._ensure_initialized()
+            # Simple check call? No, saving quota. Just check client exists.
+            return self._client is not None
+        except Exception:
+            return False
+
+
+
+def get_llm_client(config: NarratorConfig = None):
+    """Get the appropriate LLM client based on configuration."""
+    config = config or NarratorConfig()
+
+    if config.backend == "gemini":
+        return GeminiClient(model=config.model)
+    if config.backend == "ollama":
+        return OllamaClient(model=config.model)
     backend_hint = ""
     if config.backend == "ollama":
         backend_hint = "Ensure Ollama is installed, running, and the model is pulled."
@@ -297,6 +496,10 @@ def check_provider_availability(
     )
 
     return available, status
+
+    raise ValueError(
+        f"Unsupported LLM provider '{config.backend}'. Set LLM_PROVIDER to 'gemini' or 'ollama'."
+    )
 
 
 def build_guardrail_store(
