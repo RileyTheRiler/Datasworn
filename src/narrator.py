@@ -6,6 +6,7 @@ Generates narrative prose using Ollama for local LLM inference.
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Generator
+import os
 import ollama
 from src.psych_profile import PsychologicalProfile, PsychologicalEngine
 from src.style_profile import StyleProfile, load_style_profile
@@ -258,14 +259,34 @@ def get_examples_for_tone(tone: str, pacing: str, count: int = 2) -> list[dict]:
 @dataclass
 class NarratorConfig:
     """Configuration for narrative generation."""
-    backend: str = "gemini"  # "ollama" or "gemini"
-    model: str = "gemini-flash-latest"  # Switched to Flash for reliability
+
+    backend: str | None = None  # "ollama" or "gemini"
+    model: str | None = None
     temperature: float = 0.85
     top_p: float = 0.90
     top_k: int = 50
     repeat_penalty: float = 1.15  # Slightly increased for variety
     max_tokens: int = 2000  # Increased to prevent premature truncation
     style_profile_name: Optional[str] = None
+
+    def __post_init__(self):
+        allowed_backends = {"gemini", "ollama"}
+
+        resolved_backend = (self.backend or os.environ.get("LLM_PROVIDER") or "ollama").lower()
+        if resolved_backend not in allowed_backends:
+            raise ValueError(
+                f"Unsupported LLM provider '{resolved_backend}'. Set LLM_PROVIDER to 'gemini' or 'ollama'."
+            )
+        self.backend = resolved_backend
+
+        if not self.model:
+            universal_model = os.environ.get("LLM_MODEL")
+            if universal_model:
+                self.model = universal_model
+            elif self.backend == "gemini":
+                self.model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+            else:
+                self.model = os.environ.get("OLLAMA_MODEL", "llama3.1")
 
 
 # ============================================================================
@@ -528,11 +549,15 @@ class GeminiClient:
 def get_llm_client(config: NarratorConfig = None):
     """Get the appropriate LLM client based on configuration."""
     config = config or NarratorConfig()
-    
+
     if config.backend == "gemini":
         return GeminiClient(model=config.model)
-    else:
+    if config.backend == "ollama":
         return OllamaClient(model=config.model)
+
+    raise ValueError(
+        f"Unsupported LLM provider '{config.backend}'. Set LLM_PROVIDER to 'gemini' or 'ollama'."
+    )
 
 
 def build_guardrail_store(
