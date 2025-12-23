@@ -1,0 +1,45 @@
+id: "help_engineer"
+phase: 1
+title: "Engine Trouble"
+description: "The ship's engineer needs help investigating suspicious damage to the engine room. The scorch marks don't look like a normal malfunction."
+prerequisites:
+  quests: []
+  flags: []
+  reputation: {}
+recommended_order: 1
+converges_to: "discover_truth"
+expires_on_phase: null
+side_effects:
+  flags_to_set:
+    - "engine_room_investigated"
+    - "engineer_trust_gained"
+  world_deltas:
+    - type: "npc_relationship"
+      target: "engineer"
+      value: 10
+unlock_dialogue_options:
+  - "engineer_sabotage_theory"
+  - "engineer_alibi_question"
+quest_type: "side"
+objectives:
+  - id: "investigate_damage"
+    description: "Examine the scorch marks in the engine room"
+    type: "location"
+    target: "engine_room_clue"
+    required: true
+  - id: "talk_to_engineer"
+    description: "Discuss your findings with the Chief Engineer"
+    type: "npc_interaction"
+    target: "engineer"
+    required: true
+  - id: "repair_systems"
+    description: "Help repair the damaged control panel"
+    type: "skill_check"
+    target: "wits"
+    difficulty: 2
+    required: false
+rewards:
+  experience: 50
+  stat_increases:
+    wits: 1
+  items: []

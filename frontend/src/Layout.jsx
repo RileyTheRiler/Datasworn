@@ -40,6 +40,7 @@ import AreaInfoOverlay from './components/AreaInfoOverlay';
 import CampView from './components/CampView';
 import WorldDashboard from './components/WorldDashboard';
 import SensorRadar from './components/SensorRadar';
+import PauseMenu from './components/PauseMenu';
 
 
 const API_URL = 'http://localhost:8001/api';
@@ -97,6 +98,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     const [showCamp, setShowCamp] = useState(false);
     const [showSensorRadar, setShowSensorRadar] = useState(false);
     const [showWorldDashboard, setShowWorldDashboard] = useState(false);
+    const [showPauseMenu, setShowPauseMenu] = useState(false);
     const [revelationStage, setRevelationStage] = useState(null);
     const [revelationData, setRevelationData] = useState(null);
     const [revelationQuestion, setRevelationQuestion] = useState('');
@@ -294,9 +296,15 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
         onSelectStat: handleStatSelect,
     });
 
-    // Quick save/load keyboard shortcuts
+    // Quick save/load keyboard shortcuts + ESC for pause menu
     useEffect(() => {
         const handleKeyDown = (e) => {
+            // ESC - Toggle Pause Menu
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setShowPauseMenu(prev => !prev);
+            }
+
             if (e.key === 'F5') {
                 e.preventDefault();
                 // Quick save via API
@@ -784,6 +792,23 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                         >
                             🏕️ CAMP
                         </button>
+                        <div className="w-px h-4 bg-disco-muted/30 mx-2"></div>
+                        <button
+                            onClick={async () => {
+                                if (confirm('Exit game and stop all servers?')) {
+                                    try {
+                                        await fetch('http://localhost:8000/api/shutdown', { method: 'POST' });
+                                    } catch (e) {
+                                        console.log('Server already stopped');
+                                    }
+                                    window.close();
+                                }
+                            }}
+                            className="text-red-500 hover:text-white transition-colors font-bold"
+                            title="Exit Game"
+                        >
+                            🚪 EXIT
+                        </button>
                     </div>
 
                 </div>
@@ -1029,6 +1054,14 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             <PortArrivalModal
                 isOpen={showPortArrival}
                 onClose={() => setShowPortArrival(false)}
+                sessionId="default"
+            />
+
+            {/* Pause Menu (ESC) */}
+            <PauseMenu
+                isOpen={showPauseMenu}
+                onClose={() => setShowPauseMenu(false)}
+                onResume={() => setShowPauseMenu(false)}
                 sessionId="default"
             />
         </div>

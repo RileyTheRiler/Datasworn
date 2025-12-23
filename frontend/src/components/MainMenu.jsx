@@ -12,7 +12,7 @@ const MainMenu = ({ onNewGame, onLoadGame, onExit }) => {
 
     // Initial music start
     React.useEffect(() => {
-        playMood('relaxing');
+        playMood('theme');
     }, [playMood]);
 
     const handleLoadGame = (state) => {

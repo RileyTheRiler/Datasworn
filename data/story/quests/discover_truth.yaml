@@ -1,0 +1,58 @@
+id: "discover_truth"
+phase: 1
+title: "Murder on the Exile's Gambit"
+description: "Captain Marcus Reyes is dead. Someone on this ship killed him. You need to find out who, and why, before they strike again."
+prerequisites:
+  quests: []
+  flags: []
+  reputation: {}
+recommended_order: 1
+converges_to: null
+expires_on_phase: 3
+side_effects:
+  flags_to_set:
+    - "murder_investigation_started"
+    - "captain_quarters_examined"
+  world_deltas:
+    - type: "narrative_state"
+      target: "investigation_active"
+      value: true
+unlock_dialogue_options:
+  - "ask_about_captain"
+  - "question_whereabouts"
+  - "confront_suspect"
+quest_type: "main"
+objectives:
+  - id: "examine_crime_scene"
+    description: "Search the Captain's Quarters for evidence"
+    type: "location"
+    target: "captains_quarters"
+    required: true
+  - id: "interview_crew_member_1"
+    description: "Question the Chief Engineer about the night of the murder"
+    type: "npc_interaction"
+    target: "engineer"
+    required: true
+  - id: "interview_crew_member_2"
+    description: "Question Dr. Okonkwo about the autopsy findings"
+    type: "npc_interaction"
+    target: "medic"
+    required: true
+  - id: "find_murder_weapon"
+    description: "Locate the missing sidearm from the armory"
+    type: "location"
+    target: "armory"
+    required: true
+  - id: "decode_final_message"
+    description: "Decrypt the Captain's last communication"
+    type: "skill_check"
+    target: "wits"
+    difficulty: 3
+    required: false
+rewards:
+  experience: 200
+  stat_increases:
+    shadow: 1
+    wits: 1
+  items:
+    - "captains_journal"

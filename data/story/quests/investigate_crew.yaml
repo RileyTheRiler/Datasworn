@@ -1,0 +1,63 @@
+id: "investigate_crew"
+phase: 1
+title: "Secrets in the Shadows"
+description: "The crew quarters hold personal belongings and hidden secrets. Searching them might reveal who had motive to kill the Captain—but it's a violation of trust."
+prerequisites:
+  quests: []
+  flags: []
+  reputation: {}
+recommended_order: 2
+converges_to: "discover_truth"
+expires_on_phase: null
+side_effects:
+  flags_to_set:
+    - "crew_quarters_searched"
+  world_deltas:
+    - type: "npc_relationship"
+      target: "all_crew"
+      value: -5
+unlock_dialogue_options:
+  - "confront_with_evidence"
+  - "keep_secret"
+quest_type: "side"
+objectives:
+  - id: "search_quarters"
+    description: "Search the crew quarters for evidence"
+    type: "location"
+    target: "crew_quarters_search"
+    required: true
+  - id: "find_hidden_item"
+    description: "Discover what someone is hiding"
+    type: "skill_check"
+    target: "shadow"
+    difficulty: 2
+    required: true
+  - id: "make_choice"
+    description: "Decide what to do with what you've found"
+    type: "choice"
+    target: "confront_or_hide"
+    required: true
+    branches:
+      - id: "confront"
+        description: "Confront the crew member with the evidence"
+        side_effects:
+          flags_to_set:
+            - "crew_confronted"
+          world_deltas:
+            - type: "npc_relationship"
+              target: "suspect"
+              value: -20
+      - id: "keep_quiet"
+        description: "Keep the secret and use it as leverage later"
+        side_effects:
+          flags_to_set:
+            - "secret_kept"
+          world_deltas:
+            - type: "npc_relationship"
+              target: "suspect"
+              value: 5
+rewards:
+  experience: 75
+  stat_increases:
+    shadow: 1
+  items: []

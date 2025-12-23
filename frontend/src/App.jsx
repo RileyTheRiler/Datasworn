@@ -157,9 +157,23 @@ function GameContent() {
     setShowCharacterCreation(false);
   };
 
-  const handleExit = () => {
-    // For now, just reload the page to "exit" to menu (or close if desktop app later)
-    window.location.reload();
+  const handleExit = async () => {
+    if (confirm('Exit game and stop all servers?')) {
+      try {
+        // Call shutdown endpoint - this will close terminals and stop servers
+        await fetch('http://localhost:8000/api/shutdown', { method: 'POST' });
+
+        // Give user feedback
+        alert('Shutting down... All terminal windows will close automatically.');
+
+        // Try to close the browser window
+        window.close();
+      } catch (e) {
+        // Server might already be stopped or unreachable
+        console.log('Server shutdown error (may already be stopped):', e);
+        alert('Server stopped. You can close this window now.');
+      }
+    }
   };
 
   if (showMenu) {

@@ -46,7 +46,7 @@ from src.narrative.choice_crystallized import ChoiceCrystallizedSystem
 from src.narrative.mirror_moment import MirrorMomentSystem
 from src.character_identity import WoundType
 from src.narrative.reyes_journal import ReyesJournalSystem
-from src.additional_api import register_starmap_routes, register_rumor_routes, register_audio_routes
+from src.additional_api import register_starmap_routes, register_rumor_routes
 from src.narrative_api import register_narrative_routes
 from src.psych_api import register_psychology_routes
 from src.combat_api import register_combat_routes
@@ -149,6 +149,62 @@ class ActionRequest(BaseModel):
 @app.get("/")
 def health_check():
     return {"status": "online", "system": "Starforged AI GM"}
+
+@app.get("/api/health")
+def api_health_check():
+    """Health check endpoint for startup verification."""
+    return {"status": "online", "system": "Starforged AI GM", "version": "0.9.1"}
+
+@app.post("/api/shutdown")
+async def shutdown():
+    """Gracefully shutdown the server and close terminal windows."""
+    import os
+    import signal
+    import subprocess
+    
+    def cleanup_and_shutdown():
+        # Kill the server processes which will close their terminal windows
+        try:
+            # Kill uvicorn processes (more specific than all python.exe)
+            subprocess.run(
+                ['taskkill', '/F', '/FI', 'IMAGENAME eq python.exe', '/FI', 'WINDOWTITLE ne N/A'],
+                capture_output=True,
+                timeout=2
+            )
+        except Exception as e:
+            print(f"Failed to kill backend process: {e}")
+        
+        try:
+            # Kill node processes running dev server
+            subprocess.run(
+                ['taskkill', '/F', '/FI', 'IMAGENAME eq node.exe', '/FI', 'WINDOWTITLE ne N/A'],
+                capture_output=True,
+                timeout=2
+            )
+        except Exception as e:
+            print(f"Failed to kill frontend process: {e}")
+        
+        try:
+            # Also kill the cmd.exe processes that spawned them
+            subprocess.run(
+                ['taskkill', '/F', '/FI', 'IMAGENAME eq cmd.exe', '/FI', 'WINDOWTITLE eq *Starforged*'],
+                capture_output=True,
+                timeout=2
+            )
+        except Exception as e:
+            print(f"Failed to kill cmd windows: {e}")
+        
+        # Finally, kill this process (redundant but ensures cleanup)
+        try:
+            os.kill(os.getpid(), signal.SIGTERM)
+        except:
+            pass
+    
+    # Schedule cleanup and shutdown after response is sent
+    import asyncio
+    asyncio.get_event_loop().call_later(0.5, cleanup_and_shutdown)
+    
+    return {"status": "shutting down", "message": "Closing all terminals and stopping servers..."}
 
 @app.get("/api/assets/available")
 def get_available_assets():
