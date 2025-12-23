@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import CalibrationStep from './CalibrationStep';
+import TTSButton from './TTSButton';
 
 const API_URL = 'http://localhost:8000/api';
 
@@ -230,18 +231,21 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                                     key={template.id}
                                     onClick={() => setSelectedStoryTemplate(template)}
                                     className={`w-full p-4 text-left border transition-all ${selectedStoryTemplate?.id === template.id
-                                            ? 'border-disco-cyan bg-disco-cyan/10'
-                                            : 'border-disco-muted/30 hover:border-disco-muted bg-disco-bg/50'
+                                        ? 'border-disco-cyan bg-disco-cyan/10'
+                                        : 'border-disco-muted/30 hover:border-disco-muted bg-disco-bg/50'
                                         }`}
                                 >
                                     <div className="flex justify-between items-start mb-2">
-                                        <div>
+                                        <div className="flex-1">
                                             <div className="font-mono text-disco-paper">{template.name}</div>
                                             <div className="text-xs text-disco-accent">{template.tagline}</div>
                                         </div>
-                                        {selectedStoryTemplate?.id === template.id && (
-                                            <span className="text-disco-cyan text-xs">✓ Selected</span>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            <TTSButton text={`${template.name}. ${template.description}`} className="shrink-0" asSpan={true} />
+                                            {selectedStoryTemplate?.id === template.id && (
+                                                <span className="text-disco-cyan text-xs">✓ Selected</span>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="text-xs text-disco-muted line-clamp-2">{template.description}</div>
                                     <div className="flex gap-2 mt-2">
@@ -272,18 +276,21 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                                     key={char.id}
                                     onClick={() => setSelectedQuickstart(char)}
                                     className={`w-full p-4 text-left border transition-all ${selectedQuickstart?.id === char.id
-                                            ? 'border-disco-cyan bg-disco-cyan/10'
-                                            : 'border-disco-muted/30 hover:border-disco-muted bg-disco-bg/50'
+                                        ? 'border-disco-cyan bg-disco-cyan/10'
+                                        : 'border-disco-muted/30 hover:border-disco-muted bg-disco-bg/50'
                                         }`}
                                 >
                                     <div className="flex justify-between items-start mb-2">
-                                        <div>
+                                        <div className="flex-1">
                                             <div className="font-mono text-disco-paper">{char.name}</div>
                                             <div className="text-xs text-disco-accent">{char.title}</div>
                                         </div>
-                                        {selectedQuickstart?.id === char.id && (
-                                            <span className="text-disco-cyan text-xs">✓ Selected</span>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            <TTSButton text={`${char.name}. ${char.description}`} className="shrink-0" asSpan={true} />
+                                            {selectedQuickstart?.id === char.id && (
+                                                <span className="text-disco-cyan text-xs">✓ Selected</span>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="text-xs text-disco-muted line-clamp-2">{char.description}</div>
                                 </button>
@@ -439,9 +446,12 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                                                                 </div>
                                                             )}
                                                         </div>
-                                                        {isSelected && (
-                                                            <span className="text-disco-cyan text-lg">✓</span>
-                                                        )}
+                                                        <div className="flex items-center gap-2">
+                                                            <TTSButton text={`${asset.name}. ${asset.abilities ? asset.abilities.join('. ') : ''}`} className="shrink-0" asSpan={true} />
+                                                            {isSelected && (
+                                                                <span className="text-disco-cyan text-lg">✓</span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </button>
                                             );

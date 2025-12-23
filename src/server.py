@@ -51,7 +51,7 @@ from src.narrative_api import register_narrative_routes
 from src.psych_api import register_psychology_routes
 from src.combat_api import register_combat_routes
 from src.practice_api import register_practice_routes
-from src.calibration import get_calibration_scenario
+from src.calibration import get_calibration_scenario, get_all_calibration_scenarios
 from src.npc.schemas import CognitiveState, PersonalityProfile
 from src.npc.engine import NPCCognitiveEngine
 from src.quickstart_characters import get_quickstart_characters, get_quickstart_character_by_id
@@ -584,7 +584,7 @@ def get_identity(session_id: str):
 
 @app.get("/api/calibration/scenario")
 def get_prologue_scenario():
-    return get_calibration_scenario()
+    return get_all_calibration_scenarios()
 
 class CalibrateRequest(BaseModel):
     session_id: str
@@ -596,9 +596,15 @@ async def calibrate_identity(req: CalibrateRequest):
         raise HTTPException(status_code=404, detail="Session not found")
         
     state = SESSIONS[req.session_id]
-    scenario = get_calibration_scenario()
+    all_scenarios = get_all_calibration_scenarios()
     
-    choice = next((c for c in scenario['choices'] if c['id'] == req.choice_id), None)
+    choice = None
+    for scenario in all_scenarios:
+        found = next((c for c in scenario['choices'] if c['id'] == req.choice_id), None)
+        if found:
+            choice = found
+            break
+            
     if not choice:
         raise HTTPException(status_code=400, detail="Invalid choice ID")
         

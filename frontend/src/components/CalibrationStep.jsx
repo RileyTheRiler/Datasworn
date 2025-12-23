@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import TTSButton from './TTSButton';
 
 const CalibrationStep = ({ sessionId, onComplete }) => {
     const [scenario, setScenario] = useState([]);
@@ -61,20 +62,24 @@ const CalibrationStep = ({ sessionId, onComplete }) => {
             </div>
 
             <div className="bg-slate-900/50 p-6 rounded-xl border border-slate-700">
-                <p className="text-lg text-slate-200 mb-6 font-serif leading-relaxed">
-                    {currentQuestion.description || currentQuestion.text}
-                </p>
+                <div className="flex gap-4 items-start mb-6">
+                    <p className="text-lg text-slate-200 font-serif leading-relaxed flex-1">
+                        {currentQuestion.description || currentQuestion.text}
+                    </p>
+                    <TTSButton text={currentQuestion.description || currentQuestion.text} />
+                </div>
 
                 <div className="space-y-3">
                     {currentQuestion.choices.map((choice) => (
                         <button
                             key={choice.id}
                             onClick={() => handleChoice(choice.id)}
-                            className="w-full text-left p-4 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-cyan-500/50 transition-all group"
+                            className="w-full text-left p-4 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-cyan-500/50 transition-all group flex items-center justify-between gap-4"
                         >
                             <span className="text-slate-300 group-hover:text-cyan-300 transition-colors">
                                 {choice.text}
                             </span>
+                            <TTSButton text={choice.text} className="shrink-0" asSpan={true} />
                         </button>
                     ))}
                 </div>
