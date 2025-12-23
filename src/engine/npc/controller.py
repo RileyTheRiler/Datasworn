@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.game_director import GamePhase, PhaseController
 from .behavior import ActionPlan, BehaviorPlanner, FactChecker
 from .memory import SemanticMemory, WorkingMemory
 from .perception import PerceptionSystem, WorldState
@@ -37,22 +38,32 @@ class NPCController:
     def __post_init__(self) -> None:
         self.behavior = BehaviorPlanner(self.personality, self.fact_checker, debug=self.debug)
 
-    def tick(self, scene_graph: dict[str, Any], environment: dict[str, Any]) -> ActionPlan:
-        world_state = self.perception.perceive(scene_graph)
-        self._update_memory(world_state)
+    def tick(
+        self,
+        scene_graph: dict[str, Any],
+        environment: dict[str, Any],
+        phase_controller: PhaseController | None = None,
+    ) -> ActionPlan:
+        def _execute() -> ActionPlan:
+            world_state = self.perception.perceive(scene_graph)
+            self._update_memory(world_state)
 
-        reasoning_input = ReasoningInput(
-            goals=self.goals,
-            personality=self.personality,
-            emotional_state=self.emotional_state,
-            memories=self._collect_memories(),
-            context={"lighting": world_state.lighting, "time_of_day": world_state.time_of_day},
-        )
-        intention = self.reasoner.choose_intention(reasoning_input)
-        plan = self.behavior.plan(intention, environment)
-        plan = self._apply_dialogue_rules(plan)
-        self._log_debug(world_state, intention, plan)
-        return plan
+            reasoning_input = ReasoningInput(
+                goals=self.goals,
+                personality=self.personality,
+                emotional_state=self.emotional_state,
+                memories=self._collect_memories(),
+                context={"lighting": world_state.lighting, "time_of_day": world_state.time_of_day},
+            )
+            intention = self.reasoner.choose_intention(reasoning_input)
+            plan = self.behavior.plan(intention, environment)
+            plan = self._apply_dialogue_rules(plan)
+            self._log_debug(world_state, intention, plan)
+            return plan
+
+        if phase_controller:
+            return phase_controller.execute_phase(GamePhase.AI_RESPONSE, _execute)
+        return _execute()
 
     def _update_memory(self, world_state: WorldState) -> None:
         for fact in world_state.actors + world_state.objects + world_state.sounds:

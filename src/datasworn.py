@@ -6,9 +6,12 @@ Loads moves, oracles, and assets from the dataforged.json file.
 from __future__ import annotations
 import json
 import random
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from pydantic import BaseModel
+
+from src.game_director import GamePhase, PhaseController
 
 
 class MoveOutcome(BaseModel):
@@ -212,6 +215,63 @@ class DataswornData:
         """Get assets by type (e.g., 'Path', 'Companion')."""
         asset_type_lower = asset_type.lower()
         return [a for a in self._assets.values() if a.asset_type.lower() == asset_type_lower]
+
+
+@dataclass
+class PhaseOrchestratedState:
+    """Lightweight state container to demonstrate a phased turn loop."""
+
+    turn_counter: int = 0
+    combat_log: list[str] = field(default_factory=list)
+    narrative_log: list[str] = field(default_factory=list)
+    economy_balance: int = 0
+    render_queue: list[dict[str, Any]] = field(default_factory=list)
+
+
+class DataswornTurnEngine:
+    """Coordinates simple combat/narrative/economy updates through the phase controller."""
+
+    def __init__(self, phase_controller: PhaseController | None = None):
+        self.phase_controller = phase_controller or PhaseController()
+        self.state = PhaseOrchestratedState()
+
+    def tick(self, player_action: str, ai_summary: str) -> PhaseOrchestratedState:
+        """Run a single turn using the configured phase ordering."""
+
+        def _player_input() -> str:
+            self.state.combat_log.append(f"player:{player_action}")
+            return player_action
+
+        def _ai_responses() -> str:
+            self.state.combat_log.append(f"ai:{ai_summary}")
+            return ai_summary
+
+        def _world_update() -> int:
+            self.state.turn_counter += 1
+            self.state.economy_balance += 5
+            return self.state.turn_counter
+
+        def _narrative_update() -> str:
+            beat = f"Turn {self.state.turn_counter}: {player_action} / {ai_summary}"
+            self.state.narrative_log.append(beat)
+            return beat
+
+        def _render_hook() -> dict[str, Any]:
+            frame = {
+                "turn": self.state.turn_counter,
+                "last_beat": self.state.narrative_log[-1] if self.state.narrative_log else None,
+                "economy": self.state.economy_balance,
+            }
+            self.state.render_queue.append(frame)
+            return frame
+
+        self.phase_controller.execute_phase(GamePhase.PLAYER_INPUT, _player_input)
+        self.phase_controller.execute_phase(GamePhase.AI_RESPONSE, _ai_responses)
+        self.phase_controller.execute_phase(GamePhase.WORLD_UPDATE, _world_update)
+        self.phase_controller.execute_phase(GamePhase.NARRATIVE_UPDATE, _narrative_update)
+        self.phase_controller.execute_phase(GamePhase.RENDER_HOOK, _render_hook)
+
+        return self.state
 
 
 def load_starforged_data(json_path: str | Path = "data/starforged/dataforged.json") -> DataswornData:
