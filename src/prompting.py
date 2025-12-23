@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Iterable, Optional
+import socket
+from typing import Callable, Dict, List, Iterable, Optional
 
+from src.cache import PromptResultCache
 from src.feedback_learning import record_prompt_metric
 from src.llm_provider import LLMCapabilities, LLMProvider
 
@@ -190,6 +192,26 @@ def build_narrator_messages(
     return messages
 
 
+def detect_connectivity(timeout: float = 1.5) -> bool:
+    """Return True when outbound connectivity appears available."""
+
+    try:
+        with socket.create_connection(("8.8.8.8", 53), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _deterministic_local_response(user_prompt: str, context: PromptContext) -> str:
+    context_block = context.formatted_context()
+    stitched_context = context_block.replace("\n\n", " | ") if context_block else "no recent context"
+    return (
+        "[offline narrator] Using local guidance based on recent notes. "
+        f"Context: {stitched_context}. "
+        f"Player prompt: {user_prompt.strip()}"
+    )
+
+
 def execute_prompt_with_fallback(
     user_prompt: str,
     *,
@@ -201,6 +223,8 @@ def execute_prompt_with_fallback(
     stream: bool = False,
     max_retries: int = 2,
     breaker_config: CircuitBreaker | None = None,
+    prompt_cache: PromptResultCache | None = None,
+    connectivity_check: Callable[[], bool] | None = None,
 ) -> str:
     """Execute a prompt with retries and capability-aware fallback."""
 
@@ -213,7 +237,21 @@ def execute_prompt_with_fallback(
     if not eligible:
         raise RuntimeError("No providers satisfy the requested capabilities")
 
-    messages = build_narrator_messages(user_prompt, context or PromptContext())
+    context = context or PromptContext()
+    messages = build_narrator_messages(user_prompt, context)
+    cache = prompt_cache or PromptResultCache()
+    cached = cache.get_prompt(user_prompt, context)
+    if cached:
+        record_prompt_metric("prompt_cache_hit", provider=None, metadata={"source": "prompt"})
+        return cached
+
+    checker = connectivity_check or detect_connectivity
+    if not checker():
+        fallback = _deterministic_local_response(user_prompt, context)
+        cache.store_prompt(user_prompt, context, fallback)
+        record_prompt_metric("connectivity_offline", provider=None, metadata={"source": "local_fallback"})
+        return fallback
+
     last_error: Exception | None = None
 
     for provider in eligible:
@@ -248,7 +286,9 @@ def execute_prompt_with_fallback(
                     provider.name,
                     metadata={"latency_ms": int(latency * 1000)},
                 )
-                return _coerce_response(response)
+                final_response = _coerce_response(response)
+                cache.store_prompt(user_prompt, context, final_response)
+                return final_response
             except Exception as exc:  # noqa: PERF203 - controlled retries
                 latency = time.perf_counter() - start
                 breaker.record_failure(latency, str(exc))
@@ -261,7 +301,12 @@ def execute_prompt_with_fallback(
 
         record_prompt_metric("provider_fallback", provider.name, metadata={"provider": provider.name})
 
-    raise RuntimeError("All providers failed to complete prompt") from last_error
+    fallback = _deterministic_local_response(user_prompt, context)
+    cache.store_prompt(user_prompt, context, fallback)
+    record_prompt_metric(
+        "provider_failure_fallback", provider=None, metadata={"error": str(last_error) if last_error else "unknown"}
+    )
+    return fallback
 
 
 def _coerce_response(response: str | Iterable[str]) -> str:
