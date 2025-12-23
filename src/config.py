@@ -94,6 +94,33 @@ class UIConfig:
     auto_save_interval_seconds: int = 60
     max_message_history: int = 100
 
+    mechanic_tooltips: dict = field(
+        default_factory=lambda: {
+            "rest": {
+                "title": "Rest & Recover",
+                "summary": "Pause the expedition to regain health, spirit, and supply before diving back into danger.",
+                "how": "Use Sojourn or a calm haven to mend wounds and clear penalties before your next objective.",
+            },
+            "memory": {
+                "title": "Memory Log",
+                "summary": "Review recent scene summaries, choices, and NPC impressions to stay grounded in the fiction.",
+                "how": "Scan the latest summaries and decisions to recall why threats matter and who owes you favors.",
+            },
+            "vows": {
+                "title": "Vow Progress",
+                "summary": "Track sworn oaths with progress boxes so stakes stay visible when choosing your next move.",
+                "how": "Check ranks and progress to decide whether to press on, regroup, or fulfill a promise.",
+            },
+            "recap": {
+                "title": "Session Recap",
+                "summary": "A quick "\
+                         "Previously..."\
+                         " beat to re-enter the story with tension, loose threads, and current location.",
+                "how": "Use the recap pane to anchor the table before new actions and share captured highlights.",
+            },
+        }
+    )
+
     # Audio defaults
     ambient_volume: float = 0.5
     music_volume: float = 0.6

@@ -14,7 +14,14 @@ class PhotoAlbumManager:
     def __init__(self, state: PhotoAlbumState):
         self.state = state
 
-    def capture_moment(self, image_url: str, caption: str, tags: List[str], scene_id: str = "") -> PhotoEntry:
+    def capture_moment(
+        self,
+        image_url: str,
+        caption: str,
+        tags: List[str],
+        scene_id: str = "",
+        timestamp: Optional[str] = None,
+    ) -> PhotoEntry:
         """
         Creates a new photo entry and adds it to the album.
         """
@@ -22,7 +29,7 @@ class PhotoAlbumManager:
             id=str(uuid.uuid4()),
             image_url=image_url,
             caption=caption,
-            timestamp=datetime.now().isoformat(), # Use datetime.now() but need import
+            timestamp=timestamp or datetime.now().isoformat(),
             tags=tags,
             scene_id=scene_id
         )
@@ -40,6 +47,28 @@ class PhotoAlbumManager:
         if not self.state.photos:
             return None
         return self.state.photos[-1]
+
+    def get_recent_highlights(self, limit: int = 3) -> List[dict]:
+        """Return the most recent photo entries as dictionaries."""
+        if not self.state.photos:
+            return []
+
+        photos = sorted(self.state.photos, key=lambda p: p.timestamp)
+        recent = photos[-limit:][::-1]
+
+        highlights: List[dict] = []
+        for entry in recent:
+            highlights.append(
+                {
+                    "id": entry.id,
+                    "caption": entry.caption,
+                    "timestamp": entry.timestamp,
+                    "tags": entry.tags,
+                    "scene_id": entry.scene_id,
+                    "image_url": entry.image_url,
+                }
+            )
+        return highlights
 
 # Fix missing import
 from datetime import datetime
