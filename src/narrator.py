@@ -4,9 +4,11 @@ Generates narrative prose using Ollama for local LLM inference.
 """
 
 from __future__ import annotations
+import os
 from dataclasses import dataclass, field
-from typing import Generator
-import ollama
+from typing import Generator, Optional
+
+from src.llm_provider import LLMProvider, get_llm_provider
 from src.psych_profile import PsychologicalProfile, PsychologicalEngine
 from src.style_profile import StyleProfile, load_style_profile
 from src.guardrails import GuardrailFactStore, build_guardrail_prompt, sanitize_and_verify
@@ -258,8 +260,9 @@ def get_examples_for_tone(tone: str, pacing: str, count: int = 2) -> list[dict]:
 @dataclass
 class NarratorConfig:
     """Configuration for narrative generation."""
-    backend: str = "gemini"  # "ollama" or "gemini"
-    model: str = "gemini-flash-latest"  # Switched to Flash for reliability
+
+    backend: str = field(default_factory=lambda: os.environ.get("LLM_PROVIDER", "gemini"))
+    model: Optional[str] = None
     temperature: float = 0.85
     top_p: float = 0.90
     top_k: int = 50
@@ -267,272 +270,20 @@ class NarratorConfig:
     max_tokens: int = 2000  # Increased to prevent premature truncation
     style_profile_name: Optional[str] = None
 
-
-# ============================================================================
-# Ollama Client
-# ============================================================================
-
-@dataclass
-class OllamaClient:
-    """Wrapper for Ollama API."""
-    model: str = "llama3.1"
-    _client: ollama.Client = field(default_factory=ollama.Client, repr=False)
-
-    def generate(
-        self,
-        prompt: str,
-        system: str = SYSTEM_PROMPT,
-        config: NarratorConfig | None = None,
-    ) -> Generator[str, None, None]:
-        """
-        Generate text with streaming.
-
-        Args:
-            prompt: The user prompt.
-            system: System prompt for context.
-            config: Generation configuration.
-
-        Yields:
-            Text chunks as they're generated.
-        """
-        config = config or NarratorConfig()
-
-        try:
-            stream = self._client.chat(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt},
-                ],
-                stream=True,
-                options={
-                    "temperature": config.temperature,
-                    "top_p": config.top_p,
-                    "top_k": config.top_k,
-                    "repeat_penalty": config.repeat_penalty,
-                    "num_predict": config.max_tokens,
-                },
-            )
-
-            for chunk in stream:
-                if chunk.get("message", {}).get("content"):
-                    yield chunk["message"]["content"]
-
-        except ollama.ResponseError as e:
-            yield f"[Error communicating with Ollama: {e}]"
-        except Exception as e:
-            yield f"[Ollama error: {e}]"
-
-    def generate_sync(
-        self,
-        prompt: str,
-        system: str = SYSTEM_PROMPT,
-        config: NarratorConfig | None = None,
-    ) -> str:
-        """
-        Generate text synchronously (non-streaming).
-
-        Returns:
-            Complete generated text.
-        """
-        return "".join(self.generate(prompt, system, config))
-
-    def get_model_info(self) -> dict:
-        """Get information about the current model."""
-        try:
-            return self._client.show(self.model)
-        except Exception as e:
-            return {"error": str(e)}
-
-    def is_available(self) -> bool:
-        """Check if Ollama is available and model is loaded."""
-        try:
-            models = self._client.list()
-            model_names = [m.get("name", "").split(":")[0] for m in models.get("models", [])]
-            return self.model.split(":")[0] in model_names
-        except Exception:
-            return False
-
-
-# ============================================================================
-# Gemini Client
-# ============================================================================
-
-@dataclass
-class GeminiClient:
-    """Wrapper for Google Gemini API."""
-    model: str = "gemini-2.0-flash"
-    _client: any = field(default=None, repr=False)
-    _initialized: bool = field(default=False, repr=False)
-
-    def _ensure_initialized(self):
-        """Lazy initialize the Gemini client."""
-        if self._initialized:
-            return
-        
-        try:
-            import google.generativeai as genai
-            import os
-            
-            # Try to get API key from environment
-            api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-            if api_key:
-                genai.configure(api_key=api_key)
-            
-            self._client = genai.GenerativeModel(self.model)
-            self._initialized = True
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize Gemini: {e}")
-
-    def _retry_with_backoff(self, func, *args, **kwargs):
-        """Execute a function with exponential backoff for rate limits."""
-        import time
-        max_retries = 3
-        base_delay = 2  # seconds
-        
-        for attempt in range(max_retries):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                is_rate_limit = "429" in str(e) or "ResourceExhausted" in str(e) or "Quota exceeded" in str(e)
-                
-                if is_rate_limit and attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)
-                    print(f"Rate limit hit. Retrying in {delay}s...")
-                    time.sleep(delay)
-                else:
-                    raise e
-
-    def generate(
-        self,
-        prompt: str,
-        system: str = SYSTEM_PROMPT,
-        config: NarratorConfig | None = None,
-    ) -> Generator[str, None, None]:
-        """
-        Generate text with streaming.
-        """
-        config = config or NarratorConfig()
-
-        try:
-            self._ensure_initialized()
-            
-            import google.generativeai as genai
-            
-            # Combine system prompt and user prompt
-            full_prompt = f"{system}\n\n---\n\n{prompt}"
-            
-            generation_config = genai.GenerationConfig(
-                temperature=config.temperature,
-                top_p=config.top_p,
-                top_k=config.top_k,
-                max_output_tokens=config.max_tokens,
-            )
-            
-            # Helper for stream iteration to handle errors during the stream
-            def stream_generator():
-                response = self._client.generate_content(
-                    full_prompt,
-                    generation_config=generation_config,
-                    stream=True,
-                )
-                for chunk in response:
-                    if chunk.text:
-                        yield chunk.text
-
-            # We can't easily retry a stream once started, but we can retry the connection
-            # For simplicity in streaming, we just try to start it.
-            # If it fails mid-stream, that's harder, but 429 usually happens at start.
-            
-            yield from self._retry_with_backoff(stream_generator)
-
-        except Exception as e:
-            if "429" in str(e) or "Quota exceeded" in str(e):
-                yield "[System: Neural Link Unstable (Rate Limit Reached). Retrying...]"
+    def __post_init__(self):
+        backend = (self.backend or "gemini").lower()
+        if self.model is None:
+            if backend == "ollama":
+                self.model = os.environ.get("OLLAMA_MODEL", "llama3.1")
             else:
-                yield f"[Gemini error: {e}]"
-
-    def generate_sync(
-        self,
-        prompt: str,
-        system: str = SYSTEM_PROMPT,
-        config: NarratorConfig | None = None,
-    ) -> str:
-        """
-        Generate text synchronously (non-streaming).
-        """
-        config = config or NarratorConfig()
-
-        try:
-            self._ensure_initialized()
-            
-            import google.generativeai as genai
-            
-            full_prompt = f"{system}\n\n---\n\n{prompt}"
-            
-            generation_config = genai.GenerationConfig(
-                temperature=config.temperature,
-                top_p=config.top_p,
-                top_k=config.top_k,
-                max_output_tokens=config.max_tokens,
-            )
-            
-            # Define safety settings to prevent over-blocking of gritty sci-fi content
-            safety_settings = {
-                "HARM_CATEGORY_HARASSMENT": "BLOCK_ONLY_HIGH",
-                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_ONLY_HIGH",
-                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_ONLY_HIGH",
-                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_ONLY_HIGH",
-            }
-            
-            response = self._retry_with_backoff(
-                self._client.generate_content,
-                full_prompt,
-                generation_config=generation_config,
-                safety_settings=safety_settings
-            )
-            
-            try:
-                return response.text
-            except Exception:
-                # Handle cases where feedback is blocked or empty (Finish Reason 2/3/Other)
-                candidates = getattr(response, 'candidates', [])
-                if candidates:
-                    finish_reason = candidates[0].finish_reason
-                    return f"[Gemini Error: Generation stopped (Reason: {finish_reason}). Try a different action.]"
-                
-                if response.prompt_feedback:
-                    return f"[Gemini Error: Prompt blocked. {response.prompt_feedback}]"
-                    
-                return "[Gemini Error: No content returned. The Oracle is silent.]"
-
-        except Exception as e:
-            if "429" in str(e) or "Quota exceeded" in str(e):
-                 return (
-                     "[System: Rate Limit Exceeded. The Oracle is momentarily silent.]\n\n"
-                     "*(You can try your action again in a few moments, or describe the outcome yourself for now.)*"
-                 )
-            return f"[Gemini error: {e}]"
-
-    def is_available(self) -> bool:
-        """Check if Gemini API is available."""
-        try:
-            self._ensure_initialized()
-            # Simple check call? No, saving quota. Just check client exists.
-            return self._client is not None
-        except Exception:
-            return False
+                self.model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+        self.backend = backend
 
 
+def _get_provider(config: NarratorConfig) -> LLMProvider:
+    """Resolve an LLM provider using narrator configuration."""
 
-def get_llm_client(config: NarratorConfig = None):
-    """Get the appropriate LLM client based on configuration."""
-    config = config or NarratorConfig()
-    
-    if config.backend == "gemini":
-        return GeminiClient(model=config.model)
-    else:
-        return OllamaClient(model=config.model)
+    return get_llm_provider(provider_type=config.backend, model=config.model)
 
 
 def build_guardrail_store(
@@ -735,17 +486,33 @@ def generate_narrative(
         guardrail_rules=guardrail_store.guardrail_rules(),
     )
 
-    client = get_llm_client(config)
+    provider = _get_provider(config)
 
     # Check if Client is available
-    if not client.is_available():
+    if not provider.is_available():
         return (
-            f"[{config.backend} model '{config.model}' is not available. "
+            f"[{provider.name} is not available. "
             f"Check configuration.]\n\n"
             f"*Placeholder narrative for: {player_input}*"
         )
 
-    narrative = client.generate_sync(prompt, config=config)
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    response = provider.chat(
+        messages,
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        stream=False,
+    )
+
+    if isinstance(response, str):
+        narrative = response
+    else:
+        narrative = "".join(response)
+
     return sanitize_and_verify(narrative, guardrail_store)
 
 
@@ -790,11 +557,27 @@ def generate_narrative_stream(
         guardrail_rules=guardrail_store.guardrail_rules(),
     )
 
-    client = get_llm_client(config)
+    provider = _get_provider(config)
 
-    if not client.is_available():
-        yield f"[{config.backend} model '{config.model}' is not available.]"
+    if not provider.is_available():
+        yield f"[{provider.name} is not available.]"
         return
 
-    raw_text = "".join(client.generate(prompt, config=config))
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    response = provider.chat(
+        messages,
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        stream=True,
+    )
+
+    if isinstance(response, str):
+        yield response
+        return
+
+    raw_text = "".join(response)
     yield sanitize_and_verify(raw_text, guardrail_store)

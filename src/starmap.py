@@ -49,7 +49,6 @@ class Planet:
             "description": self.description,
             "habitable": self.habitable,
             "resources": self.resources,
-            "atmosphere": self.atmosphere,
             "atmosphere": self.atmosphere
         }
     
@@ -61,7 +60,6 @@ class Planet:
             description=data.get("description", ""),
             habitable=data.get("habitable", False),
             resources=data.get("resources", []),
-            atmosphere=data.get("atmosphere", "none"),
             atmosphere=data.get("atmosphere", "none")
         )
 
@@ -113,8 +111,7 @@ class StarSystem:
             resources=data.get("resources", []),
             discovered=data.get("discovered", False),
             position=tuple(data.get("position", (0.0, 0.0))),
-            controlling_faction=data.get("controlling_faction"),
-            position=tuple(data.get("position", (0.0, 0.0)))
+            controlling_faction=data.get("controlling_faction")
         )
 
 
@@ -640,9 +637,6 @@ def generate_default_sector() -> Sector:
             neighbor = system_ids[idx + 1]
             sector.connections.setdefault(system_id, []).append(neighbor)
             sector.connections.setdefault(neighbor, []).append(system_id)
-            position=(random.uniform(0, 100), random.uniform(0, 100))
-        )
-        sector.add_system(system)
 
     # Simple ring connections
     system_ids = list(sector.systems.keys())
