@@ -10,6 +10,9 @@ import base64
 import google.generativeai as genai
 from pathlib import Path
 from typing import Optional, Any
+from src.logging_config import get_logger
+
+logger = get_logger("image_gen")
 
 # Configure API key
 API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
@@ -31,7 +34,7 @@ async def generate_image(prompt: str, output_filename: str) -> Optional[str]:
     """
     provider = get_preferred_provider()
     if provider == ImageProvider.PLACEHOLDER:
-        print(f"Skipping Image Gen: {output_filename} (Placeholder Mode)")
+        logger.debug(f"Skipping Image Gen: {output_filename} (Placeholder Mode)")
         return None
         
     image_bytes = await _generate_ai_background(prompt, provider)
@@ -174,7 +177,7 @@ async def _generate_gemini_image(prompt: str) -> Optional[bytes]:
         if hasattr(response, "images") and response.images:
             return response.images[0].data
     except Exception as e:
-        print(f"Gemini Image Gen Error: {e}")
+        logger.error(f"Gemini Image Gen Error: {e}")
     return None
 
 async def _generate_dalle_image(prompt: str) -> Optional[bytes]:
@@ -195,7 +198,7 @@ async def _generate_dalle_image(prompt: str) -> Optional[bytes]:
                 if img_res.status == 200:
                     return await img_res.read()
     except Exception as e:
-        print(f"OpenAI Image Gen Error: {e}")
+        logger.error(f"OpenAI Image Gen Error: {e}")
     return None
 
 def _add_tactical_overlay(base_image_bytes: bytes, draw_func, *args) -> str:
@@ -688,7 +691,7 @@ def _cache_blueprint(cache_key: str, image_base64: str):
     try:
         cache_file.write_text(image_base64)
     except Exception as e:
-        print(f"Blueprint cache write failed: {e}")
+        logger.warning(f"Blueprint cache write failed: {e}")
 
 
 def clear_blueprint_cache():
@@ -696,8 +699,8 @@ def clear_blueprint_cache():
     for cache_file in BLUEPRINT_CACHE_DIR.glob("*.txt"):
         try:
             cache_file.unlink()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to delete cache file {cache_file}: {e}")
 
 
 async def generate_ship_blueprint(
@@ -904,8 +907,8 @@ def _draw_ship_room(draw, room_data, transform, scale, damage_level):
         font = ImageFont.load_default()
         name = room_data["name"]
         draw.text((pos[0], pos[1]), name, fill=(200, 220, 255), anchor="mm")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to draw room label for {room_data.get('name', 'unknown')}: {e}")
 
 def _draw_ship_alerts(draw, alerts, width, height):
     """Draw active alert indicators."""

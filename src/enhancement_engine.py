@@ -23,6 +23,9 @@ This unifies:
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
+from src.logging_config import get_logger
+
+logger = get_logger("enhancement_engine")
 
 
 @dataclass
@@ -113,14 +116,14 @@ class EnhancementEngine:
         try:
             from src.smart_event_detection import SmartEventDetector
             self._event_detector = SmartEventDetector(use_llm=True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Smart event detection system unavailable: {e}")
 
         try:
             from src.oracle_integration import OracleIntegrationEngine
             self._oracle_engine = OracleIntegrationEngine()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Oracle integration system unavailable: {e}")
 
         try:
             from src.persistent_world import PersistentWorldEngine
@@ -130,64 +133,65 @@ class EnhancementEngine:
 
                 self._lore_registry = LoreRegistry()
                 self._world_engine.attach_lore_registry(self._lore_registry)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Lore registry attachment failed: {e}")
                 self._lore_registry = None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Persistent world system unavailable: {e}")
 
         try:
             from src.session_recap import SessionRecapEngine
             self._recap_engine = SessionRecapEngine()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Session recap system unavailable: {e}")
 
         try:
             from src.vow_complications import VowComplicationEngine
             self._vow_engine = VowComplicationEngine()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Vow complication system unavailable: {e}")
 
         try:
             from src.faction_system import FactionSystem
             self._faction_system = FactionSystem()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Faction system unavailable: {e}")
 
         try:
             from src.asset_narrative import AssetNarrativeEngine
             self._asset_engine = AssetNarrativeEngine()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Asset narrative system unavailable: {e}")
 
         try:
             from src.auto_save import AutoSaveSystem
             self._save_system = AutoSaveSystem()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Auto-save system unavailable: {e}")
 
         try:
             from src.combat_flow import CombatFlowEngine
             self._combat_engine = CombatFlowEngine()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Combat flow system unavailable: {e}")
 
         try:
             from src.dialogue_system import DialogueSystem
             self._dialogue_system = DialogueSystem()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Dialogue system unavailable: {e}")
 
         try:
             from src.economic_system import EconomicSystem
             self._economic_system = EconomicSystem()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Economic system unavailable: {e}")
 
         try:
             from src.character_progression import CharacterProgressionEngine
             self._progression_engine = CharacterProgressionEngine()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Character progression system unavailable: {e}")
 
         self._initialized = True
 
