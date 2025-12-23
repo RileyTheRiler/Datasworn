@@ -1,0 +1,14 @@
+{
+  "name": "verdant_forest",
+  "encounters": [
+    {"id": "forest_bandits", "weight": 4, "rarity": "common"},
+    {"id": "ancient_tree_spirit", "weight": 2, "rarity": "uncommon"},
+    {"id": "hidden_grove", "weight": 1, "rarity": "rare"}
+  ],
+  "loot_modifiers": {
+    "common": 1.1,
+    "uncommon": 1.0,
+    "rare": 0.8,
+    "legendary": 0.6
+  }
+}

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "survival_rations",
+    "name": "Survival Rations",
+    "tier": 1,
+    "base_success": 0.88,
+    "inputs": {"foraged_herbs": 2, "protein_paste": 1},
+    "outputs": {"rations": 3},
+    "fail_salvage": 0.35,
+    "description": "Basic meal prep for expeditions with high chance of success."
+  },
+  {
+    "id": "field_kit",
+    "name": "Field Repair Kit",
+    "tier": 2,
+    "base_success": 0.78,
+    "inputs": {"alloy_scraps": 3, "micro_circuit": 1},
+    "outputs": {"repair_kit": 1},
+    "fail_salvage": 0.25,
+    "description": "Mid-tier kit that trades more materials for better durability."
+  },
+  {
+    "id": "covert_armor",
+    "name": "Covert Armor Plating",
+    "tier": 3,
+    "base_success": 0.65,
+    "inputs": {"alloy_scraps": 5, "resonance_mesh": 2, "micro_circuit": 2},
+    "outputs": {"armor_plating": 1},
+    "fail_salvage": 0.15,
+    "description": "High-tier plating with a meaningful chance of catastrophic failure."
+  },
+  {
+    "id": "signal_interceptor",
+    "name": "Signal Interceptor",
+    "tier": 4,
+    "base_success": 0.55,
+    "inputs": {"quantum_array": 1, "micro_circuit": 3, "alloy_scraps": 4},
+    "outputs": {"interceptor": 1},
+    "fail_salvage": 0.1,
+    "description": "Top-tier device that pushes player risk/reward via failure chances."
+  }
+]

@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from src.config import get_config
 from src.datasworn import DataswornData, Move
 from src.game_state import Character, CharacterCondition, CharacterStats, MomentumState, VowState, create_initial_state
 from src.intent_predictor import INTENT_KEYWORDS, IntentCategory
 from src.lore import LoreRegistry
 from src.persistence import PersistenceLayer
 from src.rules_engine import ProgressTrack, RollResult, action_roll
+from src.session_recap import MilestoneCategory, SessionRecapEngine
+from src.tutorial import TutorialEngine, TutorialState, get_new_player_scenario
 
 DEFAULT_DATA_PATH = Path("data/starforged/dataforged.json")
 
@@ -59,6 +62,32 @@ class CLIRunner:
         self.state = create_initial_state(character_name)
         self.persistence = persistence or PersistenceLayer(save_path or Path("saves/game_state.db"))
         self.lore_registry = LoreRegistry(Path("data/lore")) if Path("data/lore").exists() else None
+        self.recap_engine = SessionRecapEngine()
+        self.recap_engine.start_session(1)
+        self.config = get_config()
+        self.tutorial_state = TutorialState()
+        self.tutorial_engine = TutorialEngine(get_new_player_scenario())
+
+    # ------------------------------------------------------------------
+    # Tutorial helpers
+    # ------------------------------------------------------------------
+    def _update_tutorial_state(self, context: dict) -> None:
+        self.tutorial_engine.start(self.tutorial_state)
+        self.tutorial_engine.evaluate_progress(self.tutorial_state, context)
+
+    def _tutorial_overlay(self) -> str:
+        if not self.config.ui.cli_tooltips_enabled:
+            return "Guidance tooltips are disabled in settings."
+        return self.tutorial_engine.overlay_text(self.tutorial_state)
+
+    def _maybe_attach_tooltips(self, response: str, context: dict) -> str:
+        self._update_tutorial_state(context)
+        if not self.config.ui.cli_tooltips_enabled:
+            return response
+        overlay = self._tutorial_overlay()
+        if not overlay:
+            return response
+        return f"{response}\n\n[Tutorial]\n{overlay}"
 
     # ------------------------------------------------------------------
     # High-level flow
@@ -68,15 +97,24 @@ class CLIRunner:
         if not user_text:
             return ""
 
+        context = {
+            "character_created": True,
+            "submitted_action": bool(user_text),
+        }
+
         if user_text.startswith("!"):
-            return self._handle_command(user_text[1:])
+            response = self._handle_command(user_text[1:])
+            return self._maybe_attach_tooltips(response, context)
 
         intent = self._detect_intent(user_text)
         move = self._match_move(user_text, intent)
         if not move:
-            return "I couldn't match that action to a move. Try naming a move or use !help for commands."
+            response = "I couldn't match that action to a move. Try naming a move or use !help for commands."
+            return self._maybe_attach_tooltips(response, context)
 
-        return self._resolve_move(move, user_text, intent)
+        response = self._resolve_move(move, user_text, intent)
+        context["received_narrative"] = True
+        return self._maybe_attach_tooltips(response, context)
 
     # ------------------------------------------------------------------
     # Commands
@@ -98,6 +136,8 @@ class CLIRunner:
             return self._render_assets()
         if name == "vows":
             return self._render_vows()
+        if name == "timeline":
+            return self._render_timeline(arg)
         if name == "oracle":
             return self._roll_oracle(arg)
         if name == "save":
@@ -107,6 +147,8 @@ class CLIRunner:
             return self._command_load(load_name)
         if name == "codex":
             return self._command_codex(arg)
+        if name == "tutorial":
+            return self._tutorial_command(arg)
         if name in {"help", "?"}:
             if arg == "moves":
                 return self._render_move_help()
@@ -116,13 +158,31 @@ class CLIRunner:
                 "!assets       - List equipped assets and abilities\n"
                 "!vows         - List active vows and progress\n"
                 "!codex QUERY  - Search the lore codex (use faction:, location:, item: filters)\n"
+                "!timeline     - Show a filtered milestone timeline\n"
                 "!oracle NAME  - Roll an oracle by path or keyword\n"
                 "!save         - Persist the current character\n"
                 "!load [NAME]  - Load a saved character by name\n"
+                "!tutorial     - Show or control onboarding tips\n"
                 "!help moves   - List move prompts and examples\n"
                 "!help         - Show this list"
             )
         return "Unknown command. Try !help for the list."
+
+    def _tutorial_command(self, arg: str) -> str:
+        command = arg.strip().lower()
+        if command.startswith("skip"):
+            self.tutorial_engine.skip_step(self.tutorial_state)
+            self._update_tutorial_state({"acknowledged_guidance": True})
+            return f"Skipped.\n\n{self._tutorial_overlay()}"
+        if command.startswith("repeat"):
+            self.tutorial_engine.repeat_step(self.tutorial_state)
+            return self._tutorial_overlay()
+        if command.startswith("note"):
+            note = command.partition(" ")[2].strip() or "acknowledged"
+            self.tutorial_engine.complete_step(self.tutorial_state, comprehension=note)
+            return f"Recorded: {note}.\n\n{self._tutorial_overlay()}"
+        self._update_tutorial_state({"acknowledged_guidance": True})
+        return self._tutorial_overlay()
 
     def _render_status(self) -> str:
         char: Character = self.state["character"]
@@ -231,6 +291,15 @@ class CLIRunner:
                 lines.append(f"    ({'; '.join(filters)})")
 
         return "\n".join(lines)
+    def _render_timeline(self, arg: str) -> str:
+        """Render or export the recap timeline."""
+
+        if arg.lower().startswith("export"):
+            filters = [a.strip() for a in arg.split(" ", 1)[1].split(",") if a.strip()] if " " in arg else []
+            return self.recap_engine.export_timeline_json(filters or None)
+
+        filters = [a.strip() for a in arg.split(",") if a.strip()] if arg else None
+        return self.recap_engine.render_timeline_text(filters)
 
     def _command_save(self) -> str:
         char: Character = self.state["character"]
@@ -273,6 +342,12 @@ class CLIRunner:
         if progress_note:
             parts.append(progress_note)
 
+        self._log_timeline_event(
+            description=f"{move.name}: {outcome_text.splitlines()[0] if outcome_text else 'Resolved'}",
+            intent=intent,
+            importance=7 if intent == IntentCategory.COMBAT else 5,
+        )
+
         return "\n".join(parts)
 
     def _progress_move(self, move: Move, char: Character) -> str:
@@ -293,6 +368,12 @@ class CLIRunner:
         ]
         if vow.completed:
             parts.append(f"{vow.name} is now fulfilled!")
+
+        self._log_timeline_event(
+            description=f"{move.name}: {self._outcome_text(move, roll.result)}",
+            intent=IntentCategory.QUEST,
+            importance=8 if vow.completed else 5,
+        )
 
         return "\n".join(parts)
 
@@ -371,6 +452,20 @@ class CLIRunner:
         vow.ticks = track.ticks
 
         return f"Progress marked on {vow.name}: {before} -> {vow.ticks} ticks ({track.display})"
+
+    def _log_timeline_event(self, description: str, intent: str, importance: int = 5) -> None:
+        """Record the action as a milestone for recap timelines."""
+
+        category = self._map_intent_to_category(intent)
+        self.recap_engine.record_milestone(description=description, category=category, importance=importance)
+
+    @staticmethod
+    def _map_intent_to_category(intent: str) -> MilestoneCategory:
+        if intent == IntentCategory.COMBAT:
+            return MilestoneCategory.COMBAT
+        if intent in {IntentCategory.CRAFTING, IntentCategory.INVENTORY}:
+            return MilestoneCategory.ECONOMY
+        return MilestoneCategory.NARRATIVE
 
     # ------------------------------------------------------------------
     # Matching helpers

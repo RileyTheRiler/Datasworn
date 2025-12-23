@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: content-lint
+        name: content-lint
+        entry: python scripts/content_lint.py
+        language: system
+        pass_filenames: false
+        types: [text]

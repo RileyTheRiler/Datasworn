@@ -93,11 +93,23 @@ class UIConfig:
     typewriter_speed_ms: int = 30
     auto_save_interval_seconds: int = 60
     max_message_history: int = 100
+    guidance_overlays_enabled: bool = True
+    cli_tooltips_enabled: bool = True
 
     # Audio defaults
     ambient_volume: float = 0.5
     music_volume: float = 0.6
     voice_volume: float = 0.8
+
+    def __post_init__(self):
+        self.guidance_overlays_enabled = (
+            os.environ.get("STARFORGED_GUIDANCE_OVERLAYS", str(self.guidance_overlays_enabled)).lower()
+            in ("1", "true", "yes")
+        )
+        self.cli_tooltips_enabled = (
+            os.environ.get("STARFORGED_CLI_TOOLTIPS", str(self.cli_tooltips_enabled)).lower()
+            in ("1", "true", "yes")
+        )
 
 
 @dataclass

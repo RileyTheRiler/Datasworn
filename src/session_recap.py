@@ -10,8 +10,10 @@ Also generates campaign summaries and "story so far" synopses.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Iterable
 from enum import Enum
+from datetime import datetime
+import json
 import random
 
 
@@ -97,6 +99,62 @@ class SessionSummary:
         )
 
 
+class MilestoneCategory(str, Enum):
+    """Categories for timeline filtering and analytics."""
+
+    COMBAT = "combat"
+    NARRATIVE = "narrative"
+    ECONOMY = "economy"
+    QUEST = "quest"
+
+
+@dataclass
+class TimelineEntry:
+    """Timestamped milestone for the campaign timeline."""
+
+    session_number: int
+    description: str
+    category: MilestoneCategory = MilestoneCategory.NARRATIVE
+    importance: int = 5
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "session_number": self.session_number,
+            "description": self.description,
+            "category": self.category.value if isinstance(self.category, MilestoneCategory) else str(self.category),
+            "importance": self.importance,
+            "timestamp": self.timestamp.isoformat(),
+            "metadata": self.metadata,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "TimelineEntry":
+        category_value = data.get("category", MilestoneCategory.NARRATIVE)
+        try:
+            category = MilestoneCategory(category_value)
+        except ValueError:
+            category = MilestoneCategory.NARRATIVE
+
+        timestamp_raw = data.get("timestamp")
+        timestamp = timestamp_raw
+        if isinstance(timestamp_raw, str):
+            try:
+                timestamp = datetime.fromisoformat(timestamp_raw)
+            except ValueError:
+                timestamp = datetime.utcnow()
+
+        return cls(
+            session_number=data.get("session_number", 0),
+            description=data.get("description", ""),
+            category=category,
+            importance=data.get("importance", 5),
+            timestamp=timestamp if isinstance(timestamp, datetime) else datetime.utcnow(),
+            metadata=data.get("metadata", {}),
+        )
+
+
 class SessionRecapEngine:
     """
     Engine for generating session recaps and campaign summaries.
@@ -176,6 +234,7 @@ OUTPUT ONLY THE CLIFFHANGER LINE:'''
         self._provider = llm_provider
         self._session_history: List[SessionSummary] = []
         self._current_session: Optional[SessionSummary] = None
+        self._timeline: List[TimelineEntry] = []
 
     def _get_provider(self):
         """Lazy-load LLM provider."""
@@ -201,7 +260,9 @@ OUTPUT ONLY THE CLIFFHANGER LINE:'''
         characters: List[str] = None,
         location: str = "",
         is_cliffhanger: bool = False,
-        emotional_tone: str = ""
+        emotional_tone: str = "",
+        category: MilestoneCategory | str = MilestoneCategory.NARRATIVE,
+        timestamp: Optional[datetime] = None,
     ):
         """Record a significant event in the current session."""
         if not self._current_session:
@@ -221,11 +282,31 @@ OUTPUT ONLY THE CLIFFHANGER LINE:'''
         if is_cliffhanger:
             self._current_session.cliffhanger = description
 
+        # Mirror to the timeline for chronological views
+        self.record_milestone(
+            description=description,
+            category=category,
+            importance=importance,
+            timestamp=timestamp,
+            metadata={
+                "location": location,
+                "characters": characters or [],
+                "emotional_tone": emotional_tone,
+                "is_cliffhanger": is_cliffhanger,
+            },
+        )
+
     def record_decision(self, decision: str):
         """Record a major player decision."""
         if not self._current_session:
             self.start_session()
         self._current_session.major_decisions.append(decision)
+        self.record_milestone(
+            description=f"Decision: {decision}",
+            category=MilestoneCategory.NARRATIVE,
+            importance=7,
+            metadata={"type": "decision"},
+        )
 
     def record_npc_met(self, npc_name: str):
         """Record an NPC encounter."""
@@ -521,6 +602,7 @@ OUTPUT ONLY THE CLIFFHANGER LINE:'''
         return {
             "session_history": [s.to_dict() for s in self._session_history],
             "current_session": self._current_session.to_dict() if self._current_session else None,
+            "timeline": [entry.to_dict() for entry in self._timeline],
         }
 
     @classmethod
@@ -533,7 +615,85 @@ OUTPUT ONLY THE CLIFFHANGER LINE:'''
         ]
         if data.get("current_session"):
             engine._current_session = SessionSummary.from_dict(data["current_session"])
+        engine._timeline = [TimelineEntry.from_dict(t) for t in data.get("timeline", [])]
         return engine
+
+    # ------------------------------------------------------------------
+    # Timeline utilities
+    # ------------------------------------------------------------------
+    def record_milestone(
+        self,
+        description: str,
+        category: MilestoneCategory | str = MilestoneCategory.NARRATIVE,
+        importance: int = 5,
+        timestamp: Optional[datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> TimelineEntry:
+        """Capture a timestamped milestone for the campaign timeline."""
+
+        if not self._current_session:
+            self.start_session()
+
+        try:
+            category_value = (
+                category
+                if isinstance(category, MilestoneCategory)
+                else MilestoneCategory(str(category).lower())
+            )
+        except ValueError:
+            category_value = MilestoneCategory.NARRATIVE
+
+        entry = TimelineEntry(
+            session_number=self._current_session.session_number if self._current_session else len(self._session_history) + 1,
+            description=description,
+            category=category_value,
+            importance=importance,
+            timestamp=timestamp or datetime.utcnow(),
+            metadata=metadata or {},
+        )
+        self._timeline.append(entry)
+        return entry
+
+    def get_timeline(self, categories: Optional[Iterable[str]] = None) -> List[TimelineEntry]:
+        """Return the campaign timeline, optionally filtered by category."""
+
+        allowed = None
+        if categories:
+            allowed = {str(c).lower() for c in categories}
+
+        entries = self._timeline
+        if allowed:
+            entries = [e for e in entries if str(e.category.value).lower() in allowed]
+
+        return sorted(entries, key=lambda e: (e.timestamp, -e.importance, e.session_number))
+
+    def export_timeline_json(self, categories: Optional[Iterable[str]] = None) -> str:
+        """Export the timeline to a sharable JSON string."""
+
+        export_entries = [entry.to_dict() for entry in self.get_timeline(categories)]
+        return json.dumps(
+            {
+                "exported_at": datetime.utcnow().isoformat(),
+                "timeline": export_entries,
+                "total_entries": len(export_entries),
+            },
+            indent=2,
+        )
+
+    def render_timeline_text(self, categories: Optional[Iterable[str]] = None) -> str:
+        """Render a CLI-friendly timeline view."""
+
+        entries = self.get_timeline(categories)
+        if not entries:
+            return "No timeline entries recorded yet."
+
+        lines = ["=== Campaign Timeline ==="]
+        for entry in entries:
+            timestamp_text = entry.timestamp.strftime("%Y-%m-%d %H:%M")
+            lines.append(
+                f"[{timestamp_text}] Session {entry.session_number} | {entry.category.value.title()} | {entry.description}"
+            )
+        return "\n".join(lines)
 
 
 # =============================================================================
