@@ -4,6 +4,8 @@ Generates narrative prose using configurable LLM providers.
 """
 
 from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import Any, Generator, Optional
 import os
 from dataclasses import dataclass, field
 from typing import Generator, Optional
@@ -310,6 +312,117 @@ class NarratorConfig:
 # LLM Provider Helpers
 # ============================================================================
 
+@dataclass
+class OllamaClient:
+    """Wrapper for Ollama API."""
+
+    model: str = "llama3.1"
+    _client: Any = field(default=None, repr=False, init=False)
+    _ollama: Any = field(default=None, repr=False, init=False)
+    _availability_error: str | None = field(default=None, repr=False, init=False)
+    ResponseError: type = Exception
+
+    def __post_init__(self):
+        try:
+            import ollama
+
+            self._ollama = ollama
+            self.ResponseError = ollama.ResponseError
+            self._client = ollama.Client()
+        except ImportError:
+            self._availability_error = (
+                "[Ollama unavailable: The 'ollama' package is not installed. Install it to use this backend.]"
+            )
+        except Exception as e:
+            self._availability_error = (
+                "[Ollama unavailable: Unable to initialize Ollama client. "
+                f"Details: {e}]"
+            )
+
+    def generate(
+        self,
+        prompt: str,
+        system: str = SYSTEM_PROMPT,
+        config: NarratorConfig | None = None,
+    ) -> Generator[str, None, None]:
+        """
+        Generate text with streaming.
+
+        Args:
+            prompt: The user prompt.
+            system: System prompt for context.
+            config: Generation configuration.
+
+        Yields:
+            Text chunks as they're generated.
+        """
+        config = config or NarratorConfig()
+
+        if not self._client:
+            yield self._availability_error or "[Ollama unavailable: Client not initialized.]"
+            return
+
+        try:
+            stream = self._client.chat(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                stream=True,
+                options={
+                    "temperature": config.temperature,
+                    "top_p": config.top_p,
+                    "top_k": config.top_k,
+                    "repeat_penalty": config.repeat_penalty,
+                    "num_predict": config.max_tokens,
+                },
+            )
+
+            for chunk in stream:
+                if chunk.get("message", {}).get("content"):
+                    yield chunk["message"]["content"]
+
+        except self.ResponseError as e:
+            yield f"[Error communicating with Ollama: {e}]"
+        except Exception as e:
+            yield f"[Ollama error: {e}]"
+
+    def generate_sync(
+        self,
+        prompt: str,
+        system: str = SYSTEM_PROMPT,
+        config: NarratorConfig | None = None,
+    ) -> str:
+        """
+        Generate text synchronously (non-streaming).
+
+        Returns:
+            Complete generated text.
+        """
+        return "".join(self.generate(prompt, system, config))
+
+    def get_model_info(self) -> dict:
+        """Get information about the current model."""
+        if not self._client:
+            return {"error": self._availability_error or "Ollama client unavailable."}
+
+        try:
+            return self._client.show(self.model)
+        except Exception as e:
+            return {"error": str(e)}
+
+    def is_available(self) -> bool:
+        """Check if Ollama is available and model is loaded."""
+        if not self._client:
+            return False
+
+        try:
+            models = self._client.list()
+            model_names = [m.get("name", "").split(":")[0] for m in models.get("models", [])]
+            return self.model.split(":")[0] in model_names
+        except Exception:
+            return False
 def get_llm_provider_for_config(config: NarratorConfig) -> LLMProvider:
     """Map NarratorConfig to an LLMProvider instance."""
     provider_type = (config.backend or "gemini").lower()
