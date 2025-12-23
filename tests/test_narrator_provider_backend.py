@@ -15,6 +15,17 @@ class DummyProvider(LLMProvider):
     def name(self) -> str:  # pragma: no cover - trivial
         return "dummy"
 
+    def capabilities(self):  # pragma: no cover - simple stub
+        from src.llm_provider import LLMCapabilities
+
+        return LLMCapabilities(
+            max_output_tokens=1024,
+            safety_features=[],
+            cost_per_1k_tokens=0.0,
+            supports_streaming=True,
+            vendor="dummy",
+        )
+
 
 def test_provider_selection_respects_config_backend(monkeypatch):
     calls = []
