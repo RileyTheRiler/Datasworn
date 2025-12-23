@@ -43,6 +43,7 @@ from src.auto_save import AutoSaveSystem
 from src.photo_album import PhotoAlbumManager
 from src.psychology_api_models import *
 from src.additional_api import register_starmap_routes, register_rumor_routes, register_audio_routes  # Added import
+from src.lore import LoreRegistry
 
 app = FastAPI(title="Starforged AI GM")
 
@@ -79,6 +80,8 @@ try:
     DATASWORN = load_starforged_data()
 except Exception:
     DATASWORN = None
+
+LORE_REGISTRY = LoreRegistry(Path("data/lore"))
 
 class CharacterStatsInput(BaseModel):
     edge: int = 1
@@ -121,6 +124,24 @@ def get_available_assets():
         })
     
     return {"assets": assets_by_type}
+
+
+@app.get("/api/lore")
+def get_lore(q: str = "", factions: str = "", locations: str = "", items: str = ""):
+    """Search lore entries with optional filters."""
+
+    def _split(value: str) -> list[str] | None:
+        if not value:
+            return None
+        return [v.strip() for v in value.split(",") if v.strip()]
+
+    entries = LORE_REGISTRY.search(
+        query=q,
+        factions=_split(factions),
+        locations=_split(locations),
+        items=_split(items),
+    )
+    return {"entries": [entry.to_dict() for entry in entries]}
 
 @app.post("/api/session/start")
 async def start_session(req: InitRequest):
