@@ -6,8 +6,10 @@ versioning so future migrations can run safely.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -15,6 +17,8 @@ from src.game_state import Character
 
 
 CURRENT_SCHEMA_VERSION = 1
+SNAPSHOT_FORMAT = "datasworn-snapshot"
+CHARACTER_EXPORT_FORMAT = "datasworn-character"
 
 
 class PersistenceLayer:
@@ -74,11 +78,11 @@ class PersistenceLayer:
     # Character persistence
     # ------------------------------------------------------------------
     def save_character(self, character: Character) -> None:
-        data = json.dumps(character.model_dump())
+        payload = json.dumps(character.model_dump())
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO characters (name, data) VALUES (?, ?)",
-                (character.name, data),
+                (character.name, payload),
             )
         self._write_snapshot()
 
@@ -105,14 +109,15 @@ class PersistenceLayer:
     # Snapshot utilities
     # ------------------------------------------------------------------
     def _write_snapshot(self) -> None:
-        snapshot = {
+        body = {
             "schema_version": CURRENT_SCHEMA_VERSION,
             "characters": [
                 {"name": name, "data": char_data}
                 for name, char_data in self._iter_character_rows()
             ],
         }
-        self.snapshot_path.write_text(json.dumps(snapshot, indent=2))
+        payload = self._attach_header(body, SNAPSHOT_FORMAT)
+        self._atomic_write(self.snapshot_path, payload)
 
     def _iter_character_rows(self) -> Iterable[tuple[str, dict]]:
         with sqlite3.connect(self.db_path) as conn:
@@ -124,25 +129,74 @@ class PersistenceLayer:
         if not self.snapshot_path.exists():
             return None
         try:
-            return json.loads(self.snapshot_path.read_text())
+            payload = json.loads(self.snapshot_path.read_text())
         except json.JSONDecodeError:
             return None
+
+        if not self._is_payload_integrity_valid(payload, SNAPSHOT_FORMAT):
+            return None
+        return payload.get("body")
 
     # ------------------------------------------------------------------
     # Static helpers
     # ------------------------------------------------------------------
     @staticmethod
     def export_character_to_file(character: Character, path: Path) -> None:
-        payload = {
+        body = {
             "schema_version": CURRENT_SCHEMA_VERSION,
             "character": character.model_dump(),
         }
-        path.write_text(json.dumps(payload, indent=2))
+        payload = PersistenceLayer._attach_header(body, CHARACTER_EXPORT_FORMAT)
+        PersistenceLayer._atomic_write(path, payload)
 
     @staticmethod
     def parse_character_payload(data: dict) -> Character:
-        if "character" in data:
-            return Character.model_validate(data["character"])
-        if "data" in data and isinstance(data["data"], dict):
-            return Character.model_validate(data["data"])
-        return Character.model_validate(data)
+        payload = data
+        if "header" in data and "body" in data:
+            payload = data.get("body", {})
+
+        if "character" in payload:
+            return Character.model_validate(payload["character"])
+        if "data" in payload and isinstance(payload["data"], dict):
+            return Character.model_validate(payload["data"])
+        return Character.model_validate(payload)
+
+    # ------------------------------------------------------------------
+    # Integrity helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _attach_header(body: dict, format_name: str) -> dict:
+        checksum_source = json.dumps(body, sort_keys=True).encode("utf-8")
+        checksum = hashlib.sha256(checksum_source).hexdigest()
+        return {
+            "header": {
+                "format": format_name,
+                "version": CURRENT_SCHEMA_VERSION,
+                "generated_at": datetime.utcnow().isoformat(),
+                "checksum": checksum,
+            },
+            "body": body,
+        }
+
+    @staticmethod
+    def _atomic_write(path: Path, payload: dict) -> None:
+        serialized = json.dumps(payload, indent=2)
+        temp_path = path.with_suffix(path.suffix + ".tmp")
+        temp_path.write_text(serialized, encoding="utf-8")
+        temp_path.replace(path)
+
+    @staticmethod
+    def _is_payload_integrity_valid(payload: dict, expected_format: str) -> bool:
+        header = payload.get("header", {})
+        body = payload.get("body")
+        if not header or body is None:
+            return False
+        if header.get("format") != expected_format:
+            return False
+        version = header.get("version")
+        if version != body.get("schema_version"):
+            return False
+        expected_checksum = header.get("checksum")
+        checksum_source = json.dumps(body, sort_keys=True).encode("utf-8")
+        actual_checksum = hashlib.sha256(checksum_source).hexdigest()
+        return expected_checksum == actual_checksum

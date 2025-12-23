@@ -179,6 +179,7 @@ class PersistentWorldEngine:
         self._revealed_secrets: Set[str] = set()
         self._current_scene: int = 0
         self._current_session: str = ""
+        self._schema_version: int = 1
 
     def set_context(self, scene_number: int, session_id: str = ""):
         """Set current context for change tracking."""
@@ -572,21 +573,24 @@ class PersistentWorldEngine:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PersistentWorldEngine":
         """Deserialize engine state."""
+        migrated = cls._migrate_payload(dict(data))
+
         engine = cls()
         engine._entities = {
             k: EntityState.from_dict(v)
-            for k, v in data.get("entities", {}).items()
+            for k, v in migrated.get("entities", {}).items()
         }
         engine._changes = [
             WorldChange.from_dict(c)
-            for c in data.get("changes", [])
+            for c in migrated.get("changes", [])
         ]
-        engine._dead_npcs = set(data.get("dead_npcs", []))
-        engine._destroyed_locations = set(data.get("destroyed_locations", []))
-        engine._faction_control = data.get("faction_control", {})
-        engine._revealed_secrets = set(data.get("revealed_secrets", []))
-        engine._current_scene = data.get("current_scene", 0)
-        engine._current_session = data.get("current_session", "")
+        engine._dead_npcs = set(migrated.get("dead_npcs", []))
+        engine._destroyed_locations = set(migrated.get("destroyed_locations", []))
+        engine._faction_control = migrated.get("faction_control", {})
+        engine._revealed_secrets = set(migrated.get("revealed_secrets", []))
+        engine._current_scene = migrated.get("current_scene", 0)
+        engine._current_session = migrated.get("current_session", "")
+        engine._schema_version = migrated.get("schema_version", 1)
         return engine
 
     def export_campaign_state(self) -> str:
@@ -618,6 +622,46 @@ class PersistentWorldEngine:
         lines.append(f"\n## Total Changes Recorded: {len(self._changes)}")
 
         return "\n".join(lines)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize engine state for persistence."""
+        return {
+            "schema_version": self._schema_version,
+            "entities": {k: v.to_dict() for k, v in self._entities.items()},
+            "changes": [c.to_dict() for c in self._changes],
+            "dead_npcs": list(self._dead_npcs),
+            "destroyed_locations": list(self._destroyed_locations),
+            "faction_control": self._faction_control,
+            "revealed_secrets": list(self._revealed_secrets),
+            "current_scene": self._current_scene,
+            "current_session": self._current_session,
+        }
+
+    # -------------------------------------------------------------------------
+    # Migration helpers
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _migrate_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+        version = data.get("schema_version", 0)
+
+        if version < 1:
+            # Backfill missing keys from early saves
+            data.setdefault("entities", {})
+            data.setdefault("changes", [])
+            data.setdefault("dead_npcs", [])
+            data.setdefault("destroyed_locations", [])
+            data.setdefault("faction_control", {})
+            data.setdefault("revealed_secrets", [])
+            data.setdefault("current_scene", 0)
+            data.setdefault("current_session", "")
+            # Ensure each entity has required keys
+            for entity in data.get("entities", {}).values():
+                entity.setdefault("relationships", {})
+                entity.setdefault("properties", {})
+                entity.setdefault("change_history", [])
+        data["schema_version"] = 1
+        return data
 
 
 # =============================================================================
