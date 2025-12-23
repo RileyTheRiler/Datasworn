@@ -1469,7 +1469,7 @@ def quick_load():
 # Session Recap API Endpoints
 # ============================================================================
 
-from src.session_recap import SessionRecapEngine, RecapStyle
+from src.session_recap import MilestoneCategory, SessionRecapEngine, RecapStyle
 from src.npc_templates import NPCRole, get_template, generate_quick_npc, get_all_roles, get_template_preview
 
 # Global recap engine instance
@@ -1567,22 +1567,55 @@ def record_session_event(
     description: str,
     importance: int = 5,
     characters: Optional[str] = None,
-    location: Optional[str] = None
+    location: Optional[str] = None,
+    category: Optional[str] = "narrative",
+    timestamp: Optional[str] = None,
 ):
     """Record a significant event for recap purposes."""
     if session_id not in SESSIONS:
         raise HTTPException(status_code=404, detail="Session not found")
-    
+
     char_list = characters.split(",") if characters else []
-    
+
+    parsed_timestamp = None
+    if timestamp:
+        try:
+            parsed_timestamp = datetime.fromisoformat(timestamp)
+        except ValueError:
+            parsed_timestamp = None
+
     RECAP_ENGINE.record_event(
         description=description,
         importance=importance,
         characters=char_list,
-        location=location or ""
+        location=location or "",
+        category=category,
+        timestamp=parsed_timestamp,
     )
-    
+
     return {"recorded": True}
+
+
+@app.get("/api/session/timeline/{session_id}")
+def get_timeline(session_id: str, categories: Optional[str] = None):
+    """Return the recorded timeline with optional category filters."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    category_filter = [c.strip() for c in categories.split(",") if c.strip()] if categories else None
+    entries = [entry.to_dict() for entry in RECAP_ENGINE.get_timeline(category_filter)]
+    return {"timeline": entries, "total": len(entries)}
+
+
+@app.get("/api/session/timeline/{session_id}/export")
+def export_timeline(session_id: str, categories: Optional[str] = None):
+    """Export a filtered timeline as JSON for sharing."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    category_filter = [c.strip() for c in categories.split(",") if c.strip()] if categories else None
+    payload = RECAP_ENGINE.export_timeline_json(category_filter)
+    return Response(content=payload, media_type="application/json")
 
 
 # ============================================================================

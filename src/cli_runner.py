@@ -14,6 +14,7 @@ from src.game_state import Character, CharacterCondition, CharacterStats, Moment
 from src.intent_predictor import INTENT_KEYWORDS, IntentCategory
 from src.persistence import PersistenceLayer
 from src.rules_engine import ProgressTrack, RollResult, action_roll
+from src.session_recap import MilestoneCategory, SessionRecapEngine
 from src.tutorial import TutorialEngine, TutorialState, get_new_player_scenario
 
 DEFAULT_DATA_PATH = Path("data/starforged/dataforged.json")
@@ -59,6 +60,8 @@ class CLIRunner:
         self.data = DataswornData(path) if path.exists() else None
         self.state = create_initial_state(character_name)
         self.persistence = persistence or PersistenceLayer(save_path or Path("saves/game_state.db"))
+        self.recap_engine = SessionRecapEngine()
+        self.recap_engine.start_session(1)
         self.config = get_config()
         self.tutorial_state = TutorialState()
         self.tutorial_engine = TutorialEngine(get_new_player_scenario())
@@ -131,6 +134,8 @@ class CLIRunner:
             return self._render_assets()
         if name == "vows":
             return self._render_vows()
+        if name == "timeline":
+            return self._render_timeline(arg)
         if name == "oracle":
             return self._roll_oracle(arg)
         if name == "save":
@@ -148,6 +153,7 @@ class CLIRunner:
                 "!status       - Show stats, momentum, and conditions\n"
                 "!assets       - List equipped assets and abilities\n"
                 "!vows         - List active vows and progress\n"
+                "!timeline     - Show a filtered milestone timeline\n"
                 "!oracle NAME  - Roll an oracle by path or keyword\n"
                 "!save         - Persist the current character\n"
                 "!load [NAME]  - Load a saved character by name\n"
@@ -218,6 +224,16 @@ class CLIRunner:
             lines.append(f"- {vow.name} ({vow.rank}) {track.display}")
         return "\n".join(lines)
 
+    def _render_timeline(self, arg: str) -> str:
+        """Render or export the recap timeline."""
+
+        if arg.lower().startswith("export"):
+            filters = [a.strip() for a in arg.split(" ", 1)[1].split(",") if a.strip()] if " " in arg else []
+            return self.recap_engine.export_timeline_json(filters or None)
+
+        filters = [a.strip() for a in arg.split(",") if a.strip()] if arg else None
+        return self.recap_engine.render_timeline_text(filters)
+
     def _command_save(self) -> str:
         char: Character = self.state["character"]
         self.persistence.save_character(char)
@@ -259,6 +275,12 @@ class CLIRunner:
         if progress_note:
             parts.append(progress_note)
 
+        self._log_timeline_event(
+            description=f"{move.name}: {outcome_text.splitlines()[0] if outcome_text else 'Resolved'}",
+            intent=intent,
+            importance=7 if intent == IntentCategory.COMBAT else 5,
+        )
+
         return "\n".join(parts)
 
     def _progress_move(self, move: Move, char: Character) -> str:
@@ -279,6 +301,12 @@ class CLIRunner:
         ]
         if vow.completed:
             parts.append(f"{vow.name} is now fulfilled!")
+
+        self._log_timeline_event(
+            description=f"{move.name}: {self._outcome_text(move, roll.result)}",
+            intent=IntentCategory.QUEST,
+            importance=8 if vow.completed else 5,
+        )
 
         return "\n".join(parts)
 
@@ -357,6 +385,20 @@ class CLIRunner:
         vow.ticks = track.ticks
 
         return f"Progress marked on {vow.name}: {before} -> {vow.ticks} ticks ({track.display})"
+
+    def _log_timeline_event(self, description: str, intent: str, importance: int = 5) -> None:
+        """Record the action as a milestone for recap timelines."""
+
+        category = self._map_intent_to_category(intent)
+        self.recap_engine.record_milestone(description=description, category=category, importance=importance)
+
+    @staticmethod
+    def _map_intent_to_category(intent: str) -> MilestoneCategory:
+        if intent == IntentCategory.COMBAT:
+            return MilestoneCategory.COMBAT
+        if intent in {IntentCategory.CRAFTING, IntentCategory.INVENTORY}:
+            return MilestoneCategory.ECONOMY
+        return MilestoneCategory.NARRATIVE
 
     # ------------------------------------------------------------------
     # Matching helpers
