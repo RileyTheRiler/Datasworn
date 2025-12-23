@@ -11,6 +11,7 @@ from pathlib import Path
 from src.datasworn import DataswornData, Move
 from src.game_state import Character, CharacterCondition, CharacterStats, MomentumState, VowState, create_initial_state
 from src.intent_predictor import INTENT_KEYWORDS, IntentCategory
+from src.persistence import PersistenceLayer
 from src.rules_engine import ProgressTrack, RollResult, action_roll
 
 DEFAULT_DATA_PATH = Path("data/starforged/dataforged.json")
@@ -45,10 +46,17 @@ STAT_BY_INTENT: dict[str, str] = {
 class CLIRunner:
     """Lightweight CLI harness around the rules engine and Datasworn data."""
 
-    def __init__(self, character_name: str, data_path: Path | None = None):
+    def __init__(
+        self,
+        character_name: str,
+        data_path: Path | None = None,
+        save_path: Path | None = None,
+        persistence: PersistenceLayer | None = None,
+    ):
         path = data_path or DEFAULT_DATA_PATH
         self.data = DataswornData(path) if path.exists() else None
         self.state = create_initial_state(character_name)
+        self.persistence = persistence or PersistenceLayer(save_path or Path("saves/game_state.db"))
 
     # ------------------------------------------------------------------
     # High-level flow
@@ -101,6 +109,19 @@ class CLIRunner:
                 "!oracle NAME  - Roll an oracle by path or keyword\n"
                 "!help moves   - List move prompts and examples\n"
                 "!help         - Show this list"
+        if cmd.startswith("save"):
+            return self._command_save()
+        if cmd.startswith("load"):
+            name = command_text.split(maxsplit=1)[1] if len(command_text.split()) > 1 else None
+            return self._command_load(name)
+        if cmd in {"help", "?"}:
+            return (
+                "Available commands:\n"
+                "!status - Show stats, momentum, and conditions\n"
+                "!vows   - List active vows and progress\n"
+                "!save   - Persist the current character\n"
+                "!load   - Load a saved character by name\n"
+                "!help   - Show this list"
             )
         return "Unknown command. Try !help for the list."
 
@@ -148,6 +169,20 @@ class CLIRunner:
             track = ProgressTrack(name=vow.name, rank=vow.rank, ticks=vow.ticks, completed=vow.completed)
             lines.append(f"- {vow.name} ({vow.rank}) {track.display}")
         return "\n".join(lines)
+
+    def _command_save(self) -> str:
+        char: Character = self.state["character"]
+        self.persistence.save_character(char)
+        return f"Saved character '{char.name}'."
+
+    def _command_load(self, name: str | None) -> str:
+        target = name or self.state["character"].name
+        loaded = self.persistence.load_character(target)
+        if not loaded:
+            return f"No saved character found for '{target}'."
+
+        self.state["character"] = loaded
+        return f"Loaded character '{loaded.name}'."
 
     # ------------------------------------------------------------------
     # Move resolution
