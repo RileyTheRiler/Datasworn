@@ -112,9 +112,13 @@ class GameConfig:
 
     # Debug mode
     debug: bool = False
+    phase_tracing: bool = False
 
     def __post_init__(self):
         self.debug = os.environ.get("STARFORGED_DEBUG", "").lower() in ("1", "true", "yes")
+        self.phase_tracing = (
+            os.environ.get("STARFORGED_PHASE_TRACING", "").lower() in ("1", "true", "yes")
+        )
 
 
 # Global config instance - import this in other modules
