@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 from heapq import heappush, heappop
+from collections import deque
 
 
 # ============================================================================
@@ -48,12 +49,38 @@ class WorldState:
                 unsatisfied[key] = value
         return unsatisfied
     
-    def apply_effects(self, effects: dict[str, Any]) -> "WorldState":
-        """Apply effects and return new state."""
-        new_state = self.copy()
-        for key, value in effects.items():
-            new_state.facts[key] = value
+    def apply_effects(self, effects: dict[str, Any], pool: "WorldStatePool | None" = None) -> "WorldState":
+        """Apply effects and return new state, optionally using a pool."""
+
+        if pool:
+            new_state = pool.clone(self, effects)
+        else:
+            new_state = self.copy()
+            for key, value in effects.items():
+                new_state.facts[key] = value
         return new_state
+
+
+class WorldStatePool:
+    """Reusable pool for ``WorldState`` instances to limit allocations."""
+
+    def __init__(self) -> None:
+        self._pool: deque[WorldState] = deque()
+        self._leased: list[WorldState] = []
+
+    def clone(self, base: WorldState, effects: dict[str, Any] | None = None) -> WorldState:
+        state = self._pool.pop() if self._pool else WorldState()
+        state.facts.clear()
+        state.facts.update(base.facts)
+        if effects:
+            state.facts.update(effects)
+        self._leased.append(state)
+        return state
+
+    def recycle(self) -> None:
+        if self._leased:
+            self._pool.extend(self._leased)
+            self._leased.clear()
 
 
 # ============================================================================
@@ -95,9 +122,10 @@ class GOAPAction:
             base_cost *= self.cost_modifier(state)
         return max(0.1, base_cost)
     
-    def apply(self, state: WorldState) -> WorldState:
+    def apply(self, state: WorldState, pool: WorldStatePool | None = None) -> WorldState:
         """Apply this action's effects to the state."""
-        return state.apply_effects(self.effects)
+
+        return state.apply_effects(self.effects, pool=pool)
 
 
 # ============================================================================
@@ -154,6 +182,7 @@ class GOAPPlanner:
         self.actions = available_actions
         self.max_depth = 10
         self.max_iterations = 1000
+        self._state_pool = WorldStatePool()
     
     def plan(
         self,
@@ -170,13 +199,17 @@ class GOAPPlanner:
         Returns:
             List of actions to perform, or None if no plan found
         """
+        # Return states from previous runs so they can be reused.
+        self._state_pool.recycle()
+
         if goal.is_satisfied(start_state):
             return []  # Already achieved
-        
+
         # A* search
         open_set: list[PlanNode] = []
+        initial_state = self._state_pool.clone(start_state)
         heappush(open_set, PlanNode(
-            state=start_state,
+            state=initial_state,
             actions=[],
             cost=0,
         ))
@@ -190,6 +223,7 @@ class GOAPPlanner:
             
             # Check if we've reached the goal
             if goal.is_satisfied(current.state):
+                self._state_pool.recycle()
                 return current.actions
             
             # Check depth limit
@@ -205,18 +239,19 @@ class GOAPPlanner:
             # Try each action
             for action in self.actions:
                 if action.is_valid(current.state):
-                    new_state = action.apply(current.state)
+                    new_state = action.apply(current.state, pool=self._state_pool)
                     new_cost = current.cost + action.get_cost(current.state)
-                    
+
                     # Heuristic: unsatisfied goal conditions
                     h_cost = len(new_state.difference(goal.conditions)) * 0.5
-                    
+
                     heappush(open_set, PlanNode(
                         state=new_state,
                         actions=current.actions + [action],
                         cost=new_cost + h_cost,
                     ))
-        
+
+        self._state_pool.recycle()
         return None  # No plan found
     
     def plan_for_best_goal(

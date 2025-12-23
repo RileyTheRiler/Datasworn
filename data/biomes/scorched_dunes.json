@@ -1,0 +1,14 @@
+{
+  "name": "scorched_dunes",
+  "encounters": [
+    {"id": "sandstorm", "weight": 3, "rarity": "common"},
+    {"id": "buried_ruins", "weight": 2, "rarity": "uncommon"},
+    {"id": "dune_titan", "weight": 1, "rarity": "rare"}
+  ],
+  "loot_modifiers": {
+    "common": 0.9,
+    "uncommon": 1.05,
+    "rare": 1.15,
+    "legendary": 1.3
+  }
+}

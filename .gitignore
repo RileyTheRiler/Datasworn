@@ -40,3 +40,4 @@ Thumbs.db
 # Research/temporary files
 *.txt
 !requirements.txt
+!tests/fixtures/**/*.txt
