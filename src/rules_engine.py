@@ -27,6 +27,8 @@ class ActionRollResult:
     challenge_dice: tuple[int, int]
     result: RollResult
     is_match: bool
+    rule_citation: str = "Action Roll: d6 + stat + adds vs. two d10s"
+    oracle_used: str = ""
 
     def __str__(self) -> str:
         match_str = " (MATCH!)" if self.is_match else ""
@@ -34,7 +36,23 @@ class ActionRollResult:
             f"{self.result.value}{match_str}\n"
             f"Action: d6({self.action_die}) + {self.stat} + {self.adds} = {self.action_score}\n"
             f"Challenge: d10({self.challenge_dice[0]}) vs d10({self.challenge_dice[1]})"
+            + (f"\nOracle: {self.oracle_used}" if self.oracle_used else "")
         )
+
+    def breakdown(self) -> dict:
+        """Structured breakdown for UI/CLI explanation panels."""
+
+        return {
+            "action_die": self.action_die,
+            "stat": self.stat,
+            "adds": self.adds,
+            "action_score": self.action_score,
+            "challenge": list(self.challenge_dice),
+            "result": self.result.value,
+            "is_match": self.is_match,
+            "rule": self.rule_citation,
+            "oracle": self.oracle_used,
+        }
 
 
 @dataclass
@@ -44,6 +62,7 @@ class ProgressRollResult:
     challenge_dice: tuple[int, int]
     result: RollResult
     is_match: bool
+    oracle_used: str = ""
 
     def __str__(self) -> str:
         match_str = " (MATCH!)" if self.is_match else ""
@@ -51,6 +70,7 @@ class ProgressRollResult:
             f"{self.result.value}{match_str}\n"
             f"Progress: {self.progress} vs Challenge: "
             f"d10({self.challenge_dice[0]}) & d10({self.challenge_dice[1]})"
+            + (f"\nOracle: {self.oracle_used}" if self.oracle_used else "")
         )
 
 

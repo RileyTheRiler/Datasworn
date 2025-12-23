@@ -4,9 +4,11 @@ Uses Pydantic for validation and TypedDict for LangGraph state.
 """
 
 from __future__ import annotations
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, Optional, TypedDict
 from pydantic import BaseModel, Field
 from langgraph.graph.message import add_messages
+
+from src.ship_campaign_template import get_ship_campaign_state
 
 
 # ============================================================================
@@ -80,12 +82,14 @@ class VowState(BaseModel):
 class WorldState(BaseModel):
     """World information."""
     current_location: str = "Unknown Sector"
+    current_region: str = ""
     location_type: str = "neutral"
     discovered_locations: list[str] = Field(default_factory=list)
     truths: dict[str, str] = Field(default_factory=dict)
     npcs: list[dict[str, Any]] = Field(default_factory=list)
     factions: list[dict[str, Any]] = Field(default_factory=list)
     ship: ShipState = Field(default_factory=lambda: ShipState())
+    atmosphere: str = ""
     
     # Combat State
     combat_active: bool = False
@@ -151,6 +155,11 @@ class SessionState(BaseModel):
     user_decision: str = ""  # "accept", "retry", "edit"
     edited_text: str = ""
     turn_count: int = 0
+    onboarding_completed: bool = False
+    onboarding_step: int = 0
+    starter_intent: str = ""
+    starting_vow: str = ""
+    starting_location: str = ""
 
 
 class DirectorStateModel(BaseModel):
@@ -159,6 +168,7 @@ class DirectorStateModel(BaseModel):
     recent_pacing: list[str] = Field(default_factory=list)
     active_beats: list[str] = Field(default_factory=list)
     tension_level: float = 0.2
+    pacing_mode: str = "standard"
     scenes_since_breather: int = 0
     foreshadowing: list[str] = Field(default_factory=list)
     moral_patterns: list[str] = Field(default_factory=list)
@@ -212,6 +222,7 @@ class QuestLoreState(BaseModel):
     lore: dict[str, Any] = Field(default_factory=dict)
     schedules: dict[str, Any] = Field(default_factory=dict)
     rumors: dict[str, Any] = Field(default_factory=dict)
+    region_truths: list[Any] = Field(default_factory=list)
 
 
 class CompanionManagerState(BaseModel):
@@ -303,13 +314,17 @@ class NarrativeOrchestratorState(BaseModel):
 
     # Psychological Systems (Phase 3)
     attachment_system: dict[str, Any] = Field(default_factory=dict)
-    # Psychological Systems (Phase 3)
-    attachment_system: dict[str, Any] = Field(default_factory=dict)
     trust_dynamics: dict[str, Any] = Field(default_factory=dict)
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Dict-style accessor used by server helpers."""
-        return getattr(self, key, default)
+        """Provide dict-like access for compatibility with call sites/tests."""
+        if hasattr(self, key):
+            return getattr(self, key)
+
+        extra = getattr(self, "__pydantic_extra__", None)
+        if extra and key in extra:
+            return extra[key]
+        return default
 
 
 class StarmapState(BaseModel):
@@ -335,17 +350,6 @@ class WorldSimState(BaseModel):
 class HazardState(BaseModel):
     """State for environmental hazards."""
     active_hazards: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class AudioState(BaseModel):
-    """Audio engine state."""
-    current_ambient: str | None = None
-    current_music: str | None = None
-    ambient_volume: float = 0.5
-    music_volume: float = 0.6
-    voice_volume: float = 0.8
-    master_volume: float = 1.0
-    muted: bool = False
 
 
 class PhotoEntry(BaseModel):
@@ -493,4 +497,29 @@ def create_initial_state(character_name: str) -> GameState:
         audio=AudioState(),
         route="",
     )
+
+
+def create_demo_state() -> GameState:
+    """Create a ready-to-play demo state using the ship campaign template."""
+
+    template = get_ship_campaign_state()
+    state = create_initial_state("Demo Captain")
+
+    # Populate key fields from the template without requiring full conversion of the
+    # nested structures. This keeps the demo lightweight while still grounding the
+    # session in the Exile's Gambit setup.
+    state.world.current_location = "The Exile's Gambit"
+    state.world.current_region = "Deep Forge"
+    state.world.atmosphere = template.get("faction_environment", {}).get("environment", {}).get(
+        "current_conditions", {}
+    ).get("atmosphere_notes", "")
+
+    state.quest_lore.region_truths = template.get("campaign_truths", [])
+    state.companions.companions = template.get("final_systems", {}).get("voice", {})
+
+    # Seed director pacing so UI/CLI can surface an initial heartbeat.
+    state.director.pacing_mode = "standard"
+    state.director.tension_level = 0.35
+
+    return state
 

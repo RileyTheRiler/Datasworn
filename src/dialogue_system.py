@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Callable
 from enum import Enum
 from src.psych_profile import EmotionalState
+from src.narrative.npc_memory import NPCMemoryBank
+from src.narrative.reputation import ReputationLedger
 
 
 class Disposition(Enum):
@@ -193,7 +195,10 @@ class DialogueSystem:
         player_stats: Dict[str, int] = None,
         player_items: List[str] = None,
         reputation: int = 0,
-        psych_profile: "PsychologicalProfile" = None
+        psych_profile: "PsychologicalProfile" = None,
+        reputation_ledger: ReputationLedger | None = None,
+        npc_memory: NPCMemoryBank | None = None,
+        npc_faction: str | None = None,
     ) -> List[DialogueOption]:
         """
         Get options available to the player in current dialogue.
@@ -227,9 +232,12 @@ class DialogueSystem:
                 if current_idx < required_idx:
                     continue
 
-            # Check reputation requirement
+            # Check reputation requirement (NPC/faction aware)
             if option.required_reputation is not None:
-                if reputation < option.required_reputation:
+                if reputation_ledger:
+                    if not reputation_ledger.qualifies_for(npc_id, option.required_reputation, npc_faction):
+                        continue
+                elif reputation < option.required_reputation:
                     continue
 
             # Check item requirement
@@ -248,6 +256,12 @@ class DialogueSystem:
                 if option.required_emotion:
                     if psych_profile.current_emotion not in option.required_emotion:
                         continue
+
+            # Memory-aware filtering to avoid repetition
+            if npc_memory and npc_memory.has_discussed(option.id):
+                # Keep options that lead somewhere new or are critical
+                if option.leads_to is None and not option.ends_dialogue:
+                    continue
 
             available.append(option)
 
@@ -377,7 +391,7 @@ class DialogueSystem:
         """Check if currently in a dialogue."""
         return self._active_dialogue is not None
 
-    def get_narrator_context(self, npc_id: str = None) -> str:
+    def get_narrator_context(self, npc_id: str = None, npc_memory: NPCMemoryBank | None = None) -> str:
         """Generate dialogue context for narrator."""
         npc_id = npc_id or self._active_dialogue
         if not npc_id:
@@ -392,6 +406,11 @@ class DialogueSystem:
 
         if state.topics_discussed:
             lines.append(f"Topics covered: {', '.join(state.topics_discussed[-3:])}")
+
+        if npc_memory:
+            memory_summary = npc_memory.get_recent_summary()
+            if memory_summary:
+                lines.append(f"Memory: {memory_summary}")
 
         return "\n".join(lines)
 

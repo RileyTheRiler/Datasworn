@@ -3,6 +3,7 @@ Image Generation Module using Google Generative AI.
 Handles generation of location visuals, character portraits, and tactical blueprints.
 """
 
+import asyncio
 import os
 import io
 import base64
@@ -132,14 +133,6 @@ class TimeOfDay(str, Enum):
     NIGHT = "Night"
     TWILIGHT = "Twilight"
     DAWN = "Dawn"
-
-class WeatherCondition(str, Enum):
-    CLEAR = "Clear"
-    RAIN = "Rain"
-    DUST_STORM = "Dust Storm"
-    FOG = "Fog"
-    SNOW = "Snow"
-    STORM = "Storm"
 
 class WeatherCondition(str, Enum):
     CLEAR = "Clear"
@@ -358,6 +351,7 @@ def generate_tactical_blueprint(
         import asyncio
 
         prompt = generate_tactical_prompt(metadata)
+        ai_base = asyncio.run(_generate_ai_background(prompt, provider))
         ai_coro = _generate_ai_background(prompt, provider)
 
         try:
@@ -540,6 +534,7 @@ def _draw_entry_points(draw, entry_points: list[str], width: int, height: int):
 
 
 def _draw_npc_markers(draw, npcs: list[dict], width: int, height: int, show_vision: bool = False):
+    """Draw NPC position markers."""
     """Draw NPC position markers (optionally with simple vision rays)."""
     from src.blueprint_generator import calculate_npc_grid_position
     
@@ -555,13 +550,16 @@ def _draw_npc_markers(draw, npcs: list[dict], width: int, height: int, show_visi
         draw.ellipse([x - 12, y - 12, x + 12, y + 12], fill=color)
 
         if show_vision:
+            # Simple facing indicator
+            draw.line([x, y, x, y - 24], fill=color, width=2)
             # Draw a minimal forward-facing indicator to visualize awareness
             draw.line([x, y, x + 30, y], fill=color, width=2)
 
 
-def _draw_player_marker(draw, pos: tuple[int, int]):
+
+def _draw_player_marker(draw, width: int, height: int, pos: tuple[int, int] | None = None):
     """Draw player position marker."""
-    x, y = pos
+    x, y = pos or (width // 2, int(height * 0.75))
     # Outer ring (white)
     draw.ellipse([x - 22, y - 22, x + 22, y + 22], outline=COLORS["player_outline"], width=3)
     # Inner fill (blue)
@@ -569,6 +567,8 @@ def _draw_player_marker(draw, pos: tuple[int, int]):
     # "YOU" label
     draw.text((x - 12, y - 6), "YOU", fill=COLORS["text"])
     return pos
+
+    return (x, y)
 
 
 

@@ -19,6 +19,7 @@ import PhotoAlbum from './components/PhotoAlbum';
 import StarMap from './components/StarMap';
 import RumorBoard from './components/RumorBoard';
 import ShipBlueprintViewer from './components/ShipBlueprintViewer';
+import CodexBrowser from './components/CodexBrowser';
 import api from './utils/api';
 
 // Atmospheric loading messages
@@ -100,6 +101,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
     const [showStarMap, setShowStarMap] = useState(false);
     const [showRumorBoard, setShowRumorBoard] = useState(false);
     const [showShipBlueprint, setShowShipBlueprint] = useState(false);
+    const [showCodex, setShowCodex] = useState(false);
     const [activeStat, setActiveStat] = useState({ name: 'Iron', value: character.stats.iron });
 
     // Accessibility and sound contexts
@@ -462,6 +464,13 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
                             📸 Album
                         </button>
                         <button
+                            onClick={() => setShowCodex(true)}
+                            className="text-disco-cyan hover:text-disco-paper transition-colors"
+                            title="Lore Codex"
+                        >
+                            📘 Codex
+                        </button>
+                        <button
                             onClick={() => setShowStarMap(true)}
                             className="text-disco-cyan hover:text-disco-paper transition-colors"
                             title="Star Map Navigation"
@@ -574,6 +583,11 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
                         sessionId="default"
                         visible={showAlbum}
                         onClose={() => setShowAlbum(false)}
+                    />
+
+                    <CodexBrowser
+                        visible={showCodex}
+                        onClose={() => setShowCodex(false)}
                     />
                 </div>
             </div>

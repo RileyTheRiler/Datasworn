@@ -10,6 +10,12 @@ from typing import Any
 
 from langgraph.types import interrupt, Command
 
+from src.logging_config import get_logger
+from src.config import config
+
+# Module logger
+logger = get_logger("nodes")
+
 from src.game_state import (
     GameState,
     RollState,
@@ -125,8 +131,8 @@ def router_node(state: GameState) -> dict[str, Any]:
             "predicted_context": predicted_context,
             "detected_intent": detected_intent,
         }
-    except Exception:
-        pass  # Graceful fallback
+    except Exception as e:
+        logger.debug(f"Intent prediction fallback: {e}")
 
     # Default to narrative interpretation
     return {"route": "narrative"}
@@ -298,8 +304,8 @@ async def director_node(state: GameState) -> dict[str, Any]:
             transitions = dag.get_available_transitions()
             if transitions:
                 director.state.add_beat(f"Story paths: {', '.join([e.label or 'continue' for e in transitions[:3]])}")
-    except Exception:
-        pass  # Graceful fallback
+    except Exception as e:
+        logger.debug(f"Story DAG processing fallback: {e}")
     
     # Build session summary from recent messages
     messages = state.get("messages", [])
@@ -383,9 +389,9 @@ async def director_node(state: GameState) -> dict[str, Any]:
             )
             plan.pacing = Pacing.BREATHER
             plan.notes_for_narrator += f" ** MANDATE QUIET SCENE: {quiet_moment['prompt']} **"
-    except Exception:
-        pass
-    
+    except Exception as e:
+        logger.debug(f"Quiet moment check fallback: {e}")
+
     # TLOU-Style: Check for moral dilemma opportunity
     dilemma_context = ""
     theme_state = state.get("theme_tracker", {})
@@ -402,9 +408,9 @@ async def director_node(state: GameState) -> dict[str, Any]:
                 dilemma = generator.generate()
                 dilemma_context = dilemma.get_narrator_context()
                 plan.notes_for_narrator += " ** PRESENT MORAL DILEMMA TO PLAYER **"
-    except Exception:
-        pass
-    
+    except Exception as e:
+        logger.debug(f"Moral dilemma check fallback: {e}")
+
     # Quest & Lore Integration
     quest_lore_engine = None
     try:
@@ -417,8 +423,8 @@ async def director_node(state: GameState) -> dict[str, Any]:
         urgent = quest_lore_engine.quests.get_urgent_quests(current_day=1) # Simplified day tracking
         if urgent:
             plan.notes_for_narrator += " ** REMINDER: TIME SENSITIVE OBJECTIVE **"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Quest/lore integration fallback: {e}")
 
     # Combat Prediction Integration
     combat_warning = ""
@@ -434,8 +440,8 @@ async def director_node(state: GameState) -> dict[str, Any]:
             combat_warning = warning.get("narrative", "")
             if warning.get("warning") in ["SUICIDE", "EXTREME"]:
                 plan.notes_for_narrator += f" ** WARNING: {combat_warning} **"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Combat prediction fallback: {e}")
 
     # Cinematic Scene Trigger Logic
     # -----------------------------
@@ -560,8 +566,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
     - Dynamic few-shot examples matching current tone
     """
     from src.narrator import (
-        build_narrative_prompt, OllamaClient, NarratorConfig, SYSTEM_PROMPT,
-        get_examples_for_tone, validate_narrative
+        build_narrative_prompt, NarratorConfig, SYSTEM_PROMPT,
+        get_examples_for_tone, validate_narrative,
     )
     from src.director import DirectorPlan, Pacing, Tone
     from src.memory import MemoryManager, ActiveContext, SessionBuffer, CampaignSummary
@@ -696,7 +702,7 @@ def narrator_node(state: GameState) -> dict[str, Any]:
     try:
         from src.feedback_learning import FeedbackLearningEngine, PromptModifier, ExampleRetriever
         
-        feedback_engine = FeedbackLearningEngine(db_path="saves/feedback_learning.db")
+        feedback_engine = FeedbackLearningEngine(db_path=config.paths.feedback_db)
         
         # Check if we have enough data for analysis
         stats = feedback_engine.db.get_statistics()
@@ -748,8 +754,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
             enhanced_system += f"\n\n<narrative_craft>\n{craft_context}\n</narrative_craft>"
         
         craft_engine.scenes_in_current_beat += 1
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # Prose Craft System - sentence rhythm, sensory detail, dialogue craft
     try:
@@ -774,8 +780,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         if prose_guidance:
             enhanced_system += prose_guidance
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # Prose Enhancement - sensory tracking, voice consistency, metaphors
     prose_enhancement_state = state.get("prose_enhancement", {})
@@ -802,8 +808,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         if enhancement_context:
             enhanced_system += enhancement_context
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # Narrative Systems - tension arc, dialogue, transitions, themes
     narrative_systems_state = state.get("narrative_systems", {})
@@ -834,8 +840,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         if ns_guidance:
             enhanced_system += ns_guidance
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # Character Arcs - Hero's Journey, foreshadowing, pacing, emotional beats
     character_arcs_state = state.get("character_arcs", {})
@@ -856,8 +862,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         if arc_guidance:
             enhanced_system += arc_guidance
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # World Coherence - state tracking, agency validation, surprises, recaps
     world_coherence_state = state.get("world_coherence", {})
@@ -879,8 +885,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         if coherence_guidance:
             enhanced_system += coherence_guidance
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # Specialized Scenes - combat, investigation, social, exploration, horror
     specialized_scenes_state = state.get("specialized_scenes", {})
@@ -899,8 +905,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         if scene_guidance:
             enhanced_system += f"\n\n{scene_guidance}"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # Advanced Simulation - relationships, flashbacks, consequences, time, dialogue
     advanced_sim_state = state.get("advanced_simulation", {})
@@ -926,8 +932,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         if sim_guidance:
             enhanced_system += sim_guidance
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
 
 
     
@@ -951,8 +957,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         if ql_guidance:
             enhanced_system += ql_guidance
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # Faction and Environment - politics, weather, economy, companions
     faction_env_state = state.get("faction_environment", {})
@@ -972,8 +978,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         if fe_guidance:
             enhanced_system += fe_guidance
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # Final Systems - encounters, voice consistency, memory consolidation
     final_systems_state = state.get("final_systems", {})
@@ -992,8 +998,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         if final_guidance:
             enhanced_system += final_guidance
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     
     # Campaign Truths - inject world settings
@@ -1021,8 +1027,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         forbidden = truths.get_forbidden_elements()
         if forbidden:
             enhanced_system += f"\n\n<forbidden_by_setting>\nDo not include: {', '.join(forbidden)}\n</forbidden_by_setting>"
-    except Exception:
-        pass  # Graceful fallback
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # OCEAN Personality - Big Five traits for NPCs
     if memory_state and hasattr(memory_state, 'active_npcs') and memory_state.active_npcs:
@@ -1044,8 +1050,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
             
             if personality_context:
                 enhanced_system += f"\n\n<npc_personalities>\n{personality_context.strip()}\n</npc_personalities>"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"System fallback: {e}")
     
     # Cinematography - shot selection based on emotion/action
     try:
@@ -1067,8 +1073,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
             is_action=is_action,
         )
         enhanced_system += f"\n\n<cinematography>\n{camera_context}\n</cinematography>"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # Smart Zones - living scene context
     smart_zone_state = state.get("smart_zones", {})
@@ -1080,8 +1086,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
             zone_context = zone_manager.get_current_zone_context()
             if zone_context:
                 enhanced_system += f"\n\n<living_scene>\n{zone_context}\n</living_scene>"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     # Combat Orchestrator - Belgian AI attack grid
     if getattr(world, 'combat_active', False) if world else False:
@@ -1093,8 +1099,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
             if orchestrator:
                 combat_context = orchestrator.get_combat_context()
                 enhanced_system += f"\n\n<combat_orchestration>\n{combat_context}\n</combat_orchestration>"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"System fallback: {e}")
     
     # Bark System - NPC vocalizations and evidence
     bark_context = ""
@@ -1114,8 +1120,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         bark_context = bark_manager.get_narrator_context()
         bark_manager.update_cooldowns()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     if bark_context:
         enhanced_system += f"\n\n<npc_barks>\n{bark_context}\n</npc_barks>"
@@ -1129,8 +1135,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         daily_manager = DailyScriptManager.from_dict(daily_state) if daily_state else None
         if daily_manager:
             daily_context = daily_manager.get_narrator_context()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     if daily_context:
         enhanced_system += f"\n\n<world_time>\n{daily_context}\n</world_time>"
@@ -1144,8 +1150,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         lorebook = Lorebook.from_dict(lorebook_state) if lorebook_state else None
         if lorebook:
             lore_context = lorebook.get_context_for_input(player_input)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     if lore_context:
         enhanced_system += f"\n\n<lorebook>\n{lore_context}\n</lorebook>"
@@ -1162,8 +1168,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
                 # Assume player at origin for text-based game
                 player_pos = Position(0, 0)
                 tactical_context = imap.get_narrator_context(player_pos)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"System fallback: {e}")
         
         if tactical_context:
             enhanced_system += f"\n\n<tactical_map>\n{tactical_context}\n</tactical_map>"
@@ -1196,8 +1202,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
                 history_context = history.get_narrative_context()
                 if history_context:
                     social_context += history_context + "\n"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     if social_context:
         enhanced_system += f"\n\n<social_memory>\n{social_context.strip()}\n</social_memory>"
@@ -1221,8 +1227,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
                 is_ranged=True
             )
             combat_warning_context = get_combat_warning_context(prediction)
-        except Exception:
-            pass  # Graceful fallback if module not ready
+        except Exception as e:
+            logger.debug(f"Combat warning fallback: {e}")
     
     if combat_warning_context:
         enhanced_system += f"\n\n<combat_assessment>\n{combat_warning_context}\n</combat_assessment>"
@@ -1262,8 +1268,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
                     companion_context += f"\nPhrase: \"{intervention['signature_phrase']}\""
             else:
                 companion_context = companion.get_narrator_context(ctx)
-        except Exception:
-            pass  # Graceful fallback
+        except Exception as e:
+            logger.debug(f"System fallback: {e}")
     
     if companion_context:
         enhanced_system += f"\n\n<companion>\n{companion_context}\n</companion>"
@@ -1296,8 +1302,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
                 if plan:
                     goap_context = f"[{npc_name} PLAN]\n"
                     goap_context += "\n".join([f"- {a['description']}" for a in plan])
-        except Exception:
-            pass  # Graceful fallback
+        except Exception as e:
+            logger.debug(f"System fallback: {e}")
     
     if goap_context:
         enhanced_system += f"\n\n<npc_plans>\n{goap_context}\n</npc_plans>"
@@ -1317,8 +1323,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
             callback = bond_manager.get_callback_for_climax()
             if callback:
                 bond_context += f"\n\n[CALLBACK OPPORTUNITY]\n{callback}"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     if bond_context:
         enhanced_system += f"\n\n<character_bonds>\n{bond_context}\n</character_bonds>"
@@ -1332,8 +1338,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         theme = ThemeTracker.from_dict(theme_state) if theme_state else None
         if theme:
             theme_context = theme.get_theme_context()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     if theme_context:
         enhanced_system += f"\n\n<campaign_theme>\n{theme_context}\n</campaign_theme>"
@@ -1345,8 +1351,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         generator = EnvironmentalStoryGenerator()
         env_story_context = generator.get_show_dont_tell_guidance()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     if env_story_context:
         enhanced_system += f"\n\n<environmental_storytelling>\n{env_story_context}\n</environmental_storytelling>"
@@ -1397,27 +1403,38 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         
         # Get narrator injection from all systems
         enhancement_context = ctx.get_narrator_injection()
-    except Exception:
-        pass  # Graceful fallback
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     if enhancement_context:
         enhanced_system += f"\n\n{enhancement_context}"
 
     # Generate narrative with configurable backend
-    from src.narrator import get_llm_client
+    from src.narrator import check_provider_availability, get_llm_provider_for_config
+
     config = NarratorConfig()
-    client = get_llm_client(config)
-    
-    if client.is_available():
-        narrative = client.generate_sync(prompt, system=enhanced_system, config=config)
-        
+    provider = get_llm_provider_for_config(config)
+    available, status_message = check_provider_availability(config, provider)
+
+    if available:
+        response = provider.chat(
+            messages=[
+                {"role": "system", "content": enhanced_system},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            stream=False,
+        )
+        narrative = response if isinstance(response, str) else "".join(response)
+
         # Validate and log issues (non-blocking)
         is_valid, issues = validate_narrative(narrative)
         if not is_valid:
             import logging
             logging.getLogger("narrator").warning(f"Narrative validation issues: {issues}")
     else:
-        narrative = f"[LLM not available]\\n\\n*Placeholder for: {player_input}*"
+        narrative = f"{status_message}\n\n*Placeholder for: {player_input}*"
 
     # Update memory with new exchange
     updated_memory = MemoryStateModel(
@@ -1484,7 +1501,7 @@ def approval_node(state: GameState) -> dict[str, Any]:
 
     # Initialize feedback engine
     try:
-        feedback_engine = FeedbackLearningEngine(db_path="saves/feedback_learning.db")
+        feedback_engine = FeedbackLearningEngine(db_path=config.paths.feedback_db)
         
         # Build context for feedback recording
         feedback_context = {
@@ -1530,8 +1547,8 @@ def approval_node(state: GameState) -> dict[str, Any]:
         # Record edit as partial accept
         try:
             feedback_engine.record_feedback(edited, accepted=True, context=feedback_context)
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Feedback recording fallback: {e}")
         
         return {
             "narrative": state.get("narrative", {}).__class__(
@@ -1656,8 +1673,8 @@ def world_state_manager_node(state: GameState) -> dict[str, Any]:
         # Store updated spawner state
         spawner_state = director.to_dict()
         spawn_context_text = director.get_encounter_context()
-    except Exception:
-        pass  # Graceful fallback
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
 
     # Update consequence engine with new beats
     existing_beats = consequence_state.delayed_beats if hasattr(consequence_state, 'delayed_beats') else []
@@ -1735,8 +1752,8 @@ def world_state_manager_node(state: GameState) -> dict[str, Any]:
         
         # Serialize updated enhancement state
         updated_enhancement_state = enhancement_engine.to_dict()
-    except Exception:
-        pass  # Graceful fallback
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
 
     return {
         "messages": [new_message],
@@ -1837,8 +1854,8 @@ Narrative:
         if json_start >= 0 and json_end > json_start:
             events = json.loads(content[json_start:json_end])
             return events
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"System fallback: {e}")
     
     return []
 

@@ -76,6 +76,7 @@ class StarSystem:
     resources: list[str] = field(default_factory=list)
     discovered: bool = False
     position: tuple[float, float] = (0.0, 0.0)
+    controlling_faction: Optional[str] = None
     
     # Legacy compatibility
     @property
@@ -93,6 +94,8 @@ class StarSystem:
             "danger_level": self.danger_level,
             "resources": self.resources,
             "discovered": self.discovered,
+            "position": self.position,
+            "controlling_faction": self.controlling_faction,
             "position": list(self.position)
         }
     
@@ -107,7 +110,8 @@ class StarSystem:
             danger_level=data.get("danger_level", 0.0),
             resources=data.get("resources", []),
             discovered=data.get("discovered", False),
-            position=tuple(data.get("position", (0.0, 0.0)))
+            position=tuple(data.get("position", (0.0, 0.0))),
+            controlling_faction=data.get("controlling_faction")
         )
 
 
@@ -330,6 +334,13 @@ class StarMap:
         # Calculate target number of systems for each faction
         total_systems = len(sector.systems)
         unclaimed_systems = list(sector.systems.values())
+        distance_cache: dict[tuple[str, str], float] = {}
+
+        def cached_distance(a: StarSystem, b: StarSystem) -> float:
+            key = tuple(sorted((a.id, b.id)))
+            if key not in distance_cache:
+                distance_cache[key] = ((a.position[0] - b.position[0]) ** 2 + (a.position[1] - b.position[1]) ** 2) ** 0.5
+            return distance_cache[key]
         
         for faction in sorted_factions:
             faction_id = faction['id']
@@ -362,8 +373,7 @@ class StarMap:
                     for candidate in unclaimed_systems:
                         # Simple distance calculation (assuming positions exist, if not we pick random)
                         if hasattr(claimed, 'position') and hasattr(candidate, 'position'):
-                            dist = ((claimed.position[0] - candidate.position[0])**2 + 
-                                   (claimed.position[1] - candidate.position[1])**2)**0.5
+                            dist = cached_distance(claimed, candidate)
                             if dist < min_dist:
                                 min_dist = dist
                                 best_candidate = candidate
@@ -443,6 +453,151 @@ class StarMap:
         return starmap
 
 
+# ============================================================================
+# Sector & Route Planning
+# ============================================================================
+
+class Sector:
+    """A sector containing multiple star systems."""
+
+    def __init__(self, name: str = "Unknown Sector"):
+        self.name = name
+        self.systems: dict[str, StarSystem] = {}
+        self.connections: dict[str, list[str]] = {}
+
+    def add_system(self, system: StarSystem):
+        """Add a system to the sector."""
+        self.systems[system.id] = system
+        self.connections.setdefault(system.id, [])
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "systems": {k: v.to_dict() for k, v in self.systems.items()},
+            "connections": self.connections,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "Sector":
+        sector = cls(data.get("name", "Unknown Sector"))
+        sector.systems = {k: StarSystem.from_dict(v) for k, v in data.get("systems", {}).items()}
+        sector.connections = data.get("connections", {k: [] for k in sector.systems.keys()})
+        return sector
+
+
+class RoutePlanner:
+    """Plans routes between star systems."""
+    
+    def __init__(self, sector: Sector):
+        self.sector = sector
+    
+    def find_route(self, start_id: str, end_id: str) -> Optional[list[str]]:
+        """
+        Find a route between two systems.
+        Simple implementation - returns direct path.
+        Could be enhanced with pathfinding algorithms.
+        """
+        if start_id not in self.sector.systems or end_id not in self.sector.systems:
+            return None
+        
+        # Simple direct route
+        return [start_id, end_id]
+
+    def get_reachable_systems(self, start_id: str, max_jumps: int = 1) -> list[str]:
+        """Return systems reachable within a number of jumps using connections graph."""
+        if start_id not in self.sector.connections:
+            return []
+
+        visited = {start_id}
+        frontier = [start_id]
+        for _ in range(max_jumps):
+            next_frontier: list[str] = []
+            for node in frontier:
+                for neighbor in self.sector.connections.get(node, []):
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        next_frontier.append(neighbor)
+            frontier = next_frontier
+            if not frontier:
+                break
+        visited.remove(start_id)
+        return list(visited)
+
+
+class StarmapGenerator:
+    """Procedurally generates a sector with star systems and connections."""
+
+    def __init__(self, seed: Optional[int] = None):
+        self.random = random.Random(seed)
+
+    def generate_sector(self, name: str, num_systems: int = 10) -> Sector:
+        sector = Sector(name)
+
+        for i in range(num_systems):
+            system = self._generate_system(name, i)
+            sector.add_system(system)
+
+        self._generate_connections(sector)
+        return sector
+
+    def _generate_system(self, sector_name: str, index: int) -> StarSystem:
+        system_id = f"{sector_name.lower().replace(' ', '_')}_{index:03d}"
+        star_class = self.random.choice(list(StarClass))
+        position = (self.random.uniform(0, 100), self.random.uniform(0, 100))
+        planets = [self._generate_planet(system_id, i) for i in range(self.random.randint(1, 5))]
+
+        return StarSystem(
+            id=system_id,
+            name=self._generate_system_name(),
+            star_class=star_class,
+            planets=planets,
+            has_station=self.random.random() < 0.3,
+            danger_level=self.random.random(),
+            resources=self.random.sample(
+                ["Minerals", "Fuel", "Technology", "Organics", "Rare Metals"],
+                k=self.random.randint(1, 3),
+            ),
+            position=position,
+        )
+
+    def _generate_planet(self, system_id: str, index: int) -> Planet:
+        planet_type = self.random.choice(list(PlanetType))
+        atmospheres = ["none", "breathable", "toxic", "crushing"]
+
+        return Planet(
+            name=f"{system_id}-Planet-{index}",
+            planet_type=planet_type,
+            description=f"A {planet_type.value} world",
+            habitable=planet_type == PlanetType.HABITABLE,
+            resources=self.random.sample(
+                ["Minerals", "Fuel", "Technology", "Organics", "Rare Metals"],
+                k=self.random.randint(0, 2),
+            ),
+            atmosphere=self.random.choice(atmospheres),
+        )
+
+    def _generate_connections(self, sector: Sector) -> None:
+        # Simple ring connection so each system has at least two neighbors when possible
+        system_ids = list(sector.systems.keys())
+        for idx, system_id in enumerate(system_ids):
+            next_id = system_ids[(idx + 1) % len(system_ids)]
+            sector.connections.setdefault(system_id, [])
+            sector.connections.setdefault(next_id, [])
+            if next_id not in sector.connections[system_id]:
+                sector.connections[system_id].append(next_id)
+            if system_id not in sector.connections[next_id]:
+                sector.connections[next_id].append(system_id)
+
+    def _generate_system_name(self) -> str:
+        prefixes = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Theta"]
+        suffixes = ["Prime", "Secundus", "Tertius", "Major", "Minor"]
+        names = ["Centauri", "Draconis", "Orionis", "Cygni", "Lyrae", "Aquilae"]
+
+        if self.random.random() < 0.5:
+            return f"{self.random.choice(prefixes)} {self.random.choice(names)}"
+        return f"{self.random.choice(names)} {self.random.choice(suffixes)}"
+
+
 def generate_default_sector() -> Sector:
     """Generate a default starting sector with some systems."""
     sector = Sector("The Forge")
@@ -477,9 +632,17 @@ def generate_default_sector() -> Sector:
             has_station=random.random() < 0.3,
             danger_level=random.random(),
             resources=random.sample(resource_types, k=random.randint(1, 3)),
-            position=(random.uniform(0, 100), random.uniform(0, 100))
+            position=(random.uniform(0, 100), random.uniform(0, 100)),
         )
         sector.add_system(system)
+
+    # Connect systems in sequence for reachability
+    system_ids = list(sector.systems.keys())
+    for idx, system_id in enumerate(system_ids):
+        if idx + 1 < len(system_ids):
+            neighbor = system_ids[idx + 1]
+            sector.connections.setdefault(system_id, []).append(neighbor)
+            sector.connections.setdefault(neighbor, []).append(system_id)
 
     # Simple ring connections
     system_ids = list(sector.systems.keys())

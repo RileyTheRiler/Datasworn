@@ -24,7 +24,45 @@ from pathlib import Path
 import hashlib
 import uuid
 import re
+from uuid import uuid4
 from collections import defaultdict, Counter
+
+
+# =============================================================================
+# METRICS HOOKS
+# =============================================================================
+
+_RECENT_PROMPT_METRICS: List[Dict[str, Any]] = []
+
+
+def record_prompt_metric(event: str, provider: str | None, metadata: Optional[Dict[str, Any]] = None):
+    """Lightweight metric sink for prompt orchestration.
+
+    The buffer intentionally stays in-memory to avoid slowing down request
+    handling. Tests can inspect it for determinism checks.
+    """
+
+    entry = {
+        "event": event,
+        "provider": provider,
+        "metadata": metadata or {},
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    _RECENT_PROMPT_METRICS.append(entry)
+    if len(_RECENT_PROMPT_METRICS) > 200:
+        del _RECENT_PROMPT_METRICS[:50]
+
+
+def recent_prompt_metrics() -> List[Dict[str, Any]]:
+    """Return a shallow copy of recent prompt metrics."""
+
+    return list(_RECENT_PROMPT_METRICS)
+
+
+def clear_prompt_metrics():
+    """Reset the in-memory prompt metrics buffer (primarily for tests)."""
+
+    _RECENT_PROMPT_METRICS.clear()
 
 
 # =============================================================================
@@ -777,6 +815,8 @@ class FeedbackLearningEngine:
     ) -> str:
         """Record player feedback on a generated paragraph."""
         
+        # Generate unique ID to preserve all samples, even repeated text
+        para_id = uuid4().hex
         # Generate a unique ID for each feedback entry to preserve all decisions
         para_id = uuid.uuid4().hex[:12]
         
@@ -805,6 +845,7 @@ class FeedbackLearningEngine:
         self.db.save_preferences(self.current_profile)
         return self.current_profile
 
+    # Backwards-compatible alias expected by tests/legacy callers
     # Backwards compatibility alias
     def analyze_preferences(self) -> PreferenceProfile:
         return self.run_preference_analysis()

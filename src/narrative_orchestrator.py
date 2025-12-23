@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, List
 
 from src.story_graph import StoryDAG, TensionCurve
-from src.narrative_memory import NarrativeMemory
+from src.narrative_memory import NarrativeMemory, NarrativeSnapshot
 from src.theme_engine import ThemeEngine, create_starforged_themes
 from src.narrative_variety import NarrativeVariety
 from src.prose_enhancement import ProseEnhancementEngine
@@ -26,7 +26,7 @@ from src.world_coherence import WorldStateCoherence, WorldFactType
 from src.moral_dilemma import DilemmaGenerator, DilemmaType
 from src.narrative import (
     PayoffTracker, NPCMemoryBank, ConsequenceManager, ChoiceEchoSystem,
-    OpeningHookSystem, NPCEmotionalStateMachine, MoralReputationSystem, DramaticIronyTracker,
+    OpeningHookSystem, NPCEmotionalStateMachine, MoralReputationSystem, DramaticIronyTracker, ReputationLedger,
     StoryBeatGenerator, PlotManager, BranchingNarrativeSystem, NPCGoalPursuitSystem,
     EndingPreparationSystem, ImpossibleChoiceGenerator, EnvironmentalStoryteller, FlashbackSystem,
     EndingPreparationSystem, ImpossibleChoiceGenerator, EnvironmentalStoryteller, FlashbackSystem,
@@ -62,6 +62,7 @@ class NarrativeOrchestrator:
     opening_hooks: OpeningHookSystem = field(default_factory=OpeningHookSystem)
     npc_emotions: NPCEmotionalStateMachine = field(default_factory=NPCEmotionalStateMachine)
     reputation: MoralReputationSystem = field(default_factory=MoralReputationSystem)
+    social_reputation: ReputationLedger = field(default_factory=ReputationLedger)
     irony_tracker: DramaticIronyTracker = field(default_factory=DramaticIronyTracker)
     
     # Phase 3 Systems
@@ -96,6 +97,7 @@ class NarrativeOrchestrator:
     
     # State
     current_scene: int = 0
+    latest_snapshot: Optional[NarrativeSnapshot] = None
     
     def advance_scene(self):
         """Advance all systems to next scene."""
@@ -142,6 +144,8 @@ class NarrativeOrchestrator:
             if pacing_guidance:
                 sections.append(f"\\n<pacing>\\n{pacing_guidance}\\n</pacing>")
         
+        snapshot = self._ensure_latest_snapshot(location=location, active_npcs=active_npcs)
+
         # 2. Callbacks & Foreshadowing
         memory_guidance = self.narrative_memory.get_narrator_guidance()
         if memory_guidance:
@@ -276,7 +280,7 @@ class NarrativeOrchestrator:
 
         # 12. Advanced Narrative (Phase 3)
         # Suggest Beat
-        beat = self.story_beats.suggest_next_beat(tension=0.5) # Todo: hook up real tension
+        beat = self.story_beats.suggest_next_beat(tension=0.5, snapshot=snapshot) # Todo: hook up real tension
         sections.append(f"\\n[SUGGESTED BEAT: {beat.value}]")
         
         # Suggest Plot Thread
@@ -303,7 +307,8 @@ class NarrativeOrchestrator:
         narrative_output: str,
         location: str,
         active_npcs: list[str] = None,
-        roll_outcome: str = None
+        roll_outcome: str = None,
+        active_vows: Optional[list[str]] = None,
     ):
         """
         Process a complete interaction to update all tracking systems.
@@ -362,15 +367,36 @@ class NarrativeOrchestrator:
         for npc in active_npcs:
             if npc not in self.npc_memories:
                 self.npc_memories[npc] = NPCMemoryBank(npc_id=npc)
-            
+            memory_bank = self.npc_memories[npc]
+
             # Record that this interaction happened
-            # We assume a general "interaction" topic for now unless parsed
-            self.npc_memories[npc].record_interaction(
+            memory_bank.record_interaction(
                 scene_num=self.current_scene,
                 topic="general_interaction",
                 content=narrative_output[:100], # Store brief snippet
                 emotion="NEUTRAL" # Todo: derive from sentiment analysis
             )
+
+            lowered_input = player_input.lower()
+            if "promise" in lowered_input:
+                memory_bank.record_promise(
+                    description="Player made a promise",
+                    scene_num=self.current_scene,
+                )
+
+            if any(keyword in lowered_input for keyword in ["betray", "lie", "break"]):
+                memory_bank.resolve_promise(
+                    description="Player made a promise",
+                    kept=False,
+                    resolution_scene=self.current_scene,
+                )
+
+            if "help" in lowered_input or "save" in lowered_input:
+                memory_bank.record_notable_event("Player assisted recently", self.current_scene)
+                self.social_reputation.adjust_npc(npc, trust_delta=5)
+            if any(kw in lowered_input for kw in ["attack", "threat", "steal"]):
+                memory_bank.record_notable_event("Player acted aggressively", self.current_scene)
+                self.social_reputation.adjust_npc(npc, trust_delta=-8, fear_delta=5)
             
         # 7. Update Reputation (Phase 2)
         # Rough heuristic for now - real system would use LLM analysis of player_action
@@ -378,6 +404,14 @@ class NarrativeOrchestrator:
             self.reputation.record_choice("Violence used", mercy_delta=-5)
         elif "save" in player_input.lower() or "help" in player_input.lower():
             self.reputation.record_choice("Altruism shown", mercy_delta=5, selfless_delta=5)
+
+        # 7b. Update social reputation vectors for factions (basic heuristic)
+        if location:
+            faction_key = location.split(":")[0] if ":" in location else location
+            if "help" in player_input.lower():
+                self.social_reputation.adjust_faction(faction_key, trust_delta=3)
+            if "attack" in player_input.lower():
+                self.social_reputation.adjust_faction(faction_key, trust_delta=-5, fear_delta=4)
             
         # 8. Update Emotions (Phase 2)
         # Decay old emotions first
@@ -389,6 +423,54 @@ class NarrativeOrchestrator:
         if "threat" in player_input.lower():
             for npc in active_npcs:
                 self.npc_emotions.process_event(npc, "THREATENED")
+
+        # 9. Capture snapshot for continuity
+        self.latest_snapshot = self._build_snapshot(
+            location=location,
+            active_npcs=active_npcs,
+            active_vows=active_vows,
+        )
+        self.story_graph.record_snapshot(self.latest_snapshot)
+
+    def _build_snapshot(
+        self,
+        location: str,
+        active_npcs: list[str],
+        active_vows: Optional[list[str]] = None,
+    ) -> NarrativeSnapshot:
+        """Construct a narrative snapshot from current trackers."""
+        snapshot = NarrativeSnapshot(scene_index=self.current_scene)
+        snapshot.active_vows = active_vows or []
+
+        unresolved_seeds = [seed.description for seed in self.payoff_tracker.get_active_seeds()]
+        pending_payoffs = [plant.description for plant in self.narrative_memory.get_pending_payoffs()]
+        snapshot.unresolved_threads = unresolved_seeds or pending_payoffs
+
+        if getattr(self, "_pending_consequences", None):
+            for event in self._pending_consequences:
+                snapshot.add_recent_event(
+                    event_type="consequence_trigger",
+                    description=event.get("event", ""),
+                    severity=str(event.get("severity", "info")),
+                    related_characters=active_npcs,
+                    tags=[location] if location else [],
+                )
+
+        return snapshot
+
+    def _ensure_latest_snapshot(self, location: str, active_npcs: list[str]) -> NarrativeSnapshot:
+        """Ensure a snapshot exists for beat selection and continuity."""
+        if self.latest_snapshot and self.latest_snapshot.scene_index == self.current_scene:
+            return self.latest_snapshot
+
+        restored_snapshot = self.story_graph.get_latest_snapshot()
+        if restored_snapshot and restored_snapshot.scene_index == self.current_scene:
+            self.latest_snapshot = restored_snapshot
+            return self.latest_snapshot
+
+        self.latest_snapshot = self._build_snapshot(location=location, active_npcs=active_npcs)
+        self.story_graph.record_snapshot(self.latest_snapshot)
+        return self.latest_snapshot
                 
     def to_dict(self) -> dict:
         """Serialize all systems."""
@@ -410,6 +492,7 @@ class NarrativeOrchestrator:
             # Phase 2 Persistence
             "npc_emotions": self.npc_emotions.to_dict(),
             "reputation": self.reputation.to_dict(),
+            "social_reputation": self.social_reputation.to_dict(),
             "irony_tracker": self.irony_tracker.to_dict(),
             # Phase 3 Persistence
             "story_beats": self.story_beats.to_dict(),
@@ -483,10 +566,13 @@ class NarrativeOrchestrator:
         # Phase 2 Rehydration
         if "npc_emotions" in data:
             orchestrator.npc_emotions = NPCEmotionalStateMachine.from_dict(data["npc_emotions"])
-            
+
         if "reputation" in data:
             orchestrator.reputation = MoralReputationSystem.from_dict(data["reputation"])
-            
+
+        if "social_reputation" in data:
+            orchestrator.social_reputation = ReputationLedger.from_dict(data["social_reputation"])
+
         if "irony_tracker" in data:
             orchestrator.irony_tracker = DramaticIronyTracker.from_dict(data["irony_tracker"])
             

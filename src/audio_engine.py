@@ -4,37 +4,11 @@ Manages dynamic soundscapes, adaptive music, and audio state.
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal, Optional
-from enum import Enum
 
-
-# ============================================================================
-# Zone Types & Audio Presets
-# ============================================================================
-
-class ZoneType(str, Enum):
-    """Zone types for soundscape matching."""
-    BAR = "bar"
-    DERELICT = "derelict"
-    WILDERNESS = "wilderness"
-    SHIP = "ship"
-    STATION = "station"
-    COMBAT = "combat"
-    VOID = "void"
-    SETTLEMENT = "settlement"
-
-
-class MusicMood(str, Enum):
-    """Music moods based on tension/narrative state."""
-    AMBIENT = "ambient"
-    EXPLORATION = "exploration"
-    TENSION = "tension"
-    COMBAT = "combat"
-    VICTORY = "victory"
-    DEFEAT = "defeat"
-    MYSTERY = "mystery"
-    EMOTIONAL = "emotional"
+from src.audio_types import MusicMood, ZoneType
+from src.audio_manager import AudioManager
 
 
 # ============================================================================
@@ -137,9 +111,12 @@ class AudioState:
     current_music: Optional[str] = None  # Track ID
     ambient_volume: float = 0.5
     music_volume: float = 0.6
+    effects_volume: float = 0.7
     voice_volume: float = 0.8
     master_volume: float = 1.0
     muted: bool = False
+    sudden_spike_guard: bool = True
+    max_volume_step: float = 0.2
 
 
 class AudioEngine:
@@ -148,10 +125,11 @@ class AudioEngine:
     Does not handle actual playback - that's done by frontend AudioManager.
     """
     
-    def __init__(self):
+    def __init__(self, audio_manager: Optional[AudioManager] = None):
         self.state = AudioState()
         self.music_library = {track.track_id: track for track in MUSIC_LIBRARY}
         self.soundscape_presets = SOUNDSCAPE_PRESETS
+        self.manager = audio_manager or AudioManager(self.state)
     
     def get_soundscape_for_zone(self, zone_type: str) -> Optional[SoundscapePreset]:
         """Get soundscape preset for a zone type."""
@@ -238,6 +216,7 @@ class AudioEngine:
         
         if track:
             self.state.current_music = track.track_id
+            self.manager.update_music_mood(track.mood)
             
         return {
             "music": {
@@ -264,35 +243,40 @@ class AudioEngine:
         """
         ambient_directive = self.update_for_location(location, location_type)
         music_directive = self.update_for_tension(tension, combat_active, outcome)
+        stems_and_cues = self.manager.build_mix(
+            biome=ambient_directive.get("ambient", {}).get("zone_type", ZoneType.SHIP.value),
+            tension=tension,
+            combat_active=combat_active,
+            narrative_tag=outcome or "beat"
+        )
         
         return {
             **ambient_directive,
             **music_directive,
+            **stems_and_cues,
             "volumes": {
                 "ambient": self.state.ambient_volume,
                 "music": self.state.music_volume,
+                "effects": self.state.effects_volume,
                 "voice": self.state.voice_volume,
                 "master": self.state.master_volume
             },
-            "muted": self.state.muted
+            "muted": self.state.muted,
+            "accessibility": {
+                "sudden_spike_guard": self.state.sudden_spike_guard,
+                "max_volume_step": self.state.max_volume_step
+            }
         }
     
     def set_volume(self, channel: str, volume: float) -> None:
         """Set volume for a specific channel."""
         volume = max(0.0, min(1.0, volume))
-        
-        if channel == "ambient":
-            self.state.ambient_volume = volume
-        elif channel == "music":
-            self.state.music_volume = volume
-        elif channel == "voice":
-            self.state.voice_volume = volume
-        elif channel == "master":
-            self.state.master_volume = volume
+        self.manager.set_volume(channel, volume)
     
     def toggle_mute(self) -> bool:
         """Toggle mute state. Returns new mute state."""
         self.state.muted = not self.state.muted
+        self.manager.toggle_mute(self.state.muted)
         return self.state.muted
     
     def to_dict(self) -> dict:
@@ -302,9 +286,12 @@ class AudioEngine:
             "current_music": self.state.current_music,
             "ambient_volume": self.state.ambient_volume,
             "music_volume": self.state.music_volume,
+            "effects_volume": self.state.effects_volume,
             "voice_volume": self.state.voice_volume,
             "master_volume": self.state.master_volume,
-            "muted": self.state.muted
+            "muted": self.state.muted,
+            "sudden_spike_guard": self.state.sudden_spike_guard,
+            "max_volume_step": self.state.max_volume_step
         }
     
     @classmethod
@@ -315,7 +302,11 @@ class AudioEngine:
         engine.state.current_music = data.get("current_music")
         engine.state.ambient_volume = data.get("ambient_volume", 0.5)
         engine.state.music_volume = data.get("music_volume", 0.6)
+        engine.state.effects_volume = data.get("effects_volume", 0.7)
         engine.state.voice_volume = data.get("voice_volume", 0.8)
         engine.state.master_volume = data.get("master_volume", 1.0)
         engine.state.muted = data.get("muted", False)
+        engine.state.sudden_spike_guard = data.get("sudden_spike_guard", True)
+        engine.state.max_volume_step = data.get("max_volume_step", 0.2)
+        engine.manager = AudioManager(engine.state)
         return engine

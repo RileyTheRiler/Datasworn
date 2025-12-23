@@ -9,12 +9,16 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 import json
-import json
 import ollama
+
+from .logging_config import get_logger
 from .psych_profile import PsychologicalProfile, PsychologicalEngine
 from .inner_voice import InnerVoiceSystem
 from .relationship_system import RelationshipWeb
 from .dream_system import DreamEngine
+
+# Module logger
+logger = get_logger("director")
 
 
 # ============================================================================
@@ -459,9 +463,11 @@ Remember: Output ONLY valid JSON, no explanation."""
                     beats=data.get("beats", []),
                     notes_for_narrator=data.get("notes_for_narrator", ""),
                 )
-        except (json.JSONDecodeError, ValueError, KeyError):
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.debug(f"LLM plan parsing fallback: {e}")
             return None
-        except Exception:
+        except Exception as e:
+            logger.debug(f"LLM plan fallback: {e}")
             return None
         
         return None

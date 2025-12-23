@@ -13,6 +13,12 @@ from typing import Any
 import random
 
 
+
+def clamp(value: float, min_value: float, max_value: float) -> float:
+    """Clamp a numeric value into the provided range."""
+    return max(min_value, min(value, max_value))
+
+
 # ============================================================================
 # Spawn Triggers
 # ============================================================================
@@ -143,6 +149,8 @@ class SpawnDecision:
     spawn_type: SpawnType = SpawnType.PATROL
     narrative_intro: str = ""
     delay_scenes: int = 0  # Delay before spawn activates
+    resource_drop_modifier: float = 1.0
+    hint_frequency_modifier: float = 1.0
 
 
 class EncounterDirector:
@@ -157,6 +165,12 @@ class EncounterDirector:
         self.scenes_since_combat: int = 5
         self.tension_buildup: float = 0.0
         self.active_encounters: list[dict] = []
+
+        # Dynamic tuning inputs (set by GameDirector)
+        self.spawn_rate_bias: float = 1.0
+        self.patrol_density_bias: float = 1.0
+        self.resource_drop_bias: float = 1.0
+        self.hint_frequency_bias: float = 1.0
         
         # Difficulty modifiers
         self.difficulty_modifiers = {
@@ -180,6 +194,7 @@ class EncounterDirector:
         
         # Get difficulty modifier
         mod = self.difficulty_modifiers.get(context.difficulty, self.difficulty_modifiers["normal"])
+        spawn_rate_scale = clamp(self.spawn_rate_bias, 0.1, 2.0)
         
         # Build up tension over non-combat scenes
         self.scenes_since_combat += 1
@@ -196,10 +211,10 @@ class EncounterDirector:
             return self._spawn_story_encounter(context, mod)
         
         # Calculate spawn probability
-        base_chance = 0.15 * mod["spawn_chance"]
+        base_chance = 0.15 * mod["spawn_chance"] * spawn_rate_scale
         
         # Increase chance with tension buildup
-        spawn_chance = base_chance + (self.tension_buildup * 0.3)
+        spawn_chance = base_chance + (self.tension_buildup * 0.3 * spawn_rate_scale)
         
         # Reduce chance if player is hurt (mercy mechanic)
         if context.player_health < 0.4:
@@ -236,6 +251,8 @@ class EncounterDirector:
         decision.count = group_size
         decision.spawn_type = spawn_type
         decision.narrative_intro = narrative
+        decision.resource_drop_modifier = clamp(self.resource_drop_bias, 0.25, 2.0)
+        decision.hint_frequency_modifier = clamp(self.hint_frequency_bias, 0.25, 2.0)
         
         # Record spawn
         self.spawn_history.append({
@@ -297,7 +314,15 @@ class EncounterDirector:
         
         if context.threat_level > 0.8:
             spawn_type = random.choice([SpawnType.AMBUSH, SpawnType.GUARD])
-        
+
+        # Game Director biasing patrol density
+        patrol_bias = clamp(self.patrol_density_bias, 0.25, 2.0)
+        if spawn_type != SpawnType.BOSS:
+            if patrol_bias > 1.05 and random.random() < min(0.6, patrol_bias - 0.3):
+                spawn_type = SpawnType.PATROL
+            elif patrol_bias < 0.95 and spawn_type == SpawnType.PATROL and random.random() < 0.5:
+                spawn_type = random.choice([SpawnType.AMBUSH, SpawnType.GUARD])
+
         return spawn_type
     
     def _generate_narrative_intro(
@@ -361,6 +386,10 @@ class EncounterDirector:
             "scenes_since_combat": self.scenes_since_combat,
             "tension_buildup": self.tension_buildup,
             "active_encounters": self.active_encounters,
+            "spawn_rate_bias": self.spawn_rate_bias,
+            "patrol_density_bias": self.patrol_density_bias,
+            "resource_drop_bias": self.resource_drop_bias,
+            "hint_frequency_bias": self.hint_frequency_bias,
         }
     
     @classmethod
@@ -370,6 +399,10 @@ class EncounterDirector:
         director.scenes_since_combat = data.get("scenes_since_combat", 5)
         director.tension_buildup = data.get("tension_buildup", 0.0)
         director.active_encounters = data.get("active_encounters", [])
+        director.spawn_rate_bias = data.get("spawn_rate_bias", 1.0)
+        director.patrol_density_bias = data.get("patrol_density_bias", 1.0)
+        director.resource_drop_bias = data.get("resource_drop_bias", 1.0)
+        director.hint_frequency_bias = data.get("hint_frequency_bias", 1.0)
         return director
 
 
