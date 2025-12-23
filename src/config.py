@@ -101,6 +101,36 @@ class UIConfig:
 
 
 @dataclass
+class TelemetryConfig:
+    """Telemetry exporter configuration."""
+
+    enable_stdout: bool = True
+    enable_json: bool = False
+    json_path: str = "telemetry_events.jsonl"
+    enable_otlp: bool = False
+    otlp_endpoint: str = ""
+    enable_prometheus: bool = False
+    sample_rate: float = 1.0
+
+    crash_alert_threshold: int = 8
+    difficulty_anomaly_threshold: float = 0.35
+
+    def __post_init__(self):
+        env = os.environ.get
+        self.enable_stdout = env("TELEMETRY_STDOUT", str(self.enable_stdout)).lower() in ("1", "true", "yes")
+        self.enable_json = env("TELEMETRY_JSON", str(self.enable_json)).lower() in ("1", "true", "yes")
+        self.json_path = env("TELEMETRY_JSON_PATH", self.json_path)
+        self.enable_otlp = env("TELEMETRY_OTLP", str(self.enable_otlp)).lower() in ("1", "true", "yes")
+        self.otlp_endpoint = env("TELEMETRY_OTLP_ENDPOINT", self.otlp_endpoint)
+        self.enable_prometheus = env("TELEMETRY_PROMETHEUS", str(self.enable_prometheus)).lower() in ("1", "true", "yes")
+        self.sample_rate = float(env("TELEMETRY_SAMPLE_RATE", str(self.sample_rate)))
+        self.crash_alert_threshold = int(env("TELEMETRY_CRASH_THRESHOLD", str(self.crash_alert_threshold)))
+        self.difficulty_anomaly_threshold = float(
+            env("TELEMETRY_DIFFICULTY_THRESHOLD", str(self.difficulty_anomaly_threshold))
+        )
+
+
+@dataclass
 class GameConfig:
     """Master configuration containing all sub-configs."""
     paths: PathConfig = field(default_factory=PathConfig)
@@ -109,6 +139,7 @@ class GameConfig:
     narrative: NarrativeConfig = field(default_factory=NarrativeConfig)
     feedback: FeedbackConfig = field(default_factory=FeedbackConfig)
     ui: UIConfig = field(default_factory=UIConfig)
+    telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
 
     # Debug mode
     debug: bool = False

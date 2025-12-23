@@ -18,6 +18,8 @@ from typing import Dict, List, Optional, Set, Tuple, Any
 import random
 from collections import defaultdict
 
+from src.telemetry import telemetry
+
 
 # =============================================================================
 # QUEST/OBJECTIVE TRACKER
@@ -136,6 +138,12 @@ class QuestTracker:
             quest = self.quests[quest_id]
             if quest.get_progress() >= 1.0:
                 quest.status = QuestStatus.COMPLETED
+                telemetry.emit_quest_completion(
+                    quest_id,
+                    quest.quest_type.value,
+                    getattr(quest, "difficulty", "standard"),
+                    None,
+                )
     
     def get_active_quests(self) -> List[Quest]:
         """Get all active quests."""
