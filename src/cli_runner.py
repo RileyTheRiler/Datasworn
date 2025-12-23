@@ -11,6 +11,7 @@ from pathlib import Path
 from src.datasworn import DataswornData, Move
 from src.game_state import Character, CharacterCondition, CharacterStats, MomentumState, VowState, create_initial_state
 from src.intent_predictor import INTENT_KEYWORDS, IntentCategory
+from src.lore import LoreRegistry
 from src.persistence import PersistenceLayer
 from src.rules_engine import ProgressTrack, RollResult, action_roll
 
@@ -57,6 +58,7 @@ class CLIRunner:
         self.data = DataswornData(path) if path.exists() else None
         self.state = create_initial_state(character_name)
         self.persistence = persistence or PersistenceLayer(save_path or Path("saves/game_state.db"))
+        self.lore_registry = LoreRegistry(Path("data/lore")) if Path("data/lore").exists() else None
 
     # ------------------------------------------------------------------
     # High-level flow
@@ -103,6 +105,8 @@ class CLIRunner:
         if name == "load":
             load_name = rest[0].strip() if rest else None
             return self._command_load(load_name)
+        if name == "codex":
+            return self._command_codex(arg)
         if name in {"help", "?"}:
             if arg == "moves":
                 return self._render_move_help()
@@ -111,6 +115,7 @@ class CLIRunner:
                 "!status       - Show stats, momentum, and conditions\n"
                 "!assets       - List equipped assets and abilities\n"
                 "!vows         - List active vows and progress\n"
+                "!codex QUERY  - Search the lore codex (use faction:, location:, item: filters)\n"
                 "!oracle NAME  - Roll an oracle by path or keyword\n"
                 "!save         - Persist the current character\n"
                 "!load [NAME]  - Load a saved character by name\n"
@@ -162,6 +167,69 @@ class CLIRunner:
         for vow in char.vows:
             track = ProgressTrack(name=vow.name, rank=vow.rank, ticks=vow.ticks, completed=vow.completed)
             lines.append(f"- {vow.name} ({vow.rank}) {track.display}")
+        return "\n".join(lines)
+
+    def _command_codex(self, arg: str) -> str:
+        if not self.lore_registry or not self.lore_registry.entries:
+            return "Codex unavailable. Add entries to data/lore to enable searches."
+
+        query_parts: list[str] = []
+        factions: list[str] = []
+        locations: list[str] = []
+        items: list[str] = []
+
+        tokens = arg.split()
+        idx = 0
+        while idx < len(tokens):
+            token = tokens[idx]
+            lowered = token.lower()
+
+            if ":" in lowered:
+                key, value = token.split(":", 1)
+                value_parts = [value]
+                idx += 1
+                while idx < len(tokens) and ":" not in tokens[idx]:
+                    value_parts.append(tokens[idx])
+                    idx += 1
+                value_text = " ".join(value_parts).strip()
+                if key.lower() == "faction":
+                    factions.append(value_text)
+                elif key.lower() == "location":
+                    locations.append(value_text)
+                elif key.lower() == "item":
+                    items.append(value_text)
+                else:
+                    query_parts.append(value_text)
+                continue
+
+            query_parts.append(token)
+            idx += 1
+
+        query = " ".join(query_parts).strip()
+        results = self.lore_registry.search(
+            query=query,
+            factions=factions or None,
+            locations=locations or None,
+            items=items or None,
+        )
+
+        if not results:
+            return "No codex entries matched your query."
+
+        lines = ["Codex results:"]
+        for entry in results:
+            badge = "★" if entry.discovered else "○"
+            filters = []
+            if entry.factions:
+                filters.append(f"Faction: {', '.join(entry.factions)}")
+            if entry.locations:
+                filters.append(f"Location: {', '.join(entry.locations)}")
+            if entry.items:
+                filters.append(f"Item: {', '.join(entry.items)}")
+            lines.append(f"{badge} {entry.title} [{entry.category}] - {entry.summary}")
+            if filters:
+                lines.append(f"    ({'; '.join(filters)})")
+
         return "\n".join(lines)
 
     def _command_save(self) -> str:
