@@ -450,9 +450,21 @@ def check_provider_availability(
     return available, status
 
 
+    try:
+        available = provider.is_available()
+    except Exception as exc:  # pragma: no cover - defensive guard
+        return False, f"[{provider.name} availability check failed: {exc}]"
+
+    if available:
+        return True, ""
+
+    return False, f"[{provider.name} is not available.]"
+
+
 def _get_provider(config: NarratorConfig) -> LLMProvider:
     """Resolve an LLM provider using narrator configuration."""
 
+    return get_llm_provider(provider_type=config.backend, model=config.model)
     return get_llm_provider(provider_type=config.backend, model=config.model)
 
 
@@ -773,6 +785,19 @@ def generate_narrative(
     )
 
     provider = _get_provider(config)
+    available, status_message = check_provider_availability(config, provider)
+
+    if not available:
+        return (
+            f"{status_message}\n\n"
+            f"*Placeholder narrative for: {player_input}*"
+        )
+
+    response = provider.chat(
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
 
     # Check if Client is available
     if not provider.is_available():
@@ -844,6 +869,17 @@ def generate_narrative_stream(
     )
 
     provider = _get_provider(config)
+    available, status_message = check_provider_availability(config, provider)
+
+    if not available:
+        yield status_message
+        return
+
+    response = provider.chat(
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
 
     if not provider.is_available():
         yield f"[{provider.name} is not available.]"

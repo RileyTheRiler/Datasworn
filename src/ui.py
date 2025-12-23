@@ -537,16 +537,9 @@ def process_player_input(message: str, history: list, session_id: Optional[str],
     if not available:
         narrative = status_message
         history[-1] = (message, narrative)
-        yield (
-            history,
-            format_stats(_session.character),
-            format_momentum(_session.character.momentum.value),
-            format_condition(_session.character.condition),
-            format_vows(_session.character.vows),
-            format_quests(_session.quest_lore),
-            format_combat(_session.world),
-            format_companions(_session.companions),
-        )
+        session.chat_history = history
+        SESSION_STORE.save_session(session)
+        yield (*_render_session(session), session.session_id)
         return
 
     for chunk in generate_narrative_stream(
