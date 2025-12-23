@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 import math
+from contextlib import nullcontext
+
+from ..profiling import FrameProfiler
 
 
 @dataclass
@@ -50,89 +53,104 @@ class WorldState:
 class PerceptionSystem:
     """Collects and filters sensory data into a usable world state."""
 
-    def __init__(self, filters: SensoryFilters | None = None, noise: NoiseModel | None = None, debug: bool = False):
+    def __init__(
+        self,
+        filters: SensoryFilters | None = None,
+        noise: NoiseModel | None = None,
+        debug: bool = False,
+        profiler: FrameProfiler | None = None,
+    ):
         self.filters = filters or SensoryFilters()
         self.noise = noise or NoiseModel()
         self.debug = debug
+        self.profiler = profiler
+
+    def _profile(self, label: str):
+        if not self.profiler:
+            return nullcontext()
+        return self.profiler.span(label)
 
     def perceive(self, scene_graph: dict[str, Any]) -> WorldState:
-        actors = self._perceive_entities(scene_graph.get("actors", []), category="actor")
-        objects = self._perceive_entities(scene_graph.get("objects", []), category="object")
-        sounds = self._perceive_sounds(scene_graph.get("sounds", []))
+        with self._profile("perception.total"):
+            actors = self._perceive_entities(scene_graph.get("actors", []), category="actor")
+            objects = self._perceive_entities(scene_graph.get("objects", []), category="object")
+            sounds = self._perceive_sounds(scene_graph.get("sounds", []))
 
-        lighting = float(scene_graph.get("lighting", 1.0))
-        time_of_day = scene_graph.get("time_of_day")
+            lighting = float(scene_graph.get("lighting", 1.0))
+            time_of_day = scene_graph.get("time_of_day")
 
-        world_state = WorldState(
-            actors=actors,
-            objects=objects,
-            lighting=lighting,
-            time_of_day=time_of_day,
-            sounds=sounds,
-        )
+            world_state = WorldState(
+                actors=actors,
+                objects=objects,
+                lighting=lighting,
+                time_of_day=time_of_day,
+                sounds=sounds,
+            )
 
-        if self.debug:
-            self._debug_log_world_state(world_state)
+            if self.debug:
+                self._debug_log_world_state(world_state)
 
-        return world_state
+            return world_state
 
     def _perceive_entities(self, entities: Iterable[dict[str, Any]], category: str) -> list[PerceivedFact]:
-        perceived: list[PerceivedFact] = []
-        for entry in entities:
-            if not self._has_line_of_sight(entry):
-                continue
+        with self._profile(f"perception.entities.{category}"):
+            perceived: list[PerceivedFact] = []
+            for entry in entities:
+                if not self._has_line_of_sight(entry):
+                    continue
 
-            distance = float(entry.get("distance", self.filters.sight_range))
-            if distance > self.filters.sight_range:
-                continue
+                distance = float(entry.get("distance", self.filters.sight_range))
+                if distance > self.filters.sight_range:
+                    continue
 
-            base_confidence = self._base_visual_confidence(distance, entry.get("occluded", False))
-            confidence = max(self.filters.min_confidence, base_confidence - self.noise.visual_noise)
+                base_confidence = self._base_visual_confidence(distance, entry.get("occluded", False))
+                confidence = max(self.filters.min_confidence, base_confidence - self.noise.visual_noise)
 
-            if confidence < self.filters.min_confidence:
-                continue
+                if confidence < self.filters.min_confidence:
+                    continue
 
-            perceived.append(
-                PerceivedFact(
-                    category=category,
-                    identifier=str(entry.get("id", "unknown")),
-                    details={
-                        "name": entry.get("name"),
-                        "distance": distance,
-                        "bearing": entry.get("bearing"),
-                        "state": entry.get("state"),
-                        "visible": entry.get("occluded", False) is False,
-                    },
-                    confidence=min(1.0, confidence),
+                perceived.append(
+                    PerceivedFact(
+                        category=category,
+                        identifier=str(entry.get("id", "unknown")),
+                        details={
+                            "name": entry.get("name"),
+                            "distance": distance,
+                            "bearing": entry.get("bearing"),
+                            "state": entry.get("state"),
+                            "visible": entry.get("occluded", False) is False,
+                        },
+                        confidence=min(1.0, confidence),
+                    )
                 )
-            )
-        return perceived
+            return perceived
 
     def _perceive_sounds(self, sounds: Iterable[dict[str, Any]]) -> list[PerceivedFact]:
-        perceived: list[PerceivedFact] = []
-        for cue in sounds:
-            distance = float(cue.get("distance", self.filters.hearing_range))
-            if distance > self.filters.hearing_range:
-                continue
+        with self._profile("perception.sounds"):
+            perceived: list[PerceivedFact] = []
+            for cue in sounds:
+                distance = float(cue.get("distance", self.filters.hearing_range))
+                if distance > self.filters.hearing_range:
+                    continue
 
-            confidence = self._auditory_confidence(distance)
-            if confidence < self.filters.min_confidence:
-                continue
+                confidence = self._auditory_confidence(distance)
+                if confidence < self.filters.min_confidence:
+                    continue
 
-            perceived.append(
-                PerceivedFact(
-                    category="sound",
-                    identifier=str(cue.get("id", cue.get("source", "sound"))),
-                    details={
-                        "source": cue.get("source"),
-                        "intensity": cue.get("intensity", 1.0),
-                        "distance": distance,
-                        "description": cue.get("description"),
-                    },
-                    confidence=min(1.0, confidence),
+                perceived.append(
+                    PerceivedFact(
+                        category="sound",
+                        identifier=str(cue.get("id", cue.get("source", "sound"))),
+                        details={
+                            "source": cue.get("source"),
+                            "intensity": cue.get("intensity", 1.0),
+                            "distance": distance,
+                            "description": cue.get("description"),
+                        },
+                        confidence=min(1.0, confidence),
+                    )
                 )
-            )
-        return perceived
+            return perceived
 
     def _has_line_of_sight(self, entity: dict[str, Any]) -> bool:
         if entity.get("occluded"):

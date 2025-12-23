@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from contextlib import nullcontext
 
+from ..profiling import FrameProfiler
 from .memory import MemoryEntry
 from .personality import EmotionalState, PersonalityProfile
 
@@ -37,23 +39,25 @@ class ReasoningInput:
 class UtilityReasoner:
     """Combines goals, personality, and memory signals into an intention."""
 
-    def __init__(self, debug: bool = False):
+    def __init__(self, debug: bool = False, profiler: FrameProfiler | None = None):
         self.debug = debug
+        self.profiler = profiler
 
     def choose_intention(self, reasoning_input: ReasoningInput) -> Intention:
-        scored_goals = [self._score_goal(goal, reasoning_input) for goal in reasoning_input.goals]
-        if not scored_goals:
-            return Intention(action="idle", rationale="No active goals", confidence=0.2)
+        with (self.profiler.span("reasoning.choose_intention") if self.profiler else nullcontext()):
+            scored_goals = [self._score_goal(goal, reasoning_input) for goal in reasoning_input.goals]
+            if not scored_goals:
+                return Intention(action="idle", rationale="No active goals", confidence=0.2)
 
-        best_goal, best_score = max(scored_goals, key=lambda item: item[1])
-        action = self._derive_action(best_goal, reasoning_input)
-        rationale = f"Pursuing {best_goal.name} with score {best_score:.2f}"
+            best_goal, best_score = max(scored_goals, key=lambda item: item[1])
+            action = self._derive_action(best_goal, reasoning_input)
+            rationale = f"Pursuing {best_goal.name} with score {best_score:.2f}"
 
-        if self.debug:
-            print("[Reasoning] goal scores:", [(g.name, f"{s:.2f}") for g, s in scored_goals])
-            print("[Reasoning] chosen action:", action)
+            if self.debug:
+                print("[Reasoning] goal scores:", [(g.name, f"{s:.2f}") for g, s in scored_goals])
+                print("[Reasoning] chosen action:", action)
 
-        return Intention(action=action, rationale=rationale, confidence=min(1.0, best_score))
+            return Intention(action=action, rationale=rationale, confidence=min(1.0, best_score))
 
     def _score_goal(self, goal: Goal, reasoning_input: ReasoningInput) -> tuple[Goal, float]:
         personality_weight = reasoning_input.personality.utility_modifier(goal)
