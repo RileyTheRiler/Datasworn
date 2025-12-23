@@ -16,6 +16,86 @@ from typing import List, Dict, Optional
 import time
 
 
+@dataclass
+class SnapshotEvent:
+    """A structured narrative event captured for continuity."""
+
+    event_type: str
+    description: str
+    scene_index: int
+    severity: str = "info"
+    related_characters: List[str] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "event_type": self.event_type,
+            "description": self.description,
+            "scene_index": self.scene_index,
+            "severity": self.severity,
+            "related_characters": self.related_characters,
+            "tags": self.tags,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SnapshotEvent":
+        return cls(
+            event_type=data.get("event_type", "misc"),
+            description=data.get("description", ""),
+            scene_index=data.get("scene_index", 0),
+            severity=data.get("severity", "info"),
+            related_characters=data.get("related_characters", []),
+            tags=data.get("tags", []),
+        )
+
+
+@dataclass
+class NarrativeSnapshot:
+    """Compact snapshot of narrative continuity points."""
+
+    scene_index: int
+    recent_events: List[SnapshotEvent] = field(default_factory=list)
+    active_vows: List[str] = field(default_factory=list)
+    unresolved_threads: List[str] = field(default_factory=list)
+
+    def add_recent_event(
+        self,
+        event_type: str,
+        description: str,
+        severity: str = "info",
+        related_characters: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
+    ) -> SnapshotEvent:
+        event = SnapshotEvent(
+            event_type=event_type,
+            description=description,
+            scene_index=self.scene_index,
+            severity=severity,
+            related_characters=related_characters or [],
+            tags=tags or [],
+        )
+        self.recent_events.append(event)
+        return event
+
+    def to_dict(self) -> dict:
+        return {
+            "scene_index": self.scene_index,
+            "recent_events": [e.to_dict() for e in self.recent_events],
+            "active_vows": self.active_vows,
+            "unresolved_threads": self.unresolved_threads,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "NarrativeSnapshot":
+        snapshot = cls(scene_index=data.get("scene_index", 0))
+        snapshot.active_vows = data.get("active_vows", [])
+        snapshot.unresolved_threads = data.get("unresolved_threads", [])
+        snapshot.recent_events = [
+            SnapshotEvent.from_dict(evt) for evt in data.get("recent_events", [])
+        ]
+        return snapshot
+
+
 class PlantType(Enum):
     """Types of narrative plants."""
     MYSTERY = "mystery"  # Unanswered question
