@@ -72,20 +72,28 @@ def onboarding_wizard(env_path: Path) -> Dict[str, str]:
     """
 
     print("\n[Onboarding Wizard]\n")
-    provider = input("Choose provider (ollama/openai/none) [ollama]: ").strip() or "ollama"
-    if provider not in {"ollama", "openai", "none"}:
-        print("Unrecognized provider, defaulting to ollama")
+    allowed_providers = {"ollama", "gemini"}
+    default_provider = os.environ.get("LLM_PROVIDER", "ollama").lower()
+
+    provider_prompt = f"Choose provider (ollama/gemini) [{default_provider}]: "
+    provider = input(provider_prompt).strip().lower() or default_provider
+    if provider not in allowed_providers:
+        print("Unsupported provider. Please choose 'ollama' or 'gemini'. Defaulting to ollama.")
         provider = "ollama"
 
-    model = input("Preferred model (e.g., llama3.1, gpt-4o) [llama3.1]: ").strip() or "llama3.1"
+    default_model = os.environ.get("GEMINI_MODEL" if provider == "gemini" else "OLLAMA_MODEL", "")
+    default_model = default_model or ("gemini-2.0-flash" if provider == "gemini" else "llama3.1")
+    model_prompt = "Gemini model" if provider == "gemini" else "Ollama model"
+    model = input(f"Preferred {model_prompt} [{default_model}]: ").strip() or default_model
     voice = input("Enable voice features? (y/n) [n]: ").strip().lower() or "n"
     enable_voice = voice.startswith("y")
 
-    env_values = {
-        "PROVIDER": provider,
-        "MODEL": model,
-        "VOICE_ENABLED": "true" if enable_voice else "false",
-    }
+    env_values = {"LLM_PROVIDER": provider, "VOICE_ENABLED": "true" if enable_voice else "false"}
+
+    if provider == "gemini":
+        env_values["GEMINI_MODEL"] = model
+    else:
+        env_values["OLLAMA_MODEL"] = model
 
     env_lines = [f"{key}={value}\n" for key, value in env_values.items()]
     env_path.write_text("".join(env_lines), encoding="utf-8")

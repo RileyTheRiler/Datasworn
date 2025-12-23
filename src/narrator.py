@@ -6,6 +6,14 @@ Generates narrative prose using configurable LLM providers.
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Generator, Optional
+import os
+from dataclasses import dataclass, field
+from typing import Generator, Optional
+
+from src.llm_provider import LLMProvider, get_llm_provider
+from typing import Generator
+import os
+import ollama
 from dataclasses import dataclass
 from typing import Generator, Optional
 from src.llm_provider import get_llm_provider, LLMProvider
@@ -260,14 +268,44 @@ def get_examples_for_tone(tone: str, pacing: str, count: int = 2) -> list[dict]:
 @dataclass
 class NarratorConfig:
     """Configuration for narrative generation."""
-    backend: str = "gemini"  # "ollama" or "gemini"
-    model: str = "gemini-flash-latest"  # Switched to Flash for reliability
+
+    backend: str = field(default_factory=lambda: os.environ.get("LLM_PROVIDER", "gemini"))
+    model: Optional[str] = None
+    backend: str | None = None  # "ollama" or "gemini"
+    model: str | None = None
     temperature: float = 0.85
     top_p: float = 0.90
     top_k: int = 50
     repeat_penalty: float = 1.15  # Slightly increased for variety
     max_tokens: int = 2000  # Increased to prevent premature truncation
     style_profile_name: Optional[str] = None
+
+    def __post_init__(self):
+        backend = (self.backend or "gemini").lower()
+        if self.model is None:
+            if backend == "ollama":
+                self.model = os.environ.get("OLLAMA_MODEL", "llama3.1")
+            else:
+                self.model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+        self.backend = backend
+
+        allowed_backends = {"gemini", "ollama"}
+
+        resolved_backend = (self.backend or os.environ.get("LLM_PROVIDER") or "ollama").lower()
+        if resolved_backend not in allowed_backends:
+            raise ValueError(
+                f"Unsupported LLM provider '{resolved_backend}'. Set LLM_PROVIDER to 'gemini' or 'ollama'."
+            )
+        self.backend = resolved_backend
+
+        if not self.model:
+            universal_model = os.environ.get("LLM_MODEL")
+            if universal_model:
+                self.model = universal_model
+            elif self.backend == "gemini":
+                self.model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+            else:
+                self.model = os.environ.get("OLLAMA_MODEL", "llama3.1")
 
 
 # ============================================================================
@@ -399,6 +437,97 @@ def check_provider_availability(
     provider = provider or get_llm_provider_for_config(config)
     available = provider.is_available()
 
+def _get_provider(config: NarratorConfig) -> LLMProvider:
+    """Resolve an LLM provider using narrator configuration."""
+
+    return get_llm_provider(provider_type=config.backend, model=config.model)
+        except Exception as e:
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                yield "[System: Neural Link Unstable (Rate Limit Reached). Retrying...]"
+            else:
+                yield f"[Gemini error: {e}]"
+
+    def generate_sync(
+        self,
+        prompt: str,
+        system: str = SYSTEM_PROMPT,
+        config: NarratorConfig | None = None,
+    ) -> str:
+        """
+        Generate text synchronously (non-streaming).
+        """
+        config = config or NarratorConfig()
+
+        try:
+            self._ensure_initialized()
+            
+            import google.generativeai as genai
+            
+            full_prompt = f"{system}\n\n---\n\n{prompt}"
+            
+            generation_config = genai.GenerationConfig(
+                temperature=config.temperature,
+                top_p=config.top_p,
+                top_k=config.top_k,
+                max_output_tokens=config.max_tokens,
+            )
+            
+            # Define safety settings to prevent over-blocking of gritty sci-fi content
+            safety_settings = {
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_ONLY_HIGH",
+            }
+            
+            response = self._retry_with_backoff(
+                self._client.generate_content,
+                full_prompt,
+                generation_config=generation_config,
+                safety_settings=safety_settings
+            )
+            
+            try:
+                return response.text
+            except Exception:
+                # Handle cases where feedback is blocked or empty (Finish Reason 2/3/Other)
+                candidates = getattr(response, 'candidates', [])
+                if candidates:
+                    finish_reason = candidates[0].finish_reason
+                    return f"[Gemini Error: Generation stopped (Reason: {finish_reason}). Try a different action.]"
+                
+                if response.prompt_feedback:
+                    return f"[Gemini Error: Prompt blocked. {response.prompt_feedback}]"
+                    
+                return "[Gemini Error: No content returned. The Oracle is silent.]"
+
+        except Exception as e:
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                 return (
+                     "[System: Rate Limit Exceeded. The Oracle is momentarily silent.]\n\n"
+                     "*(You can try your action again in a few moments, or describe the outcome yourself for now.)*"
+                 )
+            return f"[Gemini error: {e}]"
+
+    def is_available(self) -> bool:
+        """Check if Gemini API is available."""
+        try:
+            self._ensure_initialized()
+            # Simple check call? No, saving quota. Just check client exists.
+            return self._client is not None
+        except Exception:
+            return False
+
+
+
+def get_llm_client(config: NarratorConfig = None):
+    """Get the appropriate LLM client based on configuration."""
+    config = config or NarratorConfig()
+
+    if config.backend == "gemini":
+        return GeminiClient(model=config.model)
+    if config.backend == "ollama":
+        return OllamaClient(model=config.model)
     backend_hint = ""
     if config.backend == "ollama":
         backend_hint = "Ensure Ollama is installed, running, and the model is pulled."
@@ -410,6 +539,10 @@ def check_provider_availability(
     )
 
     return available, status
+
+    raise ValueError(
+        f"Unsupported LLM provider '{config.backend}'. Set LLM_PROVIDER to 'gemini' or 'ollama'."
+    )
 
 
 def build_guardrail_store(
@@ -612,6 +745,23 @@ def generate_narrative(
         guardrail_rules=guardrail_store.guardrail_rules(),
     )
 
+    provider = _get_provider(config)
+
+    # Check if Client is available
+    if not provider.is_available():
+        return (
+            f"[{provider.name} is not available. "
+            f"Check configuration.]\n\n"
+            f"*Placeholder narrative for: {player_input}*"
+        )
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    response = provider.chat(
+        messages,
     provider = get_llm_provider_for_config(config)
     available, status_message = check_provider_availability(config, provider)
 
@@ -680,6 +830,19 @@ def generate_narrative_stream(
         guardrail_rules=guardrail_store.guardrail_rules(),
     )
 
+    provider = _get_provider(config)
+
+    if not provider.is_available():
+        yield f"[{provider.name} is not available.]"
+        return
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    response = provider.chat(
+        messages,
     provider = get_llm_provider_for_config(config)
     available, status_message = check_provider_availability(config, provider)
 
@@ -698,6 +861,7 @@ def generate_narrative_stream(
     )
 
     if isinstance(response, str):
+        yield response
         yield sanitize_and_verify(response, guardrail_store)
         return
 
