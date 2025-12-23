@@ -141,6 +141,10 @@ class GameSession:
         self.last_roll: str = ""
         self.awaiting_approval: bool = False
         self.chat_history: list[tuple[str, str]] = []
+
+        # Table-side helpers
+        self.consequence_log: list[str] = []
+        self.scene_highlights: list[str] = []
         
         # New System States
         self.quest_lore: dict | None = None
@@ -187,6 +191,8 @@ def create_character(name: str, edge: int, heart: int, iron: int, shadow: int, w
         format_quests(_session.quest_lore),
         format_combat(_session.world),
         format_companions(_session.companions),
+        format_consequences(_session.consequence_log),
+        format_scene_highlights(_session.scene_highlights),
     )
 
 
@@ -231,6 +237,22 @@ def format_vows(vows: list) -> str:
         lines.append(f"**{vow.name}** ({vow.rank}) [{bar}] {status}")
 
     return "\n".join(lines)
+
+
+def format_consequences(entries: list[str]) -> str:
+    """Display recent consequences and debts."""
+    if not entries:
+        return "*No complications recorded*"
+
+    return "\n".join(f"• {entry}" for entry in entries[:5])
+
+
+def format_scene_highlights(highlights: list[str]) -> str:
+    """Show quick recap lines for recent scenes."""
+    if not highlights:
+        return "*No scenes logged yet*"
+
+    return "\n".join(f"• {text}" for text in highlights[:5])
 
 
 def format_director_state(director_state) -> str:
@@ -359,22 +381,69 @@ def format_companions(companion_state) -> str:
     name = comp.get("name", "Companion")
     role = comp.get("archetype", "Ally").title()
     loyalty = comp.get("loyalty", 0)
-    
+
     return f"""
 **{name}** ({role})
 Loyalty: {loyalty}/10
     """.strip()
 
 
+def record_consequence(note: str) -> str:
+    """Add a manual consequence entry to the log."""
+    cleaned = note.strip()
+    if not cleaned:
+        return format_consequences(_session.consequence_log)
+
+    _session.consequence_log = [cleaned] + _session.consequence_log
+    _session.consequence_log = _session.consequence_log[:6]
+    return format_consequences(_session.consequence_log)
+
+
+def record_scene_highlight(message: str, narrative: str):
+    """Capture a compact recap line for the latest exchange."""
+    if not narrative:
+        return
+
+    first_line = narrative.strip().split("\n", maxsplit=1)[0]
+    if len(first_line) > 160:
+        first_line = first_line[:157] + "..."
+
+    recap = f"{_session.character.name if _session.character else 'Hero'}: {first_line}"
+    _session.scene_highlights = [recap] + _session.scene_highlights
+    _session.scene_highlights = _session.scene_highlights[:6]
+
+
 def process_player_input(message: str, history: list) -> Generator:
     """Process player input and generate narrative response."""
     if not _session.character:
-        yield history + [("System", "Please create a character first.")], "", "", "", "", "", "", ""
+        yield (
+            history + [("System", "Please create a character first.")],
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            format_consequences(_session.consequence_log),
+            format_scene_highlights(_session.scene_highlights),
+        )
         return
 
     # Add player message to history
     history = history + [(message, None)]
-    yield history, "", "", "", "", "", "", ""
+    yield (
+        history,
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        format_consequences(_session.consequence_log),
+        format_scene_highlights(_session.scene_highlights),
+    )
 
     # Generate narrative response
     config = NarratorConfig()
@@ -390,19 +459,36 @@ def process_player_input(message: str, history: list) -> Generator:
         narrative += chunk
         history[-1] = (message, narrative)
         yield (
-            history, 
-            format_stats(_session.character), 
-            format_momentum(_session.character.momentum.value), 
-            format_condition(_session.character.condition), 
+            history,
+            format_stats(_session.character),
+            format_momentum(_session.character.momentum.value),
+            format_condition(_session.character.condition),
             format_vows(_session.character.vows),
             format_quests(_session.quest_lore),
             format_combat(_session.world),
             format_companions(_session.companions),
+            format_consequences(_session.consequence_log),
+            format_scene_highlights(_session.scene_highlights),
         )
 
     _session.pending_narrative = narrative
     _session.awaiting_approval = True
     _session.chat_history = history
+    record_scene_highlight(message, narrative)
+
+    # Final update to reflect any scene recap generated from the completed narrative
+    yield (
+        history,
+        format_stats(_session.character),
+        format_momentum(_session.character.momentum.value),
+        format_condition(_session.character.condition),
+        format_vows(_session.character.vows),
+        format_quests(_session.quest_lore),
+        format_combat(_session.world),
+        format_companions(_session.companions),
+        format_consequences(_session.consequence_log),
+        format_scene_highlights(_session.scene_highlights),
+    )
 
 
 def accept_narrative():
@@ -461,6 +547,18 @@ def create_ui() -> gr.Blocks:
 
             # Game Tab
             with gr.Tab("Adventure"):
+                gr.Markdown(
+                    "**Quick Commands & Shortcuts:** `R` roll • `F5` save • `F9` load • `!status` show stats • `!vows` list vows • `!consequences` show log",
+                    elem_classes=["section-header"],
+                )
+
+                with gr.Accordion("Guided First Scene", open=False):
+                    gr.Markdown(
+                        "1. Declare your first vow and a starting location.\n"
+                        "2. Pick an intent below to get moving.\n"
+                        "3. Use the shortcuts strip if you need reminders during play."
+                    )
+
                 with gr.Row():
                     # Main chat area
                     with gr.Column(scale=3):
@@ -477,6 +575,11 @@ def create_ui() -> gr.Blocks:
                                 scale=4,
                             )
                             submit_btn = gr.Button("▶", scale=1, variant="primary")
+
+                        with gr.Row():
+                            scout_btn = gr.Button("🌌 Scout ahead", size="sm")
+                            diplomat_btn = gr.Button("🤝 Parley with a faction", size="sm")
+                            investigate_btn = gr.Button("🛰️ Investigate an anomaly", size="sm")
 
                         with gr.Row():
                             accept_btn = gr.Button("✓ Accept", elem_id="accept-btn", elem_classes=["action-btn"])
@@ -515,9 +618,19 @@ def create_ui() -> gr.Blocks:
                         
                         gr.Markdown("### Combat Status", elem_classes=["section-header"])
                         combat_display = gr.Markdown("*Safe*")
-                        
+
                         gr.Markdown("### Companions", elem_classes=["section-header"])
                         companion_display = gr.Markdown("*Solo*")
+
+                        gr.Markdown("### Consequences & Debts", elem_classes=["section-header"])
+                        consequence_input = gr.Textbox(
+                            label="Log a complication",
+                            placeholder="Weak hit cost, promise owed, injury...",
+                        )
+                        consequence_display = gr.Markdown("*No complications recorded*")
+
+                        gr.Markdown("### Session Highlights", elem_classes=["section-header"])
+                        highlight_display = gr.Markdown("*No scenes logged yet*")
 
                         gr.Markdown("---")
                         with gr.Row():
@@ -528,19 +641,52 @@ def create_ui() -> gr.Blocks:
         create_btn.click(
             create_character,
             inputs=[char_name, edge_stat, heart_stat, iron_stat, shadow_stat, wits_stat],
-            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display, quests_display, combat_display, companion_display],
+            outputs=[
+                chatbot,
+                stats_display,
+                momentum_display,
+                condition_display,
+                vows_display,
+                quests_display,
+                combat_display,
+                companion_display,
+                consequence_display,
+                highlight_display,
+            ],
         )
 
         submit_btn.click(
             process_player_input,
             inputs=[player_input, chatbot],
-            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display, quests_display, combat_display, companion_display],
+            outputs=[
+                chatbot,
+                stats_display,
+                momentum_display,
+                condition_display,
+                vows_display,
+                quests_display,
+                combat_display,
+                companion_display,
+                consequence_display,
+                highlight_display,
+            ],
         ).then(lambda: "", outputs=player_input)
 
         player_input.submit(
             process_player_input,
             inputs=[player_input, chatbot],
-            outputs=[chatbot, stats_display, momentum_display, condition_display, vows_display, quests_display, combat_display, companion_display],
+            outputs=[
+                chatbot,
+                stats_display,
+                momentum_display,
+                condition_display,
+                vows_display,
+                quests_display,
+                combat_display,
+                companion_display,
+                consequence_display,
+                highlight_display,
+            ],
         ).then(lambda: "", outputs=player_input)
 
         accept_btn.click(accept_narrative)
@@ -551,6 +697,16 @@ def create_ui() -> gr.Blocks:
 
         edit_btn.click(show_edit, outputs=[edit_box, save_edit_btn])
         save_edit_btn.click(edit_narrative, inputs=[edit_box], outputs=[chatbot])
+
+        # Example prompts
+        scout_btn.click(lambda: "Scout the nearby derelict for threats and salvage.", outputs=player_input)
+        diplomat_btn.click(lambda: "Approach the blockade captain to negotiate safe passage.", outputs=player_input)
+        investigate_btn.click(lambda: "Inspect the anomalous energy reading in the cargo bay.", outputs=player_input)
+
+        # Consequence logger
+        consequence_input.submit(record_consequence, inputs=[consequence_input], outputs=[consequence_display]).then(
+            lambda: "", outputs=consequence_input
+        )
 
     return demo
 
