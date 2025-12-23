@@ -16,9 +16,30 @@ export const useVoice = () => {
 const VOICE_PROFILES = {
     'narrator_female': {
         id: 'narrator_female',
-        name: 'Narrator (Female)',
-        archetype: 'enigmatic_oracle', // Corresponding backend archetype
-        description: 'Mysterious, calm female narrator',
+        name: 'Rachel (Professional)',
+        archetype: 'enigmatic_oracle',
+        description: 'Clear, studio-quality professional female voice',
+        lang: 'en-US'
+    },
+    'narrator_amelia': {
+        id: 'narrator_amelia',
+        name: 'Amelia (British)',
+        archetype: 'narrator_amelia',
+        description: 'Gentle and emotive British female voice',
+        lang: 'en-GB'
+    },
+    'narrator_natasha': {
+        id: 'narrator_natasha',
+        name: 'Natasha (Expressive)',
+        archetype: 'narrator_natasha',
+        description: 'Energetic and expressive female voice',
+        lang: 'en-US'
+    },
+    'narrator_allison': {
+        id: 'narrator_allison',
+        name: 'Allison (Millennial)',
+        archetype: 'narrator_allison',
+        description: 'Modern, clear millennial female voice',
         lang: 'en-US'
     },
     'narrator_male': {
@@ -63,12 +84,12 @@ export const VoiceProvider = ({ children }) => {
 
     // Initialize selectedVoice immediately from localStorage or default
     const [selectedVoice, setSelectedVoice] = useState(() => {
-        if (typeof window === 'undefined') return VOICE_PROFILES['narrator_female'];
+        if (typeof window === 'undefined') return VOICE_PROFILES['narrator_amelia'];
         const savedVoiceId = localStorage.getItem('tts_voice_preference');
         if (savedVoiceId && VOICE_PROFILES[savedVoiceId]) {
             return VOICE_PROFILES[savedVoiceId];
         }
-        return VOICE_PROFILES['narrator_female'];
+        return VOICE_PROFILES['narrator_amelia'];
     });
 
     const recognitionRef = useRef(null);

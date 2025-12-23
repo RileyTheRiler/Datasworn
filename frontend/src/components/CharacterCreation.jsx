@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import CalibrationStep from './CalibrationStep';
+import { useVoice } from '../contexts/VoiceContext';
 import TTSButton from './TTSButton';
+import VoiceSelector from './VoiceSelector';
 import MusicPlayer from './MusicPlayer';
 
 const API_URL = 'http://localhost:8000/api';
@@ -561,6 +563,10 @@ const CharacterCreation = ({ onComplete, onCancel }) => {
                                 <p className="text-disco-paper italic mt-1">
                                     "{vow || 'Find my place among the stars'}"
                                 </p>
+                            </div>
+
+                            <div className="border-b border-disco-muted/20 pb-2">
+                                <VoiceSelector />
                             </div>
                         </div>
                     </div>

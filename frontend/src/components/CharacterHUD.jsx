@@ -17,49 +17,50 @@ const StatBar = ({ label, value, max, color, isMomentum }) => {
     const isReset = isMomentum && value <= 2;
 
     return (
-        <div className="mb-3 group relative">
-            <div className="flex justify-between text-[10px] font-mono uppercase text-disco-cyan/70 mb-1.5 relative z-10">
-                <span className="flex items-center gap-1">
-                    <span className={`text-xs ${isBurning ? 'animate-pulse text-disco-accent' : ''}`}>{icon}</span>
-                    {label}
+        <div className="mb-4 group relative">
+            <div className="flex justify-between text-xs font-mono uppercase text-disco-cyan/90 mb-1 relative z-10 tracking-widest">
+                <span className="flex items-center gap-2">
+                    <span className={`text-sm ${isBurning ? 'animate-pulse text-disco-accent' : ''} drop-shadow-[0_0_5px_currentColor]`}>{icon}</span>
+                    <span className="font-bold">{label}</span>
                 </span>
-                <span className={`font-bold ${isBurning ? 'text-disco-accent drop-shadow-[0_0_5px_rgba(107,228,227,0.8)]' : 'text-disco-paper/80'}`}>
-                    {value}/{max}
+                <span className={`font-bold font-mono text-sm ${isBurning ? 'text-disco-accent drop-shadow-[0_0_8px_rgba(107,228,227,1)]' : 'text-disco-paper'}`}>
+                    {value}<span className="text-disco-muted/50">/</span>{max}
                 </span>
             </div>
 
-            <div className={`h-2.5 bg-black/60 border ${isBurning ? 'border-disco-accent' : 'border-disco-cyan/20'} relative overflow-hidden transition-colors duration-500 shadow-[0_0_10px_rgba(0,0,0,0.5)]`}>
+            <div className={`h-6 bg-black/80 border-2 ${isBurning ? 'border-disco-accent shadow-[0_0_15px_rgba(253,224,71,0.4)]' : 'border-disco-cyan/40 hover:border-disco-cyan/80'} relative overflow-hidden transition-all duration-300 shadow-[0_0_10px_rgba(0,0,0,0.8)] rounded-sm`}>
                 {/* Animated background grid */}
-                <div className="absolute inset-0 opacity-20" style={{
-                    backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(107, 228, 227, 0.1) 2px, rgba(107, 228, 227, 0.1) 4px)'
+                <div className="absolute inset-0 opacity-30" style={{
+                    backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 4px, rgba(107, 228, 227, 0.1) 4px, rgba(107, 228, 227, 0.1) 8px)'
                 }} />
 
                 {/* Progress bar with gradient */}
                 <div
                     style={{ width: `${Math.max(0, Math.min(100, percentage))}%` }}
-                    className={`h-full ${color} transition-all duration-700 ease-out relative`}
+                    className={`h-full ${color} transition-all duration-700 ease-out relative shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]`}
                 >
                     {/* Glow effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-[shimmer_2s_infinite]" />
+
+                    {/* Edge Highlight */}
+                    <div className="absolute right-0 top-0 bottom-0 w-1 bg-white/50 shadow-[0_0_10px_white]" />
 
                     {/* Burning Momentum Effect */}
                     {isBurning && (
-                        <div className="absolute inset-0 bg-disco-accent/50 animate-[pulse_0.5s_infinite]" style={{
-                            boxShadow: '0 0 10px #6be4e3, 0 0 20px #6be4e3'
+                        <div className="absolute inset-0 bg-disco-accent/50 animate-[pulse_0.2s_infinite]" style={{
+                            boxShadow: '0 0 15px #fde047, inset 0 0 20px #fde047'
                         }} />
                     )}
                 </div>
 
-                {/* Danger indicator for low values (except momentum) */}
+                {/* Danger indicator for low values */}
                 {!isMomentum && percentage < 30 && value > 0 && (
-                    <div className="absolute right-0 top-0 w-1 h-full bg-disco-red animate-pulse" />
-                )}
-
-                {/* Momentum Reset Warning */}
-                {isReset && (
-                    <div className="absolute right-0 top-0 w-1 h-full bg-disco-red animate-pulse" />
+                    <div className="absolute inset-0 border-2 border-disco-red animate-pulse pointer-events-none" />
                 )}
             </div>
+
+            {/* Underline deco */}
+            <div className="absolute -bottom-1 right-0 w-1/3 h-px bg-disco-cyan/20 group-hover:w-full transition-all duration-500"></div>
         </div>
     );
 }

@@ -42,7 +42,7 @@ import WorldDashboard from './components/WorldDashboard';
 import SensorRadar from './components/SensorRadar';
 import PauseMenu from './components/PauseMenu';
 import InterrogationModal from './components/InterrogationModal';
-import { ReactiveStatic, ScanlineTransition } from './components/UXEffects';
+import { ReactiveStatic, ScanlineTransition, Starfield } from './components/UXEffects';
 import TextScramble from './components/TextScramble';
 
 
@@ -111,9 +111,12 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     const [activeStat, setActiveStat] = useState({ name: 'Iron', value: character.stats.iron });
     const [activeDrawer, setActiveDrawer] = useState(null); // 'sys' or 'codex'
 
+    // Neuro-Status Logic (Derived from Spirit/Health)
+    const isStabilityCritical = character.condition.spirit <= 2 || character.condition.health <= 1;
+
     // Accessibility and sound contexts
     const { highContrast, setHighContrast } = useAccessibility();
-    const { toggleMute } = useSoundEffects();
+    const { toggleMute, playRandomGlitch } = useSoundEffects();
     const { speak, voiceEnabled, selectedVoice, isListening, startListening, stopListening, transcript, setTranscript, supported: voiceSupported } = useVoice();
     const [lastSpoken, setLastSpoken] = useState('');
 
@@ -256,6 +259,19 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
         return () => clearInterval(interval);
     }, []);
 
+    // Jitter effect for Mission Log on progress update
+    const prevProgressRef = useRef(chapterState.progress);
+    const [logJitter, setLogJitter] = useState(false);
+
+    useEffect(() => {
+        if (chapterState.progress !== prevProgressRef.current) {
+            setLogJitter(true);
+            setTimeout(() => setLogJitter(false), 500);
+            prevProgressRef.current = chapterState.progress;
+        }
+    }, [chapterState.progress]);
+
+
     // Stat selection handler for keyboard shortcuts
     const handleStatSelect = useCallback((statName) => {
         const statMap = {
@@ -273,6 +289,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
 
     // Helper for diegetic click effects
     const triggerRgbSplit = (e) => {
+        if (playRandomGlitch) playRandomGlitch();
         const target = e.currentTarget;
         // Don't override if already animating or if it's an icon-only button without text might need handling
         const text = target.innerText || target.title || "CMD";
@@ -281,8 +298,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
         setTimeout(() => target.classList.remove('animate-rgb-split'), 150);
     };
 
-    // Keyboard shortcuts
-    - expanded
+    // Keyboard shortcuts - expanded
     useKeyboardShortcuts({
         onToggleRoll: useCallback(() => setShowSkillCheck(prev => !prev), []),
         onCloseModal: useCallback(() => {
@@ -295,9 +311,6 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             setShowBlueprint(false);
             setShowAlbum(false);
             setShowShipBlueprint(false);
-            setShowShipBlueprint(false);
-            setShowCombatDashboard(false);
-            setShowDebugger(false);
             setShowCombatDashboard(false);
             setShowDebugger(false);
             setShowPractice(false);
@@ -498,277 +511,274 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     }
 
     return (
-        <div className="flex h-screen w-full bg-disco-bg bg-grunge bg-blend-multiply overflow-hidden animate-[crtFlicker_0.15s_infinite]">
-            <ReactiveStatic
-                health={character.condition.health}
-                spirit={character.condition.spirit}
-            />
-            {/* LEFT: Visual & Stats */}
-            <div className={`w-1/3 border-r border-disco-cyan/10 flex flex-col relative bg-black/20 transition-all duration-300 ${isLoading ? 'opacity-80' : 'opacity-100'}`}>
-                {/* HUD Corner Brackets - Top Left */}
-                <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-disco-cyan/40 z-50" />
-                <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-disco-cyan/40 z-50" />
-                {/* Isometric Viewport */}
-                <div className="flex-1 bg-black/80 relative overflow-hidden group">
-                    {/* Scene Display */}
-                    <div className="absolute inset-0 z-0 group-hover:shadow-glow transition-shadow duration-300">
-                        <SceneDisplay
-                            imageUrl={assets?.scene_image}
-                            locationName={world?.current_location}
-                            isLoading={isLoading}
-                            weather={world?.current_weather || 'Clear'}
-                            timeOfDay={world?.current_time || 'Day'}
-                        />
-                    </div>
-
-                    {/* Vignette - kept for style */}
-                    <div className="absolute inset-0 bg-radial-gradient from-transparent to-black/80 pointer-events-none z-10 transition-opacity duration-500 opacity-60"></div>
-
-                    {/* Location Overlay */}
-                    <div className="absolute top-0 left-0 p-8 w-full z-20 pointer-events-none">
-                        <h2 className="font-serif text-4xl text-disco-paper text-outline italic tracking-wider filter drop-shadow-lg">{world.current_location}</h2>
-                        <div className="flex items-center gap-2 mt-2">
-                            <span className="w-2 h-2 bg-disco-accent rounded-full animate-pulse"></span>
-                            <div className="text-disco-paper/60 font-mono text-xs tracking-[0.2em] uppercase">Sector: The Forge</div>
-                        </div>
-                        {/* Area Info Overlay (Rumors/Events) */}
-                        <AreaInfoOverlay
-                            areaId={world.current_location_id || world.current_location?.toLowerCase().replace(/ /g, '_')}
-                            visible={!isLoading}
-                        />
-                    </div>
-                </div>
-
-                {/* Character HUD (Replacing hardcoded version) */}
-                <CharacterHUD
-                    character={character}
-                    assets={assets}
-                    onAssetsUpdate={onAssetsUpdate}
-                    className="h-1/3"
+        <>
+            <div className={`flex h-screen w-full bg-disco-bg bg-grunge bg-blend-multiply overflow-hidden relative transition-all duration-1000 ${isStabilityCritical ? 'neuro-critical' : 'animate-[crtFlicker_0.15s_infinite]'}`}>
+                <Starfield count={150} speed={0.5} />
+                <ReactiveStatic
+                    health={character.condition.health}
+                    spirit={character.condition.spirit}
                 />
-            </div>
-
-            {/* RIGHT: Narrative Flow */}
-            <div className="w-2/3 flex flex-col relative bg-disco-panel/60">
-                {/* HUD Corner Brackets - Top Right */}
-                <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-disco-accent/40 z-50" />
-
-                {/* Chapter Indicator */}
-                <div className="absolute top-4 right-12 z-40">
-                    <ChapterIndicator
-                        title={chapterState.name}
-                        number={chapterState.number}
-                        season={chapterState.season}
-                        progress={chapterState.progress}
-                        total={chapterState.total}
-                        missions={chapterState.missions}
-                    />
-                </div>
-
-                {/* Quest Tracker Overlay */}
-                <QuestTracker sessionId="default" />
-
-                {/* Animated grid background */}
-                <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
-                    backgroundImage: 'linear-gradient(rgba(107, 228, 227, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(107, 228, 227, 0.1) 1px, transparent 1px)',
-                    backgroundSize: '20px 20px',
-                    animation: 'gridScroll 20s linear infinite'
-                }} />
-                {/* Log */}
-                <div className="flex-1 overflow-y-auto p-12 scroll-smooth" ref={scrollRef}>
-                    <div className="max-w-2xl mx-auto space-y-12">
-                        <div className="prose prose-invert prose-lg text-disco-paper/90 fade-in leading-loose">
-                            <TypewriterText
-                                text={narrative.pending_narrative}
-                                characters={gameState.relationships?.crew || {}}
-                                baseSpeed={20}
-                                className="font-mono text-base leading-relaxed tracking-wide"
-                                onInterrogate={handleInterrogate}
-                                onComplete={() => {
-                                    // Auto-scroll after typewriter completes
-                                    if (scrollRef.current) {
-                                        scrollRef.current.scrollTo({
-                                            top: scrollRef.current.scrollHeight,
-                                            behavior: 'smooth'
-                                        });
-                                    }
-                                }}
+                {/* LEFT: Visual & Stats */}
+                <div className={`w-1/3 border-r border-disco-cyan/10 flex flex-col relative bg-black/20 transition-all duration-300 ${isLoading ? 'opacity-80' : 'opacity-100'}`}>
+                    {/* HUD Corner Brackets - Top Left */}
+                    <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-disco-cyan/40 z-50" />
+                    <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-disco-cyan/40 z-50" />
+                    {/* Isometric Viewport */}
+                    <div className="flex-1 bg-black/80 relative overflow-hidden group">
+                        {/* Scene Display */}
+                        <div className="absolute inset-0 z-0 group-hover:shadow-glow transition-shadow duration-300">
+                            <SceneDisplay
+                                imageUrl={assets?.scene_image}
+                                locationName={world?.current_location}
+                                isLoading={isLoading}
+                                weather={world?.current_weather || 'Clear'}
+                                timeOfDay={world?.current_time || 'Day'}
                             />
                         </div>
 
-                        {isLoading && (
-                            <div className="flex items-center gap-3 text-disco-cyan font-mono text-sm loading-text">
-                                <span className="w-2 h-2 bg-disco-cyan rounded-full animate-pulse" />
-                                <span className="italic">{getRandomLoadingMessage()}</span>
+                        {/* Vignette - kept for style */}
+                        <div className="absolute inset-0 bg-radial-gradient from-transparent to-black/80 pointer-events-none z-10 transition-opacity duration-500 opacity-60"></div>
+
+                        {/* Location Overlay */}
+                        <div className="absolute top-0 left-0 p-8 w-full z-20 pointer-events-none">
+                            <h2 className="font-serif text-4xl text-disco-paper text-outline italic tracking-wider filter drop-shadow-lg">{world.current_location}</h2>
+                            <div className="flex items-center gap-2 mt-2">
+                                <span className="w-2 h-2 bg-disco-accent rounded-full animate-pulse"></span>
+                                <div className="text-disco-paper/60 font-mono text-xs tracking-[0.2em] uppercase">Sector: The Forge</div>
                             </div>
-                        )}
+                            {/* Area Info Overlay (Rumors/Events) */}
+                            <AreaInfoOverlay
+                                areaId={world.current_location_id || world.current_location?.toLowerCase().replace(/ /g, '_')}
+                                visible={!isLoading}
+                            />
+                        </div>
                     </div>
+
+                    {/* Character HUD (Replacing hardcoded version) */}
+                    <CharacterHUD
+                        character={character}
+                        assets={assets}
+                        onAssetsUpdate={onAssetsUpdate}
+                        className="h-1/3"
+                    />
                 </div>
 
-                {/* Input Area - Sticky to Bottom */}
-                {/* Input Area - Command Deck */}
-                <div className={`sticky bottom-0 bg-disco-bg border-t backdrop-blur-md transition-colors duration-500 z-50 ${conversationMode ? 'border-disco-cyan/60 bg-disco-cyan/5' : 'border-disco-muted/30'}`}>
+                {/* RIGHT: Narrative Flow */}
+                <div className="w-2/3 flex flex-col relative bg-disco-panel/60">
+                    {/* HUD Corner Brackets - Top Right */}
+                    <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-disco-accent/40 z-50" />
 
-                    {/* Drawer: System (Left) */}
-                    <div className={`absolute bottom-full left-0 w-64 bg-black/90 border-r border-t border-disco-muted/40 p-4 transform transition-transform duration-300 ${activeDrawer === 'sys' ? 'translate-y-0' : 'translate-y-full opacity-0 pointer-events-none'}`}>
-                        <ScanlineTransition trigger={activeDrawer === 'sys'}>
-                            <div className="flex flex-col gap-2">
-                                <div className="text-xs font-mono text-disco-muted uppercase tracking-widest mb-2 border-b border-disco-muted/20 pb-1">
-                                    <TextScramble text="SYSTEM CONTROLS" />
-                                </div>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowSaveManager(true); }} className="hover-jitter text-left px-3 py-2 text-disco-cyan hover:bg-white/10 text-sm font-mono">💾 Save/Load Terminals</button>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowSettings(true); }} className="hover-jitter text-left px-3 py-2 text-disco-paper hover:bg-white/10 text-sm font-mono">⚙️ Configuration</button>
-                                <div className="px-3 py-1"><MusicPlayer /></div>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowHelp(true); }} className="hover-jitter text-left px-3 py-2 text-disco-paper hover:bg-white/10 text-sm font-mono">❓ Help / Manual</button>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowRecap(true); }} className="hover-jitter text-left px-3 py-2 text-disco-accent hover:bg-white/10 text-sm font-mono">📜 Session Logs</button>
-                                <a href={`${API_URL}/export/story/default`} download className="hover-jitter text-left px-3 py-2 text-disco-yellow hover:bg-white/10 text-sm font-mono block">📤 Export Data</a>
+                    {/* Chapter Indicator */}
+                    <div className="absolute top-4 right-12 z-40">
+                        <ChapterIndicator
+                            title={chapterState.name}
+                            number={chapterState.number}
+                            season={chapterState.season}
+                            progress={chapterState.progress}
+                            total={chapterState.total}
+                            missions={chapterState.missions}
+                        />
+                    </div>
 
-                                <div className="h-px bg-disco-muted/20 my-1"></div>
-                                <div className="text-[10px] font-mono text-disco-muted/50 uppercase tracking-widest mb-1">Dev / Debug</div>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowDebugger(true); }} className="hover-jitter text-left px-3 py-1 text-pink-500 hover:bg-white/10 text-xs font-mono">🧠 Brain</button>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowWorldDashboard(true); }} className="hover-jitter text-left px-3 py-1 text-emerald-500 hover:bg-white/10 text-xs font-mono">🌍 Sim</button>
+                    {/* Quest Tracker Overlay */}
+                    <QuestTracker sessionId="default" />
 
-                                <div className="h-px bg-disco-muted/20 my-1"></div>
-                                <button
-                                    onClick={async (e) => {
-                                        triggerRgbSplit(e);
-                                        if (confirm('Terminate uplink?')) {
-                                            try { await fetch('http://localhost:8000/api/shutdown', { method: 'POST' }); } catch (e) { }
-                                            window.close();
+                    {/* Animated grid background */}
+                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
+                        backgroundImage: 'linear-gradient(rgba(107, 228, 227, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(107, 228, 227, 0.1) 1px, transparent 1px)',
+                        backgroundSize: '20px 20px',
+                        animation: 'gridScroll 20s linear infinite'
+                    }} />
+
+                    {/* Log */}
+                    <div className="flex-1 overflow-y-auto p-12 scroll-smooth flex justify-center" ref={scrollRef}>
+                        <div className="w-full max-w-prose space-y-12">
+                            <div className="prose prose-invert prose-lg text-disco-paper/90 fade-in leading-loose">
+                                <TypewriterText
+                                    text={narrative.pending_narrative}
+                                    characters={gameState.relationships?.crew || {}}
+                                    baseSpeed={20}
+                                    className="font-mono text-base leading-relaxed tracking-wide"
+                                    onInterrogate={handleInterrogate}
+                                    onComplete={() => {
+                                        if (scrollRef.current) {
+                                            scrollRef.current.scrollTo({
+                                                top: scrollRef.current.scrollHeight,
+                                                behavior: 'smooth'
+                                            });
                                         }
                                     }}
-                                    className="hover-jitter text-left px-3 py-2 text-disco-red hover:bg-red-900/20 text-sm font-mono font-bold">🛑 TERMINATE UPLINK</button>
+                                />
                             </div>
-                        </ScanlineTransition>
-                    </div>
 
-                    {/* Drawer: Codex (Right) */}
-                    <div className={`absolute bottom-full right-0 w-64 bg-black/90 border-l border-t border-disco-muted/40 p-4 transform transition-transform duration-300 ${activeDrawer === 'codex' ? 'translate-y-0' : 'translate-y-full opacity-0 pointer-events-none'}`}>
-                        <ScanlineTransition trigger={activeDrawer === 'codex'}>
-                            <div className="flex flex-col gap-2">
-                                <div className="text-xs font-mono text-disco-muted uppercase tracking-widest mb-2 border-b border-disco-muted/20 pb-1">
-                                    <TextScramble text="DATABASE ACCESS" />
+                            {isLoading && (
+                                <div className="flex items-center gap-3 text-disco-cyan font-mono text-sm loading-text">
+                                    <span className="w-2 h-2 bg-disco-cyan rounded-full animate-pulse" />
+                                    <span className="italic">{getRandomLoadingMessage()}</span>
                                 </div>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowQuestJournal(true); }} className="hover-jitter text-left px-3 py-2 text-amber-500 hover:bg-white/10 text-sm font-mono">⚔️ Active Missions</button>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowStoryThreads(true); }} className="hover-jitter text-left px-3 py-2 text-cyan-400 hover:bg-white/10 text-sm font-mono">🧶 Narrative Threads</button>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowRumorBoard(true); }} className="hover-jitter text-left px-3 py-2 text-disco-orange hover:bg-white/10 text-sm font-mono">📡 Rumor Network</button>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowWorldEvents(true); }} className="hover-jitter text-left px-3 py-2 text-emerald-400 hover:bg-white/10 text-sm font-mono">🌍 Sector News</button>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowAlbum(true); }} className="hover-jitter text-left px-3 py-2 text-disco-purple hover:bg-white/10 text-sm font-mono">📸 Visual Records</button>
-                                <div className="h-px bg-disco-muted/20 my-1"></div>
-                                <button onClick={(e) => { triggerRgbSplit(e); setShowSensorRadar(true); }} className="hover-jitter text-left px-3 py-2 text-cyan-400 hover:bg-white/10 text-sm font-mono">🛰️ Sensor Array</button>
-                            </div>
-                        </ScanlineTransition>
+                            )}
+                        </div>
                     </div>
 
-                    <div className="max-w-7xl mx-auto px-6 py-4 grid grid-cols-12 gap-6 items-end">
+                    {/* Command Deck - Stick Footer */}
+                    <div className={`sticky bottom-0 bg-disco-bg border-t backdrop-blur-md transition-colors duration-500 z-50 ${conversationMode ? 'border-disco-cyan/60 bg-disco-cyan/5' : 'border-disco-muted/30'}`}>
 
-                        {/* Zone A: Tactical & System (Left) - Col 1-3 */}
-                        <div className="col-span-3 flex items-center justify-start gap-3">
-                            <button
-                                onClick={(e) => { triggerRgbSplit(e); setActiveDrawer(prev => prev === 'sys' ? null : 'sys'); }}
-                                className={`hover-jitter h-12 w-12 flex items-center justify-center border transition-all duration-200 ${activeDrawer === 'sys' ? 'bg-disco-cyan text-black border-disco-cyan' : 'border-disco-muted text-disco-muted hover:border-disco-cyan hover:text-disco-cyan'}`}
-                                title="System Menu"
-                            >
-                                <span className="font-mono font-bold text-sm">SYS</span>
-                            </button>
-
-                            <div className="h-8 w-px bg-disco-muted/30 mx-1"></div>
-
-                            <button
-                                onClick={(e) => { triggerRgbSplit(e); setShowCombatDashboard(true); }}
-                                className="hover-jitter h-10 px-3 flex items-center gap-2 border border-disco-red/50 text-disco-red hover:bg-disco-red hover:text-black transition-colors"
-                                title="Tactical Dashboard"
-                            >
-                                <span className="text-lg">⚔️</span>
-                                <span className="font-mono text-xs font-bold hidden xl:inline">TAC</span>
-                            </button>
-
-                            <button
-                                onClick={(e) => { triggerRgbSplit(e); setShowCamp(prev => !prev); }}
-                                className={`hover-jitter h-10 px-3 flex items-center gap-2 border transition-colors ${showCamp ? 'bg-white text-black border-white' : 'border-disco-muted text-disco-green hover:border-disco-green hover:text-disco-green'}`}
-                                title="Camp / Living Hub"
-                            >
-                                <span className="text-lg">🏕️</span>
-                            </button>
-                        </div>
-
-                        {/* Zone B: Action Hub (Center) - Col 4-9 */}
-                        <div className="col-span-6 relative">
-                            {/* Decorative Brackets */}
-                            <div className="absolute -left-4 top-0 bottom-0 w-2 border-l border-t border-b border-disco-muted/30 opacity-50"></div>
-                            <div className="absolute -right-4 top-0 bottom-0 w-2 border-r border-t border-b border-disco-muted/30 opacity-50"></div>
-
-                            <form onSubmit={handleSubmit} className="relative group w-full">
-                                <VoiceInput />
-
-                                <div className="relative flex items-center">
-                                    <div className={`absolute left-0 pl-4 font-mono text-xs pointer-events-none transition-colors ${conversationMode ? 'text-disco-cyan' : 'text-disco-accent'}`}>
-                                        {conversationMode ? 'MSG_OUT >>' : 'CMD_IN >>'}
+                        {/* Drawer: System (Left) */}
+                        <div className={`absolute bottom-full left-0 w-64 bg-black/90 border-r border-t border-disco-muted/40 p-4 transform transition-transform duration-300 ${activeDrawer === 'sys' ? 'translate-y-0' : 'translate-y-full opacity-0 pointer-events-none'}`}>
+                            <ScanlineTransition trigger={activeDrawer === 'sys'}>
+                                <div className="flex flex-col gap-2">
+                                    <div className="text-xs font-mono text-disco-muted uppercase tracking-widest mb-2 border-b border-disco-muted/20 pb-1">
+                                        <TextScramble text="SYSTEM CONTROLS" />
                                     </div>
-                                    <input
-                                        type="text"
-                                        className={`w-full bg-black/80 border-2 font-serif text-xl py-4 pl-24 pr-16 focus:outline-none transition-all placeholder:text-disco-muted/20 ${conversationMode
-                                            ? 'border-disco-cyan text-disco-cyan focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]'
-                                            : 'border-disco-muted text-disco-paper focus:border-disco-accent focus:shadow-[0_0_20px_rgba(253,224,71,0.1)]'
-                                            }`}
-                                        placeholder={conversationMode ? "Speak to them..." : "What do you do?"}
-                                        value={input}
-                                        onChange={(e) => setInput(e.target.value)}
-                                        disabled={isLoading}
-                                    />
+                                    <button onClick={(e) => { triggerRgbSplit(e); setShowSaveManager(true); }} className="hover-jitter text-left px-3 py-2 text-disco-cyan hover:bg-white/10 text-sm font-mono">💾 Save/Load</button>
+                                    <a href={`${API_URL}/export/story/default`} download className="hover-jitter text-left px-3 py-2 text-disco-yellow hover:bg-white/10 text-sm font-mono block">📤 Export Data</a>
+                                    <div className="h-px bg-disco-muted/20 my-1"></div>
                                     <button
-                                        type="button"
-                                        onClick={() => setConversationMode(prev => !prev)}
-                                        className={`absolute right-2 p-2 rounded hover:bg-white/10 transition-colors ${conversationMode ? 'text-disco-cyan' : 'text-disco-muted'}`}
-                                        title={conversationMode ? "Switch to Narrative Mode" : "Switch to Conversation Mode"}
-                                    >
-                                        {conversationMode ? "💬" : "📜"}
-                                    </button>
+                                        onClick={async (e) => {
+                                            triggerRgbSplit(e);
+                                            if (confirm('Terminate uplink?')) {
+                                                try { await fetch('http://localhost:8000/api/shutdown', { method: 'POST' }); } catch (e) { }
+                                                window.close();
+                                            }
+                                        }}
+                                        className="hover-jitter text-left px-3 py-2 text-disco-red hover:bg-red-900/20 text-sm font-mono font-bold">🛑 TERMINATE</button>
                                 </div>
-                            </form>
+                            </ScanlineTransition>
+                        </div>
 
-                            {/* Context Action Bar (Below Input) */}
-                            <div className="flex justify-between mt-2 px-1">
-                                <div className="flex gap-2">
-                                    <button onClick={(e) => { triggerRgbSplit(e); setShowSkillCheck(true); }} className="hover-jitter text-[10px] font-mono text-disco-muted hover:text-disco-accent uppercase tracking-wider">[R]oll</button>
-                                    <button onClick={(e) => { triggerRgbSplit(e); setShowPractice(prev => !prev); }} className="hover-jitter text-[10px] font-mono text-disco-muted hover:text-disco-cyan uppercase tracking-wider">[P]ractice</button>
+                        {/* Drawer: Codex (Right) */}
+                        <div className={`absolute bottom-full right-0 w-64 bg-black/90 hologram-panel border-l border-t border-disco-muted/40 p-4 transform transition-transform duration-300 ${activeDrawer === 'codex' ? 'translate-y-0' : 'translate-y-full opacity-0 pointer-events-none'}`}>
+                            <ScanlineTransition trigger={activeDrawer === 'codex'}>
+                                <div className="flex flex-col gap-2">
+                                    <div className="text-xs font-mono text-disco-muted uppercase tracking-widest mb-2 border-b border-disco-muted/20 pb-1">
+                                        <TextScramble text="DATABASE ACCESS" />
+                                    </div>
+                                    <button onClick={(e) => { triggerRgbSplit(e); setShowQuestJournal(true); }} className="hover-jitter text-left px-3 py-2 text-amber-500 hover:bg-white/10 text-sm font-mono">⚔️ Active Missions</button>
+                                    <button onClick={(e) => { triggerRgbSplit(e); setShowStoryThreads(true); }} className="hover-jitter text-left px-3 py-2 text-cyan-400 hover:bg-white/10 text-sm font-mono">🧶 Narrative Threads</button>
+                                    <button onClick={(e) => { triggerRgbSplit(e); setShowRumorBoard(true); }} className="hover-jitter text-left px-3 py-2 text-disco-orange hover:bg-white/10 text-sm font-mono">📡 Rumor Network</button>
+                                    <button onClick={(e) => { triggerRgbSplit(e); setShowWorldEvents(true); }} className="hover-jitter text-left px-3 py-2 text-emerald-400 hover:bg-white/10 text-sm font-mono">🌍 Sector News</button>
+                                    <button onClick={(e) => { triggerRgbSplit(e); setShowAlbum(true); }} className="hover-jitter text-left px-3 py-2 text-disco-purple hover:bg-white/10 text-sm font-mono">📸 Visual Records</button>
+                                    <div className="h-px bg-disco-muted/20 my-1"></div>
+                                    <button onClick={(e) => { triggerRgbSplit(e); setShowSensorRadar(true); }} className="hover-jitter text-left px-3 py-2 text-cyan-400 hover:bg-white/10 text-sm font-mono">🛰️ Sensor Array</button>
                                 </div>
-                                <div className="flex gap-2">
-                                    <button onClick={(e) => { triggerRgbSplit(e); handleManualCapture(); }} className="hover-jitter text-[10px] font-mono text-disco-muted hover:text-disco-purple uppercase tracking-wider">[C]apture Frame</button>
+                            </ScanlineTransition>
+                        </div>
+
+                        <div className="max-w-7xl mx-auto px-6 py-4 flex items-end justify-between gap-6">
+
+                            {/* LEFT GRID [SYS, INV, TAC, LOG] */}
+                            <div className="grid grid-cols-2 gap-2 w-48 shrink-0">
+                                {/* [SYS] */}
+                                <button
+                                    onClick={(e) => { triggerRgbSplit(e); setActiveDrawer(prev => prev === 'sys' ? null : 'sys'); }}
+                                    className={`h-10 border text-xs font-mono font-bold tracking-wider hover-jitter transition-colors ${activeDrawer === 'sys' ? 'bg-disco-cyan text-black border-disco-cyan' : 'border-disco-muted/50 text-disco-muted hover:border-disco-cyan hover:text-disco-cyan'}`}
+                                >
+                                    [ SYS ]
+                                </button>
+                                {/* [INV] -> Camp */}
+                                <button
+                                    onClick={(e) => { triggerRgbSplit(e); setShowCamp(prev => !prev); }}
+                                    className={`h-10 border text-xs font-mono font-bold tracking-wider hover-jitter transition-colors ${showCamp ? 'bg-disco-green text-black border-disco-green' : 'border-disco-muted/50 text-disco-muted hover:border-disco-green hover:text-disco-green'}`}
+                                >
+                                    [ INV ]
+                                </button>
+                                {/* [TAC] */}
+                                <button
+                                    onClick={(e) => { triggerRgbSplit(e); setShowCombatDashboard(true); }}
+                                    className="h-10 border border-disco-muted/50 text-disco-muted/80 text-xs font-mono font-bold tracking-wider hover:border-disco-red hover:text-disco-red hover-jitter transition-colors"
+                                >
+                                    [ TAC ]
+                                </button>
+                                {/* [LOG] */}
+                                <button
+                                    onClick={(e) => { triggerRgbSplit(e); setShowRecap(true); }}
+                                    className={`h-10 border border-disco-muted/50 text-disco-muted/80 text-xs font-mono font-bold tracking-wider hover:border-disco-accent hover:text-disco-accent hover-jitter transition-colors ${logJitter ? 'animate-quantum-jitter border-disco-cyan text-disco-cyan' : ''}`}
+                                >
+                                    [ LOG ]
+                                </button>
+
+                            </div>
+
+                            {/* CENTER ANCHOR: INPUT */}
+                            <div className="flex-1 relative max-w-2xl">
+                                {/* Brackets around input */}
+                                <div className="absolute -left-2 top-0 bottom-0 w-2 border-l border-t border-b border-disco-muted/30"></div>
+                                <div className="absolute -right-2 top-0 bottom-0 w-2 border-r border-t border-b border-disco-muted/30"></div>
+
+                                <form onSubmit={handleSubmit} className="relative group w-full">
+                                    <VoiceInput />
+
+                                    <div className="relative flex items-center">
+                                        <div className={`absolute left-0 pl-4 font-mono text-xs pointer-events-none transition-colors ${conversationMode ? 'text-disco-cyan' : 'text-disco-accent'}`}>
+                                            {conversationMode ? 'MSG_OUT >>' : 'CMD_IN >>'}
+                                        </div>
+                                        <input
+                                            type="text"
+                                            className={`w-full bg-black/80 border-2 font-serif text-xl py-4 pl-24 pr-16 focus:outline-none transition-all placeholder:text-disco-muted/20 ${conversationMode
+                                                ? 'border-disco-cyan text-disco-cyan focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]'
+                                                : 'border-disco-muted text-disco-paper focus:border-disco-accent focus:shadow-[0_0_20px_rgba(253,224,71,0.1)]'
+                                                }`}
+                                            placeholder={conversationMode ? "Speak to them..." : "What do you do?"}
+                                            value={input}
+                                            onChange={(e) => setInput(e.target.value)}
+                                            disabled={isLoading}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setConversationMode(prev => !prev)}
+                                            className={`absolute right-2 p-2 rounded hover:bg-white/10 transition-colors ${conversationMode ? 'text-disco-cyan' : 'text-disco-muted'}`}
+                                            title={conversationMode ? "Switch to Narrative Mode" : "Switch to Conversation Mode"}
+                                        >
+                                            {conversationMode ? "💬" : "📜"}
+                                        </button>
+                                    </div>
+                                </form>
+
+                                {/* Context Action Bar (Below Input) */}
+                                <div className="flex justify-between mt-2 px-1">
+                                    <div className="flex gap-2">
+                                        <button onClick={(e) => { triggerRgbSplit(e); setShowSkillCheck(true); }} className="hover-jitter text-[10px] font-mono text-disco-muted hover:text-disco-accent uppercase tracking-wider">[R]oll</button>
+                                        <button onClick={(e) => { triggerRgbSplit(e); setShowPractice(prev => !prev); }} className="hover-jitter text-[10px] font-mono text-disco-muted hover:text-disco-cyan uppercase tracking-wider">[P]ractice</button>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={(e) => { triggerRgbSplit(e); handleManualCapture(); }} className="hover-jitter text-[10px] font-mono text-disco-muted hover:text-disco-purple uppercase tracking-wider">[C]apture Frame</button>
+                                    </div>
                                 </div>
                             </div>
+
+                            {/* RIGHT GRID [MAP, CODEX, CFG, ?] */}
+                            <div className="grid grid-cols-2 gap-2 w-48 shrink-0">
+                                {/* [MAP] */}
+                                <button
+                                    onClick={(e) => { triggerRgbSplit(e); setShowStarMap(true); }}
+                                    className="h-10 border border-disco-muted/50 text-disco-muted/80 text-xs font-mono font-bold tracking-wider hover:border-disco-cyan hover:text-disco-cyan hover-jitter transition-colors"
+                                >
+                                    [ MAP ]
+                                </button>
+                                {/* [CODEX] */}
+                                <button
+                                    onClick={(e) => { triggerRgbSplit(e); setActiveDrawer(prev => prev === 'codex' ? null : 'codex'); }}
+                                    className={`h-10 border text-xs font-mono font-bold tracking-wider hover-jitter transition-colors ${activeDrawer === 'codex' ? 'bg-amber-500 text-black border-amber-500' : 'border-disco-muted/50 text-disco-muted hover:border-amber-500 hover:text-amber-500'}`}
+                                >
+                                    [ CODEX ]
+                                </button>
+                                {/* [CFG] */}
+                                <button
+                                    onClick={(e) => { triggerRgbSplit(e); setShowSettings(true); }}
+                                    className="h-10 border border-disco-muted/50 text-disco-muted/80 text-xs font-mono font-bold tracking-wider hover:border-white hover:text-white hover-jitter transition-colors"
+                                >
+                                    [ CFG ]
+                                </button>
+                                {/* [ ? ] */}
+                                <button
+                                    onClick={(e) => { triggerRgbSplit(e); setShowHelp(true); }}
+                                    className="h-10 border border-disco-muted/50 text-disco-muted/80 text-xs font-mono font-bold tracking-wider hover:border-white hover:text-white hover-jitter transition-colors"
+                                >
+                                    [ ? ]
+                                </button>
+                            </div>
+
                         </div>
-
-                        {/* Zone C: Data & Map (Right) - Col 10-12 */}
-                        <div className="col-span-3 flex items-center justify-end gap-3">
-                            <button
-                                onClick={(e) => { triggerRgbSplit(e); setShowStarMap(true); }}
-                                className="hover-jitter h-10 px-3 flex items-center gap-2 border border-disco-cyan/30 text-disco-cyan hover:bg-disco-cyan/10 transition-colors"
-                                title="Star Map"
-                            >
-                                <span className="text-lg">🌌</span>
-                                <span className="font-mono text-xs font-bold hidden xl:inline">NAV</span>
-                            </button>
-
-                            <button
-                                onClick={(e) => { triggerRgbSplit(e); setShowBlueprint(true); }}
-                                className="hover-jitter h-10 px-3 flex items-center gap-2 border border-disco-green/30 text-disco-green hover:bg-disco-green/10 transition-colors"
-                                title="Local Map"
-                            >
-                                <span className="text-lg">🗺️</span>
-                            </button>
-
-                            <div className="h-8 w-px bg-disco-muted/30 mx-1"></div>
-
-                            <button
-                                onClick={(e) => { triggerRgbSplit(e); setActiveDrawer(prev => prev === 'codex' ? null : 'codex'); }}
-                                className={`hover-jitter h-12 w-12 flex items-center justify-center border transition-all duration-200 ${activeDrawer === 'codex' ? 'bg-amber-500 text-black border-amber-500' : 'border-disco-muted text-disco-muted hover:border-amber-500 hover:text-amber-500'}`}
-                                title="Codex / Database"
-                            >
-                                <span className="font-mono font-bold text-sm">DAT</span>
-                            </button>
-                        </div>
-
                     </div>
                 </div>
             </div>
@@ -789,15 +799,17 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             />
 
             {/* Dice/Skill Check Overlay */}
-            {showSkillCheck && (
-                <SkillCheck
-                    stat={character.stats.iron}
-                    statName="Iron"
-                    character={character}
-                    onRollComplete={handleRollComplete}
-                    onClose={() => setShowSkillCheck(false)}
-                />
-            )}
+            {
+                showSkillCheck && (
+                    <SkillCheck
+                        stat={character.stats.iron}
+                        statName="Iron"
+                        character={character}
+                        onRollComplete={handleRollComplete}
+                        onClose={() => setShowSkillCheck(false)}
+                    />
+                )
+            }
 
             {/* Keyboard Help Overlay */}
             <KeyboardHelpOverlay
@@ -886,31 +898,37 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             />
 
             {/* Narrative Threads Modal */}
-            {showStoryThreads && (
-                <StoryThreads
-                    onClose={() => setShowStoryThreads(false)}
-                />
-            )}
+            {
+                showStoryThreads && (
+                    <StoryThreads
+                        onClose={() => setShowStoryThreads(false)}
+                    />
+                )
+            }
 
             {/* Quest Journal Modal */}
-            {showQuestJournal && (
-                <QuestJournal
-                    onClose={() => setShowQuestJournal(false)}
-                    sessionId="default"
-                />
-            )}
+            {
+                showQuestJournal && (
+                    <QuestJournal
+                        onClose={() => setShowQuestJournal(false)}
+                        sessionId="default"
+                    />
+                )
+            }
 
             {/* World Events Modal */}
-            {showWorldEvents && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setShowWorldEvents(false)}>
-                    <div className="bg-gray-900 border border-amber-900/50 rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <WorldEvents sessionId="default" />
-                        <div className="p-2 text-center border-t border-gray-800">
-                            <button onClick={() => setShowWorldEvents(false)} className="text-gray-500 hover:text-white text-sm">Close Log</button>
+            {
+                showWorldEvents && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setShowWorldEvents(false)}>
+                        <div className="bg-gray-900 border border-amber-900/50 rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                            <WorldEvents sessionId="default" />
+                            <div className="p-2 text-center border-t border-gray-800">
+                                <button onClick={() => setShowWorldEvents(false)} className="text-gray-500 hover:text-white text-sm">Close Log</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Psyche Dashboard (Always On Widget) */}
             <PsycheDashboard />
@@ -955,17 +973,19 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
             />
 
             {/* Practice Cards View */}
-            {showPractice && (
-                <div className="fixed inset-0 z-[150] overflow-hidden">
-                    <PracticeCards onClose={() => setShowPractice(false)} />
-                    <button
-                        onClick={() => setShowPractice(false)}
-                        className="fixed top-8 right-8 z-[160] text-white/40 hover:text-white text-2xl"
-                    >
-                        ✕
-                    </button>
-                </div>
-            )}
+            {
+                showPractice && (
+                    <div className="fixed inset-0 z-[150] overflow-hidden">
+                        <PracticeCards onClose={() => setShowPractice(false)} />
+                        <button
+                            onClick={() => setShowPractice(false)}
+                            className="fixed top-8 right-8 z-[160] text-white/40 hover:text-white text-2xl"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                )
+            }
 
             {/* Interrogation Modal */}
             <InterrogationModal
@@ -1023,8 +1043,8 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
                 onResume={() => setShowPauseMenu(false)}
                 sessionId="default"
             />
-        </div>
-    )
+        </>
+    );
 }
 
 export default Layout;

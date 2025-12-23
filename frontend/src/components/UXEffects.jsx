@@ -257,26 +257,51 @@ export const MomentumBurst = ({ trigger, isPositive = true }) => {
 // REACTIVE STATIC (Health/Spirit Warning)
 // ============================================================================
 export const ReactiveStatic = ({ health = 5, spirit = 5, max = 5 }) => {
-    // Calculate critical status (below 20% = 1/5)
-    // 0 = no static, 1 = full static
-    const healthFactor = Math.max(0, (1 - (health / max)) * 2); // Starts ramping up at 50% health, severe at 0
-    const spiritFactor = Math.max(0, (1 - (spirit / max)) * 2);
+    // Calculate analog interference based on missing stats
+    // 0.0 = perfect condition, 1.0 = near death
+    const healthLoss = Math.max(0, (max - health) / max);
+    const spiritLoss = Math.max(0, (max - spirit) / max);
 
-    const intensity = Math.max(0, (healthFactor + spiritFactor) - 1.5); // Only show if critically low (e.g. sum > 1.5)
+    // Composite interference value
+    // Heavy weight on health (physical damage causes hardware failure)
+    // Spirit flickering (sync issues)
+    const interference = (healthLoss * 0.7) + (spiritLoss * 0.3);
 
-    // Or simpler logic: if either is <= 1 (20%), show static
-    const isCritical = health <= 1 || spirit <= 1;
-    const staticOpacity = isCritical ? 0.15 : 0;
+    // Thresholds for effects
+    // Low interference: Subtle grain
+    // High interference: Heavy static + chromatic distortion
 
-    if (!isCritical) return null;
+    if (interference < 0.1) return null;
+
+    // Opacity scales non-linearly: little bit at first, ramping up quickly near end
+    // e.g. 0.2 loss -> 0.04 opacity
+    // 0.8 loss -> 0.64 opacity
+    // 1.0 loss -> 1.0 opacity
+    const baseOpacity = Math.pow(interference, 2.5);
+
+    // Dynamic noise intensity
+    const noiseOpacity = Math.min(0.15, baseOpacity * 0.8);
 
     return (
-        <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden mix-blend-screen">
+        <div className="fixed inset-0 pointer-events-none z-[100] overflow-hidden mix-blend-hard-light">
+            {/* Base Static Layer */}
             <div
                 className="absolute inset-0 bg-noise animate-static"
-                style={{ opacity: staticOpacity }}
+                style={{ opacity: noiseOpacity }}
             />
-            {/* Occasional flicker handled by parent or CSS animation keyframes variation */}
+
+            {/* Critical Failure Scanlines (only when very hurt) */}
+            {interference > 0.6 && (
+                <div
+                    className="absolute inset-0 bg-scanlines opacity-30 animate-scanline-drift"
+                    style={{ animationDuration: `${2 - interference}s` }}
+                />
+            )}
+
+            {/* Glitch Slices on Critical */}
+            {interference > 0.8 && (
+                <div className="absolute inset-0 animate-glitch-slice opacity-20"></div>
+            )}
         </div>
     );
 };
@@ -302,6 +327,85 @@ export const ScanlineTransition = ({ children, trigger }) => {
     );
 };
 
+// ============================================================================
+// STARFIELD ANIMATION
+// ============================================================================
+export const Starfield = ({ count = 100, speed = 1 }) => {
+    // Generate static stars once to avoid hydration mismatches or constant re-renders
+    const [layers, setLayers] = useState({ back: [], mid: [], front: [] });
+
+    useEffect(() => {
+        const generateStars = (n) => [...Array(n)].map((_, i) => ({
+            id: i,
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+            size: Math.random() < 0.1 ? 2 : 1, // Occasional larger star
+            opacity: Math.random() * 0.7 + 0.3,
+        }));
+
+        setLayers({
+            back: generateStars(Math.floor(count * 0.6)),   // Distant stars (slowest)
+            mid: generateStars(Math.floor(count * 0.3)),    // Mid-range stars
+            front: generateStars(Math.floor(count * 0.1)),  // Close stars (fastest)
+        });
+    }, [count]);
+
+    const Layer = ({ stars, duration, sizeModifier = 1, animationClass = 'animate-star-scroll-mid' }) => (
+        <div
+            className={`absolute inset-0 ${animationClass}`}
+            style={{ animationDuration: `${duration / speed}s` }}
+        >
+            {stars.map(s => (
+                <div
+                    key={s.id}
+                    className="absolute rounded-full bg-white"
+                    style={{
+                        left: s.left,
+                        top: s.top,
+                        width: `${s.size * sizeModifier}px`,
+                        height: `${s.size * sizeModifier}px`,
+                        opacity: s.opacity,
+                        boxShadow: s.size > 1.5 ? '0 0 2px rgba(255, 255, 255, 0.8)' : 'none'
+                    }}
+                />
+            ))}
+            {/* Duplicate for seamless loop */}
+            {stars.map(s => (
+                <div
+                    key={`dup-${s.id}`}
+                    className="absolute rounded-full bg-white"
+                    style={{
+                        left: s.left,
+                        top: `calc(${s.top} - 100vh)`, // Position above for scrolling down
+                        width: `${s.size * sizeModifier}px`,
+                        height: `${s.size * sizeModifier}px`,
+                        opacity: s.opacity,
+                        boxShadow: s.size > 1.5 ? '0 0 2px rgba(255, 255, 255, 0.8)' : 'none'
+                    }}
+                />
+            ))}
+        </div>
+    );
+
+    return (
+        <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 bg-black">
+            {/* Base deep space gradient */}
+            <div className="absolute inset-0 bg-gradient-to-b from-[#050510] via-[#0a0a20] to-[#050510] opacity-80" />
+
+            {/* Star Layers with Parallax */}
+            <div className="absolute inset-0 opacity-40">
+                <Layer stars={layers.back} duration={60} sizeModifier={0.8} animationClass="animate-star-scroll-back" />
+            </div>
+            <div className="absolute inset-0 opacity-60">
+                <Layer stars={layers.mid} duration={40} sizeModifier={1} animationClass="animate-star-scroll-mid" />
+            </div>
+            <div className="absolute inset-0 opacity-80">
+                <Layer stars={layers.front} duration={20} sizeModifier={1.5} animationClass="animate-star-scroll-front" />
+            </div>
+        </div>
+    );
+};
+
 export default {
     ScreenShake,
     TensionVignette,
@@ -310,5 +414,6 @@ export default {
     AmbientParticles,
     MomentumBurst,
     ReactiveStatic,
-    ScanlineTransition
+    ScanlineTransition,
+    Starfield
 };

@@ -63,7 +63,7 @@ const SessionRecap = ({ isOpen, onClose, sessionId = "default" }) => {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-            <div className="panel-glass w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col m-4">
+            <div className="panel-glass hologram-panel w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col m-4">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-disco-muted/30">
                     <h2 className="text-2xl font-serif text-disco-paper flex items-center gap-2">

@@ -4,6 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 const StoryThreads = ({ onClose }) => {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [pulsingId, setPulsingId] = useState(null);
+
+    const handleLockedClick = (id) => {
+        setPulsingId(id);
+        setTimeout(() => setPulsingId(null), 400);
+    };
+
 
     useEffect(() => {
         fetch('http://localhost:8000/api/narrative/state')
@@ -103,6 +110,34 @@ const StoryThreads = ({ onClose }) => {
                                 No active narrative threads detected.
                             </div>
                         )}
+                    </div>
+
+                    {/* Locked Files - Visual FX Demo */}
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-orbitron text-red-500/70 border-b border-red-900/30 pb-2 flex justify-between">
+                            <span>ENCRYPTED ARCHIVES</span>
+                            <span className="text-xs pt-1">SECURE ACCESS REQUIRED</span>
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {[1, 2].map(id => (
+                                <div
+                                    key={`locked-${id}`}
+                                    onClick={() => handleLockedClick(id)}
+                                    className={`p-4 bg-black/40 border border-red-900/30 rounded cursor-pointer transition-all hover:bg-red-900/10 group ${pulsingId === id ? 'animate-access-denied border-red-500' : ''}`}
+                                >
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs font-bold uppercase tracking-widest text-red-700 group-hover:text-red-500 transition-colors">CLASSIFIED</span>
+                                        <span className="text-xs font-mono text-red-900 group-hover:text-red-600">Locked</span>
+                                    </div>
+                                    <div className="h-2 w-24 bg-red-900/20 rounded mb-2 overflow-hidden">
+                                        <div className="h-full bg-red-900/50 w-2/3 animate-pulse"></div>
+                                    </div>
+                                    <p className="text-red-900/60 font-mono text-sm group-hover:text-red-500/60">
+                                        [ DATA CORRUPTED // AUTH REQUIRED ]
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Themes */}

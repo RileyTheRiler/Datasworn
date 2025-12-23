@@ -40,9 +40,21 @@ VOICE_PROFILES = {
         "voice_id": "21m00Tcm4TlvDq8ikWAM",  # Rachel - Clear, professional female voice
         "description": "Mysterious, calm, otherworldly"
     },
+    "narrator_amelia": {
+        "voice_id": "pGAwIQNN9UjOkKxjAyGQ",
+        "description": "Gentle, emotive British female voice"
+    },
+    "narrator_natasha": {
+        "voice_id": "uxKr2vlA4hYgXZR1oPRT",
+        "description": "Energetic, expressive female voice"
+    },
+    "narrator_allison": {
+        "voice_id": "xctasy8XvGp2cVO9HL9k",
+        "description": "Clear, millennial female voice"
+    },
     "default": {
-        "voice_id": "21m00Tcm4TlvDq8ikWAM",
-        "description": "Default narrator voice"
+        "voice_id": "pGAwIQNN9UjOkKxjAyGQ",
+        "description": "Default narrator voice (Amelia)"
     }
 }
 

@@ -46,12 +46,20 @@ const TypewriterText = ({
             const currentChar = text[indexRef.current];
             const nextChar = text[indexRef.current + 1] || '';
 
-            setDisplayedText(text.slice(0, indexRef.current + 1));
+            // Decoding effect: Add random chars ahead of cursor
+            // Only do this if we are not done
+            const scrambleChars = '!@#$%^&*()_+-=[]{}|;:,.<>/?0123456789ABCDEF';
+            const randomChar1 = scrambleChars[Math.floor(Math.random() * scrambleChars.length)];
+            const randomChar2 = scrambleChars[Math.floor(Math.random() * scrambleChars.length)];
+
+            // Render text + decoding noise
+            setDisplayedText(text.slice(0, indexRef.current + 1) + (indexRef.current < text.length - 2 ? randomChar1 + randomChar2 : ''));
             indexRef.current++;
 
             const delay = getCharDelay(currentChar, nextChar);
             timeoutRef.current = setTimeout(typeNextChar, delay);
         } else {
+            setDisplayedText(text); // Clean up any noise
             setIsComplete(true);
             setIsTyping(false);
             onComplete?.();
