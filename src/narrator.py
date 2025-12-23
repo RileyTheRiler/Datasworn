@@ -435,7 +435,20 @@ def check_provider_availability(
 ) -> tuple[bool, str]:
     """Check provider availability and return a user-facing status message."""
     provider = provider or get_llm_provider_for_config(config)
+
+    backend_hint = ""
+    if config.backend == "ollama":
+        backend_hint = "Ensure Ollama is installed, running, and the model is pulled."
+    elif config.backend == "gemini":
+        backend_hint = "Set GEMINI_API_KEY and install google-generativeai."
+
     available = provider.is_available()
+    status = f"{provider.name} is available." if available else (
+        f"[{provider.name} unavailable. {backend_hint or 'Check configuration.'}]"
+    )
+
+    return available, status
+
 
 def _get_provider(config: NarratorConfig) -> LLMProvider:
     """Resolve an LLM provider using narrator configuration."""
@@ -553,17 +566,6 @@ def get_llm_client(config: NarratorConfig = None):
         return GeminiClient(model=config.model)
     if config.backend == "ollama":
         return OllamaClient(model=config.model)
-    backend_hint = ""
-    if config.backend == "ollama":
-        backend_hint = "Ensure Ollama is installed, running, and the model is pulled."
-    elif config.backend == "gemini":
-        backend_hint = "Set GEMINI_API_KEY and install google-generativeai."
-
-    status = f"{provider.name} is available." if available else (
-        f"[{provider.name} unavailable. {backend_hint or 'Check configuration.'}]"
-    )
-
-    return available, status
 
     raise ValueError(
         f"Unsupported LLM provider '{config.backend}'. Set LLM_PROVIDER to 'gemini' or 'ollama'."
