@@ -8,7 +8,7 @@ import gradio as gr
 from typing import Generator
 
 from src.game_state import Character, create_initial_state
-from src.narrator import generate_narrative_stream, NarratorConfig
+from src.narrator import generate_narrative_stream, NarratorConfig, check_provider_availability
 
 
 # ============================================================================
@@ -411,7 +411,23 @@ def process_player_input(message: str, history: list) -> Generator:
 
     # Generate narrative response
     config = NarratorConfig()
+    available, status_message = check_provider_availability(config)
     narrative = ""
+
+    if not available:
+        narrative = status_message
+        history[-1] = (message, narrative)
+        yield (
+            history,
+            format_stats(_session.character),
+            format_momentum(_session.character.momentum.value),
+            format_condition(_session.character.condition),
+            format_vows(_session.character.vows),
+            format_quests(_session.quest_lore),
+            format_combat(_session.world),
+            format_companions(_session.companions),
+        )
+        return
 
     for chunk in generate_narrative_stream(
         player_input=message,
