@@ -1,0 +1,56 @@
+[
+  {
+    "id": "faction.veiled_syndicate",
+    "title": "Veiled Syndicate",
+    "category": "faction",
+    "summary": "A covert faction thriving in the shadows of frontier stations, trading in secrets and forbidden tech.",
+    "factions": ["Veiled Syndicate"],
+    "locations": ["Shadowport Expanse"],
+    "items": ["Black Cipher"],
+    "keywords": ["smuggling", "espionage", "syndicate"],
+    "discoveries": ["Veiled Syndicate"],
+    "callbacks": [
+      {
+        "trigger": "SECRET_REVEALED",
+        "response": "Highlight how the Veiled Syndicate's informants shift their focus to the revelation, tightening their surveillance.",
+        "weight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "location.shadowport_expanse",
+    "title": "Shadowport Expanse",
+    "category": "location",
+    "summary": "A hidden dockyard carved into an asteroid's heart, pulsing with neon markets and quiet backroom deals.",
+    "factions": ["Veiled Syndicate"],
+    "locations": ["Shadowport Expanse"],
+    "items": ["Black Cipher"],
+    "keywords": ["haven", "smuggler", "dock"],
+    "discoveries": ["Shadowport Expanse"],
+    "callbacks": [
+      {
+        "trigger": "LOCATION_DISCOVERED",
+        "response": "Describe the glow of illegal markets and the Syndicate operatives watching from the catwalks.",
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "id": "item.black_cipher",
+    "title": "Black Cipher",
+    "category": "item",
+    "summary": "An obsidian data-shard rumored to contain jump coordinates to Precursor vaults guarded by the Syndicate.",
+    "factions": ["Veiled Syndicate"],
+    "locations": ["Shadowport Expanse"],
+    "items": ["Black Cipher"],
+    "keywords": ["artifact", "precursor", "vault"],
+    "discoveries": ["Black Cipher"],
+    "callbacks": [
+      {
+        "trigger": "ITEM_ACQUIRED",
+        "response": "Let the narrative tease encoded whispers from the shard, hinting at deeper Syndicate entanglements.",
+        "weight": 1.0
+      }
+    ]
+  }
+]

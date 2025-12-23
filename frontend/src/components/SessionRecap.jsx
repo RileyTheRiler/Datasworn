@@ -8,15 +8,24 @@ const API_URL = 'http://localhost:8000/api';
 const SessionRecap = ({ isOpen, onClose, sessionId = "default" }) => {
     const [recap, setRecap] = useState(null);
     const [storySoFar, setStorySoFar] = useState(null);
+    const [timeline, setTimeline] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [activeTab, setActiveTab] = useState('recap');
     const [recapStyle, setRecapStyle] = useState('dramatic');
+    const [timelineFilters, setTimelineFilters] = useState(['combat', 'narrative', 'economy']);
 
     useEffect(() => {
         if (isOpen) {
             fetchRecap();
         }
     }, [isOpen, recapStyle]);
+
+    useEffect(() => {
+        if (isOpen && activeTab === 'timeline') {
+            fetchTimeline();
+        }
+    }, [isOpen, activeTab, timelineFilters]);
 
     const fetchRecap = async () => {
         setLoading(true);
@@ -44,10 +53,56 @@ const SessionRecap = ({ isOpen, onClose, sessionId = "default" }) => {
         }
     };
 
+    const fetchTimeline = async () => {
+        setLoading(true);
+        try {
+            const activeFilters = timelineFilters.length === 3 ? '' : `?categories=${timelineFilters.join(',')}`;
+            const res = await fetch(`${API_URL}/session/timeline/${sessionId}${activeFilters}`);
+            const data = await res.json();
+            setTimeline(data.timeline || []);
+        } catch (err) {
+            console.error('Failed to fetch timeline:', err);
+            setTimeline([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleFilterToggle = (filter) => {
+        setTimelineFilters((prev) =>
+            prev.includes(filter)
+                ? prev.filter((f) => f !== filter)
+                : [...prev, filter]
+        );
+    };
+
+    const handleExportTimeline = async () => {
+        setExporting(true);
+        try {
+            const activeFilters = timelineFilters.length === 3 ? '' : `?categories=${timelineFilters.join(',')}`;
+            const res = await fetch(`${API_URL}/session/timeline/${sessionId}/export${activeFilters}`);
+            const jsonText = await res.text();
+            const blob = new Blob([jsonText], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `timeline-${sessionId}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Failed to export timeline:', err);
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const handleTabChange = (tab) => {
         setActiveTab(tab);
         if (tab === 'story' && !storySoFar) {
             fetchStorySoFar();
+        }
+        if (tab === 'timeline' && timeline.length === 0) {
+            fetchTimeline();
         }
     };
 
@@ -97,6 +152,15 @@ const SessionRecap = ({ isOpen, onClose, sessionId = "default" }) => {
                     >
                         Story So Far
                     </button>
+                    <button
+                        onClick={() => handleTabChange('timeline')}
+                        className={`flex-1 py-3 text-sm font-mono uppercase transition-colors
+                            ${activeTab === 'timeline'
+                                ? 'text-disco-cyan border-b-2 border-disco-cyan bg-disco-cyan/5'
+                                : 'text-disco-muted hover:text-disco-paper'}`}
+                    >
+                        Timeline
+                    </button>
                 </div>
 
                 {/* Style Selector (for recap tab) */}
@@ -123,7 +187,11 @@ const SessionRecap = ({ isOpen, onClose, sessionId = "default" }) => {
                     {loading ? (
                         <div className="text-center py-12">
                             <div className="loading-text text-disco-cyan">
-                                {activeTab === 'recap' ? 'Generating recap...' : 'Compiling story...'}
+                                {activeTab === 'recap'
+                                    ? 'Generating recap...'
+                                    : activeTab === 'story'
+                                        ? 'Compiling story...'
+                                        : 'Loading timeline...'}
                             </div>
                         </div>
                     ) : activeTab === 'recap' ? (
@@ -144,7 +212,7 @@ const SessionRecap = ({ isOpen, onClose, sessionId = "default" }) => {
                                 <p className="text-sm mt-2">Your story begins now...</p>
                             </div>
                         )
-                    ) : (
+                    ) : activeTab === 'story' ? (
                         storySoFar ? (
                             <div className="space-y-4">
                                 <h3 className="font-serif text-xl text-disco-accent mb-4">The Story So Far</h3>
@@ -163,6 +231,47 @@ const SessionRecap = ({ isOpen, onClose, sessionId = "default" }) => {
                                 <p className="text-sm mt-2">Play more to build your legend...</p>
                             </div>
                         )
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="flex gap-2 flex-wrap">
+                                {['combat', 'narrative', 'economy'].map((filter) => (
+                                    <button
+                                        key={filter}
+                                        onClick={() => handleFilterToggle(filter)}
+                                        className={`px-3 py-1 text-xs rounded border transition-colors ${timelineFilters.includes(filter)
+                                                ? 'bg-disco-cyan/20 text-disco-cyan border-disco-cyan/50'
+                                                : 'text-disco-muted border-disco-muted/40 hover:text-disco-paper'
+                                            }`}
+                                    >
+                                        {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                                    </button>
+                                ))}
+                                <button
+                                    onClick={handleExportTimeline}
+                                    className="ml-auto px-3 py-1 text-xs rounded border border-disco-muted/40 text-disco-paper hover:text-disco-cyan"
+                                    disabled={exporting}
+                                >
+                                    {exporting ? 'Exporting...' : 'Export JSON'}
+                                </button>
+                            </div>
+
+                            {timeline.length ? (
+                                <div className="space-y-3">
+                                    {timeline.map((entry, idx) => (
+                                        <div key={`${entry.timestamp}-${idx}`} className="p-3 rounded border border-disco-muted/30 bg-disco-bg/40">
+                                            <div className="text-xs text-disco-muted flex justify-between items-center">
+                                                <span>{new Date(entry.timestamp).toLocaleString()}</span>
+                                                <span className="uppercase tracking-wide text-[10px] text-disco-cyan">{entry.category}</span>
+                                            </div>
+                                            <div className="text-disco-paper mt-1">{entry.description}</div>
+                                            <div className="text-[10px] text-disco-muted mt-1">Session {entry.session_number}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-12 text-disco-muted">No timeline entries yet.</div>
+                            )}
+                        </div>
                     )}
                 </div>
 
