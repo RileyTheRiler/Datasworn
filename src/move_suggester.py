@@ -22,6 +22,7 @@ class MoveSuggestion:
     reason: str
     trigger_phrase: str
     outcome_preview: str
+    odds_hint: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -31,6 +32,7 @@ class MoveSuggestion:
             "reason": self.reason,
             "trigger_phrase": self.trigger_phrase,
             "outcome_preview": self.outcome_preview,
+            "odds_hint": self.odds_hint,
         }
 
 
@@ -263,6 +265,8 @@ def suggest_moves(player_input: str, max_suggestions: int = 3) -> list[MoveSugge
         matched_keywords = [kw for kw in move_data["keywords"] if kw in input_lower]
         reason = f"Your action mentions: {', '.join(matched_keywords[:3])}"
 
+        odds_hint = f"Best stat: {best_stat.title()} ({best_stat_reason})"
+
         # Build outcome preview
         outcomes = move_data.get("outcomes", {})
         outcome_preview = (
@@ -278,6 +282,7 @@ def suggest_moves(player_input: str, max_suggestions: int = 3) -> list[MoveSugge
             reason=reason,
             trigger_phrase=move_data["trigger"],
             outcome_preview=outcome_preview,
+            odds_hint=odds_hint,
         ))
 
     # Sort by confidence descending
@@ -342,6 +347,8 @@ def format_suggestions_for_display(suggestions: list[MoveSuggestion]) -> str:
         lines.append(f"{i}. **{s.move_name}** ({s.stat}) [{confidence_bar}]")
         lines.append(f"   *{s.trigger_phrase}*")
         lines.append(f"   {s.reason}")
+        if s.odds_hint:
+            lines.append(f"   {s.odds_hint}")
         lines.append("")
 
     lines.append("*Type the move name to roll, or continue describing your action.*")

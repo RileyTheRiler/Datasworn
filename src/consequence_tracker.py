@@ -183,6 +183,11 @@ class ConsequenceTracker:
         """Get all unresolved consequences."""
         return [c for c in self.consequences if not c.resolved]
 
+    def get_recent_log(self, limit: int = 5) -> list[Consequence]:
+        """Return the most recent consequences, resolved or not."""
+        sorted_entries = sorted(self.consequences, key=lambda c: c.created_turn, reverse=True)
+        return sorted_entries[:limit]
+
     def get_consequences_by_severity(self, min_severity: ConsequenceSeverity) -> list[Consequence]:
         """Get active consequences at or above a severity level."""
         severity_order = [
