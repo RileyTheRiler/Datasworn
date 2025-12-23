@@ -7,16 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Generator, Optional
 import os
-from dataclasses import dataclass, field
-from typing import Generator, Optional
 
 from src.llm_provider import LLMProvider, get_llm_provider
-from typing import Generator
-import os
-import ollama
-from dataclasses import dataclass
-from typing import Generator, Optional
-from src.llm_provider import get_llm_provider, LLMProvider
 from src.psych_profile import PsychologicalProfile, PsychologicalEngine
 from src.style_profile import StyleProfile, load_style_profile
 from src.guardrails import GuardrailFactStore, build_guardrail_prompt, sanitize_and_verify
@@ -269,8 +261,6 @@ def get_examples_for_tone(tone: str, pacing: str, count: int = 2) -> list[dict]:
 class NarratorConfig:
     """Configuration for narrative generation."""
 
-    backend: str = field(default_factory=lambda: os.environ.get("LLM_PROVIDER", "gemini"))
-    model: Optional[str] = None
     backend: str | None = None  # "ollama" or "gemini"
     model: str | None = None
     temperature: float = 0.85
@@ -281,17 +271,9 @@ class NarratorConfig:
     style_profile_name: Optional[str] = None
 
     def __post_init__(self):
-        backend = (self.backend or "gemini").lower()
-        if self.model is None:
-            if backend == "ollama":
-                self.model = os.environ.get("OLLAMA_MODEL", "llama3.1")
-            else:
-                self.model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
-        self.backend = backend
-
         allowed_backends = {"gemini", "ollama"}
 
-        resolved_backend = (self.backend or os.environ.get("LLM_PROVIDER") or "ollama").lower()
+        resolved_backend = (self.backend or os.environ.get("LLM_PROVIDER") or "gemini").lower()
         if resolved_backend not in allowed_backends:
             raise ValueError(
                 f"Unsupported LLM provider '{resolved_backend}'. Set LLM_PROVIDER to 'gemini' or 'ollama'."
@@ -450,21 +432,8 @@ def check_provider_availability(
     return available, status
 
 
-    try:
-        available = provider.is_available()
-    except Exception as exc:  # pragma: no cover - defensive guard
-        return False, f"[{provider.name} availability check failed: {exc}]"
-
-    if available:
-        return True, ""
-
-    return False, f"[{provider.name} is not available.]"
-
-
 def _get_provider(config: NarratorConfig) -> LLMProvider:
     """Resolve an LLM provider using narrator configuration."""
-
-    return get_llm_provider(provider_type=config.backend, model=config.model)
     return get_llm_provider(provider_type=config.backend, model=config.model)
 
 
@@ -793,20 +762,6 @@ def generate_narrative(
             f"*Placeholder narrative for: {player_input}*"
         )
 
-    response = provider.chat(
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-
-    # Check if Client is available
-    if not provider.is_available():
-        return (
-            f"[{provider.name} is not available. "
-            f"Check configuration.]\n\n"
-            f"*Placeholder narrative for: {player_input}*"
-        )
-
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": prompt},
@@ -875,16 +830,6 @@ def generate_narrative_stream(
         yield status_message
         return
 
-    response = provider.chat(
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-
-    if not provider.is_available():
-        yield f"[{provider.name} is not available.]"
-        return
-
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": prompt},
@@ -898,7 +843,6 @@ def generate_narrative_stream(
     )
 
     if isinstance(response, str):
-        yield response
         yield sanitize_and_verify(response, guardrail_store)
         return
 

@@ -98,6 +98,11 @@ class CLIRunner:
             return self._render_vows()
         if name == "oracle":
             return self._roll_oracle(arg)
+        if name == "save":
+            return self._command_save()
+        if name == "load":
+            load_name = rest[0].strip() if rest else None
+            return self._command_load(load_name)
         if name in {"help", "?"}:
             if arg == "moves":
                 return self._render_move_help()
@@ -107,21 +112,10 @@ class CLIRunner:
                 "!assets       - List equipped assets and abilities\n"
                 "!vows         - List active vows and progress\n"
                 "!oracle NAME  - Roll an oracle by path or keyword\n"
+                "!save         - Persist the current character\n"
+                "!load [NAME]  - Load a saved character by name\n"
                 "!help moves   - List move prompts and examples\n"
                 "!help         - Show this list"
-        if cmd.startswith("save"):
-            return self._command_save()
-        if cmd.startswith("load"):
-            name = command_text.split(maxsplit=1)[1] if len(command_text.split()) > 1 else None
-            return self._command_load(name)
-        if cmd in {"help", "?"}:
-            return (
-                "Available commands:\n"
-                "!status - Show stats, momentum, and conditions\n"
-                "!vows   - List active vows and progress\n"
-                "!save   - Persist the current character\n"
-                "!load   - Load a saved character by name\n"
-                "!help   - Show this list"
             )
         return "Unknown command. Try !help for the list."
 

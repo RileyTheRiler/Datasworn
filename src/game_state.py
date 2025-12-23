@@ -309,8 +309,6 @@ class NarrativeOrchestratorState(BaseModel):
 
     # Psychological Systems (Phase 3)
     attachment_system: dict[str, Any] = Field(default_factory=dict)
-    # Psychological Systems (Phase 3)
-    attachment_system: dict[str, Any] = Field(default_factory=dict)
     trust_dynamics: dict[str, Any] = Field(default_factory=dict)
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -322,8 +320,6 @@ class NarrativeOrchestratorState(BaseModel):
         if extra and key in extra:
             return extra[key]
         return default
-        """Dict-style accessor used by server helpers."""
-        return getattr(self, key, default)
 
 
 class StarmapState(BaseModel):
@@ -349,17 +345,6 @@ class WorldSimState(BaseModel):
 class HazardState(BaseModel):
     """State for environmental hazards."""
     active_hazards: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class AudioState(BaseModel):
-    """Audio engine state."""
-    current_ambient: str | None = None
-    current_music: str | None = None
-    ambient_volume: float = 0.5
-    music_volume: float = 0.6
-    voice_volume: float = 0.8
-    master_volume: float = 1.0
-    muted: bool = False
 
 
 class PhotoEntry(BaseModel):
