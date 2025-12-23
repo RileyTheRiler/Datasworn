@@ -5,7 +5,7 @@ from .echo import ChoiceEchoSystem
 
 from .hooks import OpeningHookSystem
 from .emotions import NPCEmotionalStateMachine, EmotionType
-from .reputation import MoralReputationSystem
+from .reputation import MoralReputationSystem, ReputationLedger, RelationshipVector
 from .irony import DramaticIronyTracker
 from .beats import StoryBeatGenerator, BeatType
 from .plots import PlotManager, PlotType
@@ -29,6 +29,8 @@ __all__ = [
     "NPCEmotionalStateMachine",
     "EmotionType",
     "MoralReputationSystem",
+    "ReputationLedger",
+    "RelationshipVector",
     "DramaticIronyTracker",
     "StoryBeatGenerator",
     "BeatType",

@@ -41,6 +41,8 @@ class BTContext:
     # World awareness
     player_name: str = ""
     player_reputation: float = 0.5  # 0=hated, 1=trusted
+    faction_reputation: float = 0.0
+    npc_reputation: float = 0.0
     player_nearby: bool = True
     current_location: str = ""
     
@@ -62,6 +64,8 @@ class BTContext:
     last_seen_player: str = ""  # Location where player was last seen
     knows_player_reputation: bool = True
     rumors_heard: list[str] = field(default_factory=list)
+    recent_memory_flags: list[str] = field(default_factory=list)
+    memory_summary: str = ""
     
     # Output - set by leaf nodes
     action: str = ""
@@ -278,6 +282,29 @@ class HasAllies(BTNode):
         return NodeStatus.SUCCESS if context.allies_nearby > 0 else NodeStatus.FAILURE
 
 
+class ReputationThreshold(BTNode):
+    """Gate behavior by reputation scores."""
+
+    def __init__(self, npc_threshold: float = 0.0, faction_threshold: float = 0.0):
+        self.npc_threshold = npc_threshold
+        self.faction_threshold = faction_threshold
+
+    def execute(self, context: BTContext) -> NodeStatus:
+        npc_ok = context.npc_reputation >= self.npc_threshold
+        faction_ok = context.faction_reputation >= self.faction_threshold
+        return NodeStatus.SUCCESS if (npc_ok and faction_ok) else NodeStatus.FAILURE
+
+
+class MemoryFlagPresent(BTNode):
+    """Check if a remembered flag exists (e.g., promise broken)."""
+
+    def __init__(self, flag: str):
+        self.flag = flag
+
+    def execute(self, context: BTContext) -> NodeStatus:
+        return NodeStatus.SUCCESS if self.flag in context.recent_memory_flags else NodeStatus.FAILURE
+
+
 # ============================================================================
 # Action Nodes (Leaf nodes that do things)
 # ============================================================================
@@ -356,6 +383,18 @@ class Greet(BTNode):
         return NodeStatus.SUCCESS
 
 
+class RecallRecentMemory(BTNode):
+    """Inject memory summary into dialogue intent."""
+
+    def __init__(self, fallback: str = "reflects on past dealings"):
+        self.fallback = fallback
+
+    def execute(self, context: BTContext) -> NodeStatus:
+        summary = context.memory_summary or self.fallback
+        context.dialogue_intent = f"references history: {summary}"
+        return NodeStatus.SUCCESS
+
+
 class Ignore(BTNode):
     def execute(self, context: BTContext) -> NodeStatus:
         context.action = "ignore"
@@ -384,6 +423,12 @@ class CallForHelp(BTNode):
 def create_merchant_tree() -> BTNode:
     """Behavior tree for merchant/trader NPCs."""
     return Selector(
+        # Remember broken promises
+        Sequence(
+            MemoryFlagPresent("promise_broken"),
+            RecallRecentMemory("demands restitution before trading"),
+            SetAction("refuse_service"),
+        ),
         # If hostile, refuse service
         Sequence(
             IsHostile(threshold=0.2),
@@ -398,6 +443,7 @@ def create_merchant_tree() -> BTNode:
         ),
         # Default: offer trade
         Sequence(
+            ReputationThreshold(npc_threshold=0.1, faction_threshold=-0.2),
             IsPlayerNearby(),
             IsFriendly(threshold=0.3),
             SetDialogueIntent("offers goods and services"),
@@ -439,10 +485,21 @@ def create_guard_tree() -> BTNode:
             ),
             name="GuardCombat"
         ),
+        # Holds grudges from memory flags
+        Sequence(
+            MemoryFlagPresent("violent_history"),
+            Warn(),
+        ),
         # Suspicious of hostile player
         Sequence(
             IsHostile(threshold=0.3),
             Warn(),
+        ),
+        # React to low reputation with faction
+        Sequence(
+            ReputationThreshold(npc_threshold=-0.3, faction_threshold=-0.2),
+            SetDialogueIntent("keeps hand on weapon due to reputation"),
+            SetAction("observe"),
         ),
         # Quest offering for friendly players
         Sequence(
@@ -568,11 +625,15 @@ def evaluate_npc_behavior(
     archetype: str,
     player_name: str,
     player_reputation: float = 0.5,
+    npc_reputation: float = 0.0,
+    faction_reputation: float = 0.0,
     in_combat: bool = False,
     threat_level: float = 0.0,
     has_quest: bool = False,
     quest_name: str = "",
     health: float = 1.0,
+    memory_summary: str = "",
+    recent_memory_flags: list[str] | None = None,
     **kwargs,
 ) -> BTContext:
     """
@@ -587,12 +648,16 @@ def evaluate_npc_behavior(
         archetype=archetype,
         player_name=player_name,
         player_reputation=player_reputation,
+        npc_reputation=npc_reputation,
+        faction_reputation=faction_reputation,
         disposition=player_reputation,  # Use reputation as disposition
         in_combat=in_combat,
         threat_level=threat_level,
         has_quest=has_quest,
         quest_name=quest_name,
         health=health,
+        memory_summary=memory_summary,
+        recent_memory_flags=recent_memory_flags or [],
         player_nearby=True,
         **{k: v for k, v in kwargs.items() if hasattr(BTContext, k)},
     )
