@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Any
 import random
 import math
+import time
 
 
 # ============================================================================
@@ -36,6 +37,114 @@ class NPCRole:
     behaviors: list[str]
     dialogue_topics: list[str]
     personality_hints: str
+
+
+@dataclass
+class PerceptionWorldObject:
+    """Simple representation of an object in the scene graph."""
+
+    object_id: str
+    position: tuple[float, float, float]
+    affordance_tags: set[str] = field(default_factory=set)
+
+    def add_tags(self, *tags: str) -> None:
+        for tag in tags:
+            self.affordance_tags.add(tag.lower())
+
+
+@dataclass
+class TriggerVolume:
+    """Simplified trigger volume used for auditory cues."""
+
+    name: str
+    center: tuple[float, float, float]
+    radius: float
+    loudness: float = 1.0
+
+    def contains(self, point: tuple[float, float, float]) -> bool:
+        px, py, pz = point
+        cx, cy, cz = self.center
+        distance_sq = (px - cx) ** 2 + (py - cy) ** 2 + (pz - cz) ** 2
+        return distance_sq <= self.radius**2
+
+
+@dataclass
+class PerceptionEnvironment:
+    """Contextual modifiers based on weather and time of day."""
+
+    time_of_day: str = "day"  # dawn, day, dusk, night
+    weather: str = "clear"  # clear, rain, fog, storm, snow
+    visibility_modifier: float = 1.0
+    hearing_modifier: float = 1.0
+
+    def compute_modifiers(self) -> None:
+        """Update perception multipliers based on conditions."""
+        time_modifiers = {
+            "dawn": 0.9,
+            "day": 1.0,
+            "dusk": 0.8,
+            "night": 0.6,
+        }
+        weather_visibility = {
+            "clear": 1.0,
+            "rain": 0.85,
+            "fog": 0.6,
+            "storm": 0.5,
+            "snow": 0.75,
+        }
+        weather_hearing = {
+            "clear": 1.0,
+            "rain": 0.9,
+            "fog": 1.05,
+            "storm": 0.75,
+            "snow": 0.95,
+        }
+
+        self.visibility_modifier = time_modifiers.get(self.time_of_day, 1.0)
+        self.visibility_modifier *= weather_visibility.get(self.weather, 1.0)
+        self.hearing_modifier = weather_hearing.get(self.weather, 1.0)
+
+
+@dataclass
+class PerceptionSnapshot:
+    """Debug-friendly snapshot of the perception system."""
+
+    timestamp: float
+    detection_states: dict[str, float]
+    detection_labels: dict[str, str]
+    world_objects: dict[str, set[str]]
+    environment: PerceptionEnvironment
+    active_triggers: list[str]
+    navmesh_nodes: int
+    scene_nodes: int
+
+    def as_text(self) -> str:
+        lines = ["[PERCEPTION SNAPSHOT]"]
+        lines.append(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.timestamp)))
+        lines.append(f"Visibility modifier: {self.environment.visibility_modifier:.2f}")
+        lines.append(f"Hearing modifier: {self.environment.hearing_modifier:.2f}")
+        lines.append("\nDetections:")
+        if not self.detection_states:
+            lines.append("  (none)")
+        for npc_id, awareness in self.detection_states.items():
+            label = self.detection_labels.get(npc_id, "UNKNOWN")
+            lines.append(f"  - {npc_id}: {label} ({awareness:.2f})")
+
+        lines.append("\nWorld objects & affordances:")
+        if not self.world_objects:
+            lines.append("  (none tracked)")
+        for obj_id, tags in self.world_objects.items():
+            tag_list = ", ".join(sorted(tags)) if tags else "(no tags)"
+            lines.append(f"  - {obj_id}: {tag_list}")
+
+        if self.active_triggers:
+            lines.append("\nActive triggers: " + ", ".join(self.active_triggers))
+        else:
+            lines.append("\nActive triggers: (none)")
+
+        lines.append(f"Scene nodes tracked: {self.scene_nodes}")
+        lines.append(f"Navmesh nodes tracked: {self.navmesh_nodes}")
+        return "\n".join(lines)
 
 
 # Pre-defined roles for different zone types
@@ -252,11 +361,17 @@ class PerceptionCone:
 
 class PerceptionManager:
     """Manages perception for multiple NPCs."""
-    
+
     def __init__(self):
         self.npc_perceptions: dict[str, PerceptionCone] = {}
         self.detection_states: dict[str, float] = {}  # npc_id -> awareness of player
-    
+        self.detection_labels: dict[str, str] = {}
+        self.scene_nodes: dict[str, tuple[float, float, float]] = {}
+        self.navmesh: dict[str, set[str]] = {}
+        self.world_objects: dict[str, PerceptionWorldObject] = {}
+        self.trigger_volumes: list[TriggerVolume] = []
+        self.environment: PerceptionEnvironment = PerceptionEnvironment()
+
     def register_npc(
         self,
         npc_id: str,
@@ -271,7 +386,123 @@ class PerceptionManager:
         )
         self.npc_perceptions[npc_id] = cone
         self.detection_states[npc_id] = 0.0
-    
+        self.detection_labels[npc_id] = "UNAWARE"
+
+    # ------------------------------------------------------------------
+    # Scene graph / navigation helpers
+    # ------------------------------------------------------------------
+    def register_scene_node(self, node_id: str, position: tuple[float, float, float]) -> None:
+        """Register a node in the simplified scene graph."""
+        self.scene_nodes[node_id] = position
+
+    def connect_navmesh(self, node_a: str, node_b: str) -> None:
+        """Connect two navmesh nodes to indicate reachability."""
+        self.navmesh.setdefault(node_a, set()).add(node_b)
+        self.navmesh.setdefault(node_b, set()).add(node_a)
+
+    def query_navmesh(self, start: str, goal: str) -> tuple[bool, int]:
+        """Breadth-first reachability query on the simplified navmesh."""
+        if start not in self.navmesh or goal not in self.navmesh:
+            return False, 0
+
+        visited = {start}
+        frontier = [(start, 0)]
+
+        while frontier:
+            node, depth = frontier.pop(0)
+            if node == goal:
+                return True, depth
+            for neighbor in self.navmesh.get(node, set()):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    frontier.append((neighbor, depth + 1))
+
+        return False, 0
+
+    def perform_raycast(self, source: str, target: str) -> tuple[bool, float]:
+        """Simulate a raycast for line-of-sight and return confidence."""
+        if source not in self.scene_nodes or target not in self.scene_nodes:
+            return False, 0.0
+
+        sx, sy, sz = self.scene_nodes[source]
+        tx, ty, tz = self.scene_nodes[target]
+        distance = math.sqrt((sx - tx) ** 2 + (sy - ty) ** 2 + (sz - tz) ** 2)
+
+        # Check for occluders tagged as cover near the midpoint
+        mid_point = ((sx + tx) / 2, (sy + ty) / 2, (sz + tz) / 2)
+        occlusion_penalty = 0.0
+        for obj in self.world_objects.values():
+            if "cover" in obj.affordance_tags:
+                ox, oy, oz = obj.position
+                if math.dist(mid_point, (ox, oy, oz)) < 2.5:
+                    occlusion_penalty += 0.25
+
+        visibility = max(0.0, 1.0 - (distance / 50.0) - occlusion_penalty)
+        visibility *= self.environment.visibility_modifier
+
+        return visibility > 0.15, min(1.0, visibility)
+
+    # ------------------------------------------------------------------
+    # World object tagging / trigger volumes
+    # ------------------------------------------------------------------
+    def register_world_object(
+        self, object_id: str, position: tuple[float, float, float], tags: list[str] | None = None
+    ) -> None:
+        """Register an object with affordance tags for perception world state."""
+        obj = PerceptionWorldObject(object_id, position, set())
+        if tags:
+            obj.add_tags(*tags)
+        self.world_objects[object_id] = obj
+
+    def tag_object(self, object_id: str, *tags: str) -> None:
+        """Add affordance tags to an existing object."""
+        if object_id not in self.world_objects:
+            return
+        self.world_objects[object_id].add_tags(*tags)
+
+    def add_trigger_volume(self, name: str, center: tuple[float, float, float], radius: float, loudness: float = 1.0) -> None:
+        self.trigger_volumes.append(TriggerVolume(name, center, radius, loudness))
+
+    def check_trigger_volumes(self, position: tuple[float, float, float], sound_level: float = 1.0) -> list[str]:
+        """Return list of trigger names that fired based on listener position and loudness."""
+        activated = []
+        for trigger in self.trigger_volumes:
+            if trigger.contains(position):
+                effective_loudness = sound_level * trigger.loudness * self.environment.hearing_modifier
+                if effective_loudness > 0.25:
+                    activated.append(trigger.name)
+        return activated
+
+    # ------------------------------------------------------------------
+    # Environment and saliency
+    # ------------------------------------------------------------------
+    def set_environment(self, time_of_day: str | None = None, weather: str | None = None) -> None:
+        if time_of_day:
+            self.environment.time_of_day = time_of_day
+        if weather:
+            self.environment.weather = weather
+        self.environment.compute_modifiers()
+
+    def compute_saliency(
+        self,
+        is_moving: bool,
+        sound_level: float,
+        is_quest_target: bool = False,
+        is_clutter: bool = False,
+    ) -> float:
+        """Calculate attention priority score."""
+        saliency = 0.0
+        if is_moving:
+            saliency += 0.35
+        if sound_level > 0.1:
+            saliency += min(0.4, sound_level)
+        if is_quest_target:
+            saliency += 0.4
+        if is_clutter:
+            saliency -= 0.25
+
+        return max(0.0, min(1.0, saliency))
+
     def update_detection(
         self,
         npc_id: str,
@@ -279,6 +510,12 @@ class PerceptionManager:
         player_angle: float,
         player_in_cover: bool = False,
         player_moving: bool = False,
+        player_position: tuple[float, float, float] | None = None,
+        player_node: str | None = None,
+        listener_node: str | None = None,
+        sound_level: float = 0.0,
+        is_quest_target: bool = False,
+        is_background_clutter: bool = False,
     ) -> dict:
         """
         Update detection state for an NPC.
@@ -287,11 +524,46 @@ class PerceptionManager:
         """
         if npc_id not in self.npc_perceptions:
             return {"detected": False, "awareness": 0.0}
-        
+
         cone = self.npc_perceptions[npc_id]
         detected, awareness = cone.can_see(
             player_distance, player_angle, player_in_cover, player_moving
         )
+
+        # Scene graph line-of-sight check supplements cone detection
+        los_confidence = 1.0
+        if player_node and listener_node:
+            los_detected, los_confidence = self.perform_raycast(listener_node, player_node)
+            detected = detected and los_detected
+            awareness *= los_confidence
+
+        # Navmesh reachability can nudge confidence
+        navmesh_reachable = True
+        if listener_node and player_node:
+            navmesh_reachable, hops = self.query_navmesh(listener_node, player_node)
+            if not navmesh_reachable:
+                awareness *= 0.8
+            else:
+                awareness *= max(0.6, 1.0 - (hops * 0.05))
+
+        # Sound cues from trigger volumes
+        active_triggers = []
+        if player_position:
+            active_triggers = self.check_trigger_volumes(player_position, sound_level)
+            if active_triggers:
+                awareness += 0.15 * len(active_triggers)
+
+        # Environment modifiers (weather/time-of-day)
+        awareness *= self.environment.visibility_modifier
+
+        # Attention saliency
+        saliency = self.compute_saliency(
+            is_moving=player_moving,
+            sound_level=sound_level * self.environment.hearing_modifier,
+            is_quest_target=is_quest_target,
+            is_clutter=is_background_clutter,
+        )
+        awareness = min(1.0, awareness + saliency * 0.4)
         
         # Smooth awareness transitions
         current = self.detection_states.get(npc_id, 0.0)
@@ -313,13 +585,33 @@ class PerceptionManager:
             state = "CURIOUS"
         else:
             state = "UNAWARE"
-        
+
+        self.detection_labels[npc_id] = state
+
         return {
             "detected": detected,
             "awareness": new_awareness,
             "state": state,
+            "saliency": saliency,
+            "triggers": active_triggers,
+            "navmesh_reachable": navmesh_reachable,
         }
-    
+
+    # ------------------------------------------------------------------
+    # Debugging and snapshots
+    # ------------------------------------------------------------------
+    def snapshot(self) -> PerceptionSnapshot:
+        return PerceptionSnapshot(
+            timestamp=time.time(),
+            detection_states=dict(self.detection_states),
+            detection_labels=dict(self.detection_labels),
+            world_objects={obj_id: set(obj.affordance_tags) for obj_id, obj in self.world_objects.items()},
+            environment=self.environment,
+            active_triggers=[t.name for t in self.trigger_volumes],
+            navmesh_nodes=len(self.navmesh),
+            scene_nodes=len(self.scene_nodes),
+        )
+
     def get_stealth_context(self) -> str:
         """Generate stealth context for narrator."""
         if not self.detection_states:
@@ -458,3 +750,8 @@ def check_perception(
     cone = PerceptionCone()
     detected, awareness = cone.can_see(distance, angle, in_cover)
     return {"detected": detected, "awareness": awareness}
+
+
+def debug_perception_snapshot(manager: PerceptionManager) -> str:
+    """Return a formatted perception snapshot for console overlays."""
+    return manager.snapshot().as_text()
