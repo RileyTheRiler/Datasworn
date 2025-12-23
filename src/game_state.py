@@ -155,6 +155,11 @@ class SessionState(BaseModel):
     user_decision: str = ""  # "accept", "retry", "edit"
     edited_text: str = ""
     turn_count: int = 0
+    onboarding_completed: bool = False
+    onboarding_step: int = 0
+    starter_intent: str = ""
+    starting_vow: str = ""
+    starting_location: str = ""
 
 
 class DirectorStateModel(BaseModel):

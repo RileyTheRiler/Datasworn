@@ -11,6 +11,7 @@ from pathlib import Path
 from src.config import get_config
 from src.datasworn import DataswornData, Move
 from src.game_state import Character, CharacterCondition, CharacterStats, MomentumState, VowState, create_initial_state
+from src.consequence_tracker import ConsequenceTracker, get_consequence_display
 from src.intent_predictor import INTENT_KEYWORDS, IntentCategory
 from src.lore import LoreRegistry
 from src.persistence import PersistenceLayer
@@ -67,6 +68,30 @@ class CLIRunner:
         self.config = get_config()
         self.tutorial_state = TutorialState()
         self.tutorial_engine = TutorialEngine(get_new_player_scenario())
+        self.consequence_tracker = ConsequenceTracker()
+        self._starter_intents: list[dict[str, str]] = [
+            {
+                "id": "frontier_rescue",
+                "label": "Answer the distress call at Iron Gate",
+                "prompt": "Rush to Iron Gate station to rescue stranded settlers.",
+                "location": "Iron Gate Station",
+                "vow": "Protect the refugees of Iron Gate",
+            },
+            {
+                "id": "lost_probe",
+                "label": "Recover the lost probe in the Ghost Belt",
+                "prompt": "Scout the debris field where the research probe vanished.",
+                "location": "Ghost Belt",
+                "vow": "Retrieve the secrets of the Ghost Belt probe",
+            },
+            {
+                "id": "clandestine_meet",
+                "label": "Meet a clandestine contact on the Brimworld",
+                "prompt": "Slip through patrols to reach a Brimworld contact with intel.",
+                "location": "Brimworld Bazaar",
+                "vow": "Uncover the intel hidden in the Brimworld bazaar",
+            },
+        ]
 
     # ------------------------------------------------------------------
     # Tutorial helpers
@@ -96,6 +121,10 @@ class CLIRunner:
         user_text = user_text.strip()
         if not user_text:
             return ""
+
+        onboarding_response = self._handle_onboarding(user_text)
+        if onboarding_response is not None:
+            return onboarding_response
 
         context = {
             "character_created": True,
@@ -136,6 +165,8 @@ class CLIRunner:
             return self._render_assets()
         if name == "vows":
             return self._render_vows()
+        if name == "consequences":
+            return self._render_consequences()
         if name == "timeline":
             return self._render_timeline(arg)
         if name == "oracle":
@@ -163,6 +194,7 @@ class CLIRunner:
                 "!save         - Persist the current character\n"
                 "!load [NAME]  - Load a saved character by name\n"
                 "!tutorial     - Show or control onboarding tips\n"
+                "!consequences - Show outstanding consequences\n"
                 "!help moves   - List move prompts and examples\n"
                 "!help         - Show this list"
             )
@@ -183,6 +215,57 @@ class CLIRunner:
             return f"Recorded: {note}.\n\n{self._tutorial_overlay()}"
         self._update_tutorial_state({"acknowledged_guidance": True})
         return self._tutorial_overlay()
+
+    # ------------------------------------------------------------------
+    # Onboarding
+    # ------------------------------------------------------------------
+    def _handle_onboarding(self, user_text: str) -> str | None:
+        session_state = self.state["session"]
+        if session_state.onboarding_completed:
+            return None
+
+        if session_state.onboarding_step == 0:
+            session_state.onboarding_step = 1
+            options = "\n".join(
+                [f"[{idx+1}] {opt['label']}" for idx, opt in enumerate(self._starter_intents)]
+            )
+            return (
+                "Welcome! Choose a starter intent to set the opening scene:\n"
+                f"{options}\n\n"
+                "Reply with the number or intent id to continue."
+            )
+
+        selection = user_text.lower()
+        choice = None
+        if selection.isdigit():
+            idx = int(selection) - 1
+            if 0 <= idx < len(self._starter_intents):
+                choice = self._starter_intents[idx]
+        if not choice:
+            for opt in self._starter_intents:
+                if opt["id"] == selection:
+                    choice = opt
+                    break
+
+        if not choice:
+            return "Please choose a starter intent by number or id."
+
+        session_state.onboarding_completed = True
+        session_state.starter_intent = choice["prompt"]
+        session_state.starting_vow = choice["vow"]
+        session_state.starting_location = choice["location"]
+
+        self.state["world"].current_location = choice["location"]
+        self.state["narrative"].current_scene = choice["prompt"]
+        character = self.state["character"]
+        character.vows.append(
+            VowState(name=choice["vow"], rank="dangerous", ticks=0, completed=False)
+        )
+
+        return (
+            f"Starting at {choice['location']} with vow '{choice['vow']}'.\n"
+            f"Intent: {choice['prompt']}"
+        )
 
     def _render_status(self) -> str:
         char: Character = self.state["character"]
@@ -227,6 +310,17 @@ class CLIRunner:
         for vow in char.vows:
             track = ProgressTrack(name=vow.name, rank=vow.rank, ticks=vow.ticks, completed=vow.completed)
             lines.append(f"- {vow.name} ({vow.rank}) {track.display}")
+        return "\n".join(lines)
+
+    def _render_consequences(self) -> str:
+        display = get_consequence_display(self.consequence_tracker)
+        if not display:
+            return "No outstanding consequences. Keep exploring!"
+        lines = ["Active Consequences:"]
+        for item in display:
+            lines.append(
+                f"{item['icon']} {item['description']} (severity: {item['severity']}, source: {item['source']})"
+            )
         return "\n".join(lines)
 
     def _command_codex(self, arg: str) -> str:
