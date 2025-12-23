@@ -7,28 +7,24 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Dict
+import json
+import os
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
 
-def check_ollama() -> bool:
-    """Check if Ollama is available."""
-    try:
-        import ollama
-        client = ollama.Client()
-        models = client.list()
-        if models.get("models"):
-            print(f"✓ Ollama is running. Available models: {[m['name'] for m in models['models']]}")
-            return True
-        else:
-            print("⚠ Ollama is running but no models are available.")
-            print("  Run: ollama pull llama3.1")
-            return False
-    except Exception as e:
-        print(f"✗ Ollama is not available: {e}")
-        print("  Please ensure Ollama is installed and running: ollama serve")
-        return False
+def check_llm_provider() -> bool:
+    """Check if the configured LLM provider is available."""
+    from src.narrator import NarratorConfig, check_provider_availability, get_llm_provider_for_config
+
+    config = NarratorConfig()
+    provider = get_llm_provider_for_config(config)
+    available, status_message = check_provider_availability(config, provider)
+
+    print(status_message)
+    return available
 
 
 def check_datasworn() -> bool:
@@ -45,21 +41,147 @@ def check_datasworn() -> bool:
         return False
 
 
+def load_preferences(env_path: Path) -> Dict[str, str]:
+    """Load simple KEY=VALUE preferences from the onboarding file."""
+
+    if not env_path.exists():
+        return {}
+
+    prefs: Dict[str, str] = {}
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        if not line or line.strip().startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        prefs[key.strip()] = value.strip()
+
+    # Apply to environment so downstream code can reuse
+    for key, value in prefs.items():
+        os.environ.setdefault(key, value)
+
+    return prefs
+
+
+def onboarding_wizard(env_path: Path) -> Dict[str, str]:
+    """Interactive onboarding to capture user preferences.
+
+    The wizard guides the player through selecting an LLM provider/model and
+    audio preferences, then writes them to a simple ``.env`` style file so
+    both the CLI and UI can reuse the configuration on the next launch.
+    """
+
+    print("\n[Onboarding Wizard]\n")
+    provider = input("Choose provider (ollama/openai/none) [ollama]: ").strip() or "ollama"
+    if provider not in {"ollama", "openai", "none"}:
+        print("Unrecognized provider, defaulting to ollama")
+        provider = "ollama"
+
+    model = input("Preferred model (e.g., llama3.1, gpt-4o) [llama3.1]: ").strip() or "llama3.1"
+    voice = input("Enable voice features? (y/n) [n]: ").strip().lower() or "n"
+    enable_voice = voice.startswith("y")
+
+    env_values = {
+        "PROVIDER": provider,
+        "MODEL": model,
+        "VOICE_ENABLED": "true" if enable_voice else "false",
+    }
+
+    env_lines = [f"{key}={value}\n" for key, value in env_values.items()]
+    env_path.write_text("".join(env_lines), encoding="utf-8")
+
+    print(f"Saved onboarding preferences to {env_path}\n")
+    return env_values
+
+
+def run_demo_session():
+    """Load a ready-to-play demo campaign and show a sample move."""
+
+    from src.game_state import create_demo_state
+    from src.rules_engine import action_roll
+
+    state = create_demo_state()
+    print("\n[Demo Campaign Loaded]")
+    print(f"Ship: {state.world.current_location} | Character: {state.character.name}\n")
+
+    print("Running a sample Action Roll (Edge +1 vs. base difficulty)...")
+    roll = action_roll(stat=state.character.stats.edge, adds=1)
+    print(roll)
+    print("\nUse --cli to keep playing, or launch the UI to explore the full experience.")
+
+
 def run_cli():
     """Run the game in CLI mode for testing."""
     print("\n" + "=" * 60)
     print("  STARFORGED AI GAME MASTER - CLI MODE")
     print("=" * 60 + "\n")
+    from src.cli_runner import bootstrap_cli
 
-    from src.game_state import create_initial_state, Character
+    name = input("Enter your character's name: ").strip() or "Test Pilot"
+    cli = bootstrap_cli(name)
+
+    print(
+        "\nCommands: !status, !vows, !help.  Type actions and the rules engine will\n"
+        "pick an Ironsworn move, roll it, and update your progress.\n",
+    )
+
+    from src.auto_save import AutoSaveSystem
     from src.narrator import generate_narrative, NarratorConfig
 
-    # Create a test character
-    name = input("Enter your character's name: ").strip() or "Test Pilot"
-    print(f"\nWelcome, {name}. Your journey through the Forge begins...\n")
+    env_file = Path(__file__).parent / ".env"
+    prefs = load_preferences(env_file)
+    if prefs:
+        print("Loaded preferences: " + json.dumps(prefs))
 
-    # Simple game loop
+    auto_save = AutoSaveSystem()
+    recovery_info = auto_save.get_recovery_info()
+    if recovery_info:
+        print(f"\n⚠ {recovery_info}")
+
+    # Load the latest save if available and the player wants to resume
+    latest_saves = auto_save.list_saves()
+    resume_state: dict | None = None
+    if latest_saves:
+        latest_slot = latest_saves[0].slot_name
+        choice = input(f"Resume from latest save '{latest_slot}'? (y/N): ").strip().lower()
+        if choice.startswith("y"):
+            resume_state = auto_save.load_game(latest_slot)
+
+    if resume_state:
+        state = resume_state
+        name = state.get("character", {}).get("name", "Traveler")
+        print(f"\nWelcome back, {name}. Resuming your journey...\n")
+    else:
+        name = input("Enter your character's name: ").strip() or "Test Pilot"
+        state = {
+            "character": {"name": name},
+            "world": {"current_location": "The Forge"},
+            "session": {"turn_count": 0},
+            "director": {"tension_level": 0.25, "last_pacing": "standard"},
+        }
+        print(f"\nWelcome, {name}. Your journey through the Forge begins...\n")
+
     config = NarratorConfig()
+    auto_save.mark_session_start()
+
+    def print_status(game_state: dict):
+        world = game_state.get("world", {})
+        session = game_state.get("session", {})
+        director = game_state.get("director", {})
+        tension = director.get("tension_level", 0.0) or 0.0
+        try:
+            tension = float(tension)
+        except (TypeError, ValueError):
+            tension = 0.0
+
+        print("\n[Status]")
+        print(f"Location: {world.get('current_location', 'Unknown')}")
+        print(f"Turns: {session.get('turn_count', 0)}")
+        print(
+            f"Tension: {tension:.2f} | "
+            f"Pacing: {director.get('last_pacing', 'standard')}"
+        )
+
     while True:
         try:
             action = input("\n> What do you do? ").strip()
@@ -68,15 +190,28 @@ def run_cli():
             if action.lower() in ["quit", "exit", "q"]:
                 print("\nUntil next time, Ironsworn.")
                 break
+            if action.lower() in ["!status", "status"]:
+                print_status(state)
+                continue
 
+            response = cli.handle_input(action)
+            if response:
+                print(f"\n{response}\n")
             print("\n[Generating narrative...]\n")
             narrative = generate_narrative(
                 player_input=action,
                 character_name=name,
-                location="the Forge",
+                location=state.get("world", {}).get("current_location", "the Forge"),
                 config=config,
             )
             print(narrative)
+            state.setdefault("session", {})
+            state["session"]["turn_count"] = state["session"].get("turn_count", 0) + 1
+
+            saved = auto_save.auto_save(state)
+            if saved:
+                print(f"\n💾 Auto-saved ({saved.slot_name} @ turn {saved.scene_number})")
+
             print("\n" + "-" * 40)
 
         except KeyboardInterrupt:
@@ -121,6 +256,8 @@ Examples:
     )
     parser.add_argument("--cli", action="store_true", help="Run in CLI mode")
     parser.add_argument("--ui", action="store_true", help="Run web UI (default)")
+    parser.add_argument("--demo", action="store_true", help="Load a ready-to-play demo campaign")
+    parser.add_argument("--onboard", action="store_true", help="Run the onboarding wizard and save preferences")
     parser.add_argument("--test", action="store_true", help="Run tests")
     parser.add_argument("--check", action="store_true", help="Check system requirements")
     parser.add_argument("--share", action="store_true", help="Create public Gradio share link")
@@ -133,12 +270,20 @@ Examples:
 
     if args.check:
         print("\n[Checking system requirements...]\n")
-        ollama_ok = check_ollama()
+        provider_ok = check_llm_provider()
         datasworn_ok = check_datasworn()
-        if ollama_ok and datasworn_ok:
+        if provider_ok and datasworn_ok:
             print("\n✓ All systems ready!")
         else:
             print("\n⚠ Some requirements are missing.")
+        return
+
+    if args.onboard:
+        env_file = Path(__file__).parent / ".env"
+        onboarding_wizard(env_file)
+
+    if args.demo:
+        run_demo_session()
         return
 
     if args.test:
@@ -149,10 +294,10 @@ Examples:
         print("\n⚠ Continuing without Datasworn data...")
 
     if args.cli:
-        check_ollama()
+        check_llm_provider()
         run_cli()
     else:
-        check_ollama()
+        check_llm_provider()
         run_ui(share=args.share, port=args.port)
 
 

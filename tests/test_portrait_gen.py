@@ -24,6 +24,7 @@ def test_portrait_prompts():
                 "A rugged spacer",
                 style=PortraitStyle.PIXEL_ART,
                 expression=PortraitExpression.ANGRY,
+                conditions=["scarred", "tired"],
                 conditions=["scarred", "tired"]
             )
         )
@@ -39,6 +40,7 @@ def test_portrait_prompts():
                 "Kaelen",
                 "A rugged spacer",
                 style=PortraitStyle.OIL_PAINTING,
+                expression=PortraitExpression.WEARY,
                 expression=PortraitExpression.WEARY
             )
         )

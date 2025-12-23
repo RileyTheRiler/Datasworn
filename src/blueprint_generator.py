@@ -477,5 +477,22 @@ def extract_ship_metadata(game_state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def generate_cache_key(game_state: dict[str, Any]) -> str:
+    """
+    Generate a unique cache key for the current tactical situation.
+    """
+    world_state = game_state.get("world", {})
+    if not isinstance(world_state, dict) and hasattr(world_state, "dict"):
+        world_state = world_state.dict()
+        
+    location = world_state.get("current_location", "unknown")
+    npcs = world_state.get("npcs", [])
+    
+    # Hash of location and NPC dispositions
+    npc_fingerprint = "|".join([f"{n.get('name')}:{n.get('disposition')}" for n in npcs])
+    
+    import hashlib
+    combined = f"{location}_{npc_fingerprint}"
+    return f"tactical_{hashlib.md5(combined.encode()).hexdigest()}"
 # Remove legacy duplicate definitions (kept earlier versions with grid size support)
 

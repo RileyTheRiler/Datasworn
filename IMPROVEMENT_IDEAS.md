@@ -442,6 +442,62 @@ A comprehensive list of potential improvements for the Starforged AI Game Master
 
 ---
 
+## 11. Content Safety & Tone Controls
+
+### 11.1 Safety Layering & Filters
+**Problem**: Players need confidence the AI will avoid unwanted content without losing creativity.
+**Implementation**:
+- Add configurable safety policies (e.g., lines/veils) that inject constraints into prompts and filters
+- Implement runtime content moderation on LLM responses with automatic redaction/rewrites
+- Create safety incident logging with player review/appeal options
+- Add per-session "tone contract" that summarizes allowed/forbidden themes
+
+### 11.2 Consent & Boundaries Flow
+**Problem**: Session safety needs quick, lightweight controls.
+**Implementation**:
+- Add "pause/change topic" commands that steer narration away immediately
+- Implement an X-card equivalent in UI/CLI that rolls back the last scene and re-generates safely
+- Create pre-session checklist for comfort levels and taboo topics
+- Add mid-session check-ins that prompt for adjustments when risky themes appear
+
+### 11.3 Youth/Family Mode
+**Problem**: Younger groups may want a filtered experience.
+**Implementation**:
+- Add family-friendly preset with vocabulary/violence filters and simplified stakes
+- Implement "storybook" narration style option with lighter tone
+- Create curated oracle subsets appropriate for younger players
+- Add parental controls to lock content settings
+
+---
+
+## 12. Modding & Extensibility
+
+### 12.1 Plugin Architecture
+**Problem**: Custom rules/content require code edits.
+**Implementation**:
+- Add plugin hooks for moves, oracles, and UI panels loaded from a `/plugins` directory
+- Implement sandboxing/validation for third-party plugins
+- Create plugin manifest format describing capabilities and permissions
+- Add hot-reload support for rapid iteration during playtesting
+
+### 12.2 Custom Prompt Packs
+**Problem**: Different playgroups need tailored narrative styles.
+**Implementation**:
+- Add prompt pack loader that swaps narrative voice, pacing defaults, and safety rules
+- Implement prompt pack marketplace browser with ratings and tags
+- Create CLI/UI selection flow with previews of example outputs
+- Add compatibility checks to ensure prompt packs match installed assets and rulesets
+
+### 12.3 Data Import Pipelines
+**Problem**: Players want to bring external data (maps, NPCs, sectors) into campaigns.
+**Implementation**:
+- Add CSV/JSON importers with schema validation and mapping guides
+- Implement visual mapping wizard for locations and NPCs in the UI
+- Create deduplication/merge tools to avoid double entries when re-importing
+- Add provenance tracking so imported data can be rolled back or updated safely
+
+---
+
 ## Implementation Priority Matrix
 
 | Priority | Category | Items |

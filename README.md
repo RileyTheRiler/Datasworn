@@ -46,6 +46,9 @@ pip install -r requirements.txt
 - Python 3.10+
 - **Either** Ollama (local) **or** a Gemini API key
 
+> **Note on Gemini SDK:**
+> The legacy `google-generativeai` package now emits a deprecation warning during the test suite. Google recommends migrating to `google.genai`; this repository will switch once downstream tooling finishes validating the new SDK. In the meantime the warning is harmless and tests still pass.
+
 ## LLM Configuration
 
 ### Option 1: Ollama (Local, Free)
@@ -95,10 +98,25 @@ Your API key should **ONLY** be stored in the `.env` file, which is already in `
 # CLI Mode (recommended for testing)
 python main.py --cli
 
+# Run the onboarding wizard and save defaults
+python main.py --onboard
+
+# Launch a ready-to-play demo session
+python main.py --demo
+
+# Resume with web UI (default)
 # Web UI
 python main.py
 ```
 
+Running `--onboard` saves your LLM provider, model, and audio preferences so future `--cli` sessions start with your defaults. If an autosave is found, the CLI will offer a one-step resume before you begin a new scene, keeping pacing and vows intact.
+
+During CLI play, the Director and autosave systems stay in sync: `!status` reports the current tension/pacing heartbeat, and each turn is automatically saved so you can safely exit and resume later without losing your rhythm.
+
+### Test warnings to expect
+- The legacy `google-generativeai` SDK currently emits a deprecation warning; migration to `google.genai` is planned once tooling stabilizes.
+- A Pydantic v2 notice surfaces in `src/server.py` when invoking director psyche APIs; the warning is harmless and slated for cleanup during the SDK migration.
+- Some integration paths may log a coroutine-not-awaited runtime warning when exercising hazard generation fixtures; current behavior does not impact results and will be addressed with upcoming async refactors.
 ### Gameplay improvement ideas
 Looking for ways to tune pacing, onboarding, and move clarity? See [Gameplay Improvement Recommendations](docs/gameplay_improvements.md) for actionable tweaks to sharpen session flow.
 
@@ -109,6 +127,7 @@ Looking for ways to tune pacing, onboarding, and move clarity? See [Gameplay Imp
 | `!vows` | View active vows with progress |
 | `!save` | Save current game |
 | `!load` | Load saved game |
+| `resume` | Automatically offered if autosaves are present |
 
 ## Architecture
 
