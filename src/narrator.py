@@ -1,6 +1,6 @@
 """
 Narrator System for Starforged AI Game Master.
-Generates narrative prose using Ollama for local LLM inference.
+Generates narrative prose using configurable LLM providers.
 """
 
 from __future__ import annotations
@@ -8,6 +8,9 @@ from dataclasses import dataclass, field
 from typing import Generator
 import os
 import ollama
+from dataclasses import dataclass
+from typing import Generator, Optional
+from src.llm_provider import get_llm_provider, LLMProvider
 from src.psych_profile import PsychologicalProfile, PsychologicalEngine
 from src.style_profile import StyleProfile, load_style_profile
 from src.guardrails import GuardrailFactStore, build_guardrail_prompt, sanitize_and_verify
@@ -290,94 +293,22 @@ class NarratorConfig:
 
 
 # ============================================================================
-# Ollama Client
+# LLM Provider Helpers
 # ============================================================================
 
-@dataclass
-class OllamaClient:
-    """Wrapper for Ollama API."""
-    model: str = "llama3.1"
-    _client: ollama.Client = field(default_factory=ollama.Client, repr=False)
-
-    def generate(
-        self,
-        prompt: str,
-        system: str = SYSTEM_PROMPT,
-        config: NarratorConfig | None = None,
-    ) -> Generator[str, None, None]:
-        """
-        Generate text with streaming.
-
-        Args:
-            prompt: The user prompt.
-            system: System prompt for context.
-            config: Generation configuration.
-
-        Yields:
-            Text chunks as they're generated.
-        """
-        config = config or NarratorConfig()
-
-        try:
-            stream = self._client.chat(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt},
-                ],
-                stream=True,
-                options={
-                    "temperature": config.temperature,
-                    "top_p": config.top_p,
-                    "top_k": config.top_k,
-                    "repeat_penalty": config.repeat_penalty,
-                    "num_predict": config.max_tokens,
-                },
-            )
-
-            for chunk in stream:
-                if chunk.get("message", {}).get("content"):
-                    yield chunk["message"]["content"]
-
-        except ollama.ResponseError as e:
-            yield f"[Error communicating with Ollama: {e}]"
-        except Exception as e:
-            yield f"[Ollama error: {e}]"
-
-    def generate_sync(
-        self,
-        prompt: str,
-        system: str = SYSTEM_PROMPT,
-        config: NarratorConfig | None = None,
-    ) -> str:
-        """
-        Generate text synchronously (non-streaming).
-
-        Returns:
-            Complete generated text.
-        """
-        return "".join(self.generate(prompt, system, config))
-
-    def get_model_info(self) -> dict:
-        """Get information about the current model."""
-        try:
-            return self._client.show(self.model)
-        except Exception as e:
-            return {"error": str(e)}
-
-    def is_available(self) -> bool:
-        """Check if Ollama is available and model is loaded."""
-        try:
-            models = self._client.list()
-            model_names = [m.get("name", "").split(":")[0] for m in models.get("models", [])]
-            return self.model.split(":")[0] in model_names
-        except Exception:
-            return False
+def get_llm_provider_for_config(config: NarratorConfig) -> LLMProvider:
+    """Map NarratorConfig to an LLMProvider instance."""
+    provider_type = (config.backend or "gemini").lower()
+    return get_llm_provider(provider_type=provider_type, model=config.model)
 
 
-# ============================================================================
-# Gemini Client
-# ============================================================================
+def check_provider_availability(
+    config: NarratorConfig,
+    provider: LLMProvider | None = None,
+) -> tuple[bool, str]:
+    """Check provider availability and return a user-facing status message."""
+    provider = provider or get_llm_provider_for_config(config)
+    available = provider.is_available()
 
 @dataclass
 class GeminiClient:
@@ -554,6 +485,17 @@ def get_llm_client(config: NarratorConfig = None):
         return GeminiClient(model=config.model)
     if config.backend == "ollama":
         return OllamaClient(model=config.model)
+    backend_hint = ""
+    if config.backend == "ollama":
+        backend_hint = "Ensure Ollama is installed, running, and the model is pulled."
+    elif config.backend == "gemini":
+        backend_hint = "Set GEMINI_API_KEY and install google-generativeai."
+
+    status = f"{provider.name} is available." if available else (
+        f"[{provider.name} unavailable. {backend_hint or 'Check configuration.'}]"
+    )
+
+    return available, status
 
     raise ValueError(
         f"Unsupported LLM provider '{config.backend}'. Set LLM_PROVIDER to 'gemini' or 'ollama'."
@@ -760,17 +702,30 @@ def generate_narrative(
         guardrail_rules=guardrail_store.guardrail_rules(),
     )
 
-    client = get_llm_client(config)
+    provider = get_llm_provider_for_config(config)
+    available, status_message = check_provider_availability(config, provider)
 
-    # Check if Client is available
-    if not client.is_available():
+    if not available:
         return (
-            f"[{config.backend} model '{config.model}' is not available. "
-            f"Check configuration.]\n\n"
+            f"{status_message}\n\n"
             f"*Placeholder narrative for: {player_input}*"
         )
 
-    narrative = client.generate_sync(prompt, config=config)
+    response = provider.chat(
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        stream=False,
+    )
+
+    if isinstance(response, str):
+        narrative = response
+    else:
+        narrative = "".join(response)
+
     return sanitize_and_verify(narrative, guardrail_store)
 
 
@@ -815,11 +770,26 @@ def generate_narrative_stream(
         guardrail_rules=guardrail_store.guardrail_rules(),
     )
 
-    client = get_llm_client(config)
+    provider = get_llm_provider_for_config(config)
+    available, status_message = check_provider_availability(config, provider)
 
-    if not client.is_available():
-        yield f"[{config.backend} model '{config.model}' is not available.]"
+    if not available:
+        yield status_message
         return
 
-    raw_text = "".join(client.generate(prompt, config=config))
+    response = provider.chat(
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        stream=True,
+    )
+
+    if isinstance(response, str):
+        yield sanitize_and_verify(response, guardrail_store)
+        return
+
+    raw_text = "".join(response)
     yield sanitize_and_verify(raw_text, guardrail_store)

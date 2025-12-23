@@ -560,8 +560,8 @@ def narrator_node(state: GameState) -> dict[str, Any]:
     - Dynamic few-shot examples matching current tone
     """
     from src.narrator import (
-        build_narrative_prompt, OllamaClient, NarratorConfig, SYSTEM_PROMPT,
-        get_examples_for_tone, validate_narrative
+        build_narrative_prompt, NarratorConfig, SYSTEM_PROMPT,
+        get_examples_for_tone, validate_narrative,
     )
     from src.director import DirectorPlan, Pacing, Tone
     from src.memory import MemoryManager, ActiveContext, SessionBuffer, CampaignSummary
@@ -1404,20 +1404,31 @@ def narrator_node(state: GameState) -> dict[str, Any]:
         enhanced_system += f"\n\n{enhancement_context}"
 
     # Generate narrative with configurable backend
-    from src.narrator import get_llm_client
+    from src.narrator import check_provider_availability, get_llm_provider_for_config
+
     config = NarratorConfig()
-    client = get_llm_client(config)
-    
-    if client.is_available():
-        narrative = client.generate_sync(prompt, system=enhanced_system, config=config)
-        
+    provider = get_llm_provider_for_config(config)
+    available, status_message = check_provider_availability(config, provider)
+
+    if available:
+        response = provider.chat(
+            messages=[
+                {"role": "system", "content": enhanced_system},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            stream=False,
+        )
+        narrative = response if isinstance(response, str) else "".join(response)
+
         # Validate and log issues (non-blocking)
         is_valid, issues = validate_narrative(narrative)
         if not is_valid:
             import logging
             logging.getLogger("narrator").warning(f"Narrative validation issues: {issues}")
     else:
-        narrative = f"[LLM not available]\\n\\n*Placeholder for: {player_input}*"
+        narrative = f"{status_message}\n\n*Placeholder for: {player_input}*"
 
     # Update memory with new exchange
     updated_memory = MemoryStateModel(
