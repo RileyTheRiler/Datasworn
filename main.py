@@ -115,6 +115,15 @@ def run_cli():
     print("\n" + "=" * 60)
     print("  STARFORGED AI GAME MASTER - CLI MODE")
     print("=" * 60 + "\n")
+    from src.cli_runner import bootstrap_cli
+
+    name = input("Enter your character's name: ").strip() or "Test Pilot"
+    cli = bootstrap_cli(name)
+
+    print(
+        "\nCommands: !status, !vows, !help.  Type actions and the rules engine will\n"
+        "pick an Ironsworn move, roll it, and update your progress.\n",
+    )
 
     from src.auto_save import AutoSaveSystem
     from src.narrator import generate_narrative, NarratorConfig
@@ -185,6 +194,9 @@ def run_cli():
                 print_status(state)
                 continue
 
+            response = cli.handle_input(action)
+            if response:
+                print(f"\n{response}\n")
             print("\n[Generating narrative...]\n")
             narrative = generate_narrative(
                 player_input=action,
