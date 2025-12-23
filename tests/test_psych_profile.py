@@ -147,16 +147,39 @@ def test_move_modifiers():
 def test_hallucination_trigger():
     profile = PsychologicalProfile()
     engine = PsychologicalEngine()
-    
+
     # Sanity >= 0.3 = No hallucination
     profile.sanity = 0.5
     assert engine.generate_hallucination(profile) is None
-    
+
     # Sanity < 0.3 = Hallucination
     profile.sanity = 0.2
     hallucination = engine.generate_hallucination(profile)
     assert hallucination is not None
     assert len(hallucination) > 10  # It's a sentence
+
+    # Policy can reject low-confidence hallucinations
+    from src.ai_tuning import HallucinationPolicy
+
+    profile.sanity = 0.1
+    strict_policy = HallucinationPolicy(reject_below_confidence=0.9)
+    assert (
+        engine.generate_hallucination(
+            profile,
+            policy=strict_policy,
+            hallucination_confidence=0.5,
+        )
+        is None
+    )
+
+    # Director approval and confidence can allow one through
+    approved = engine.generate_hallucination(
+        profile,
+        policy=strict_policy,
+        hallucination_confidence=0.95,
+        director_approved=True,
+    )
+    assert approved is not None
 
 def test_evolution_heuristic():
     profile = PsychologicalProfile()
