@@ -12,6 +12,11 @@ from src.llm_provider import LLMProvider, get_llm_provider
 from src.psych_profile import PsychologicalProfile, PsychologicalEngine
 from src.style_profile import StyleProfile, load_style_profile
 from src.guardrails import GuardrailFactStore, build_guardrail_prompt, sanitize_and_verify
+from src.logging_config import get_logger
+from src.config import config
+
+# Module logger
+logger = get_logger("narrator")
 
 
 # ============================================================================
