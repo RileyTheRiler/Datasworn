@@ -19,9 +19,18 @@ def check_llm_provider() -> bool:
     """Check if the configured LLM provider is available."""
     from src.narrator import NarratorConfig, check_provider_availability, get_llm_provider_for_config
 
-    config = NarratorConfig()
-    provider = get_llm_provider_for_config(config)
-    available, status_message = check_provider_availability(config, provider)
+    try:
+        config = NarratorConfig()
+    except ValueError as exc:
+        print(f"✗ {exc}")
+        return False
+
+    try:
+        provider = get_llm_provider_for_config(config)
+        available, status_message = check_provider_availability(config, provider)
+    except Exception as exc:  # pragma: no cover - defensive guard for onboarding
+        print(f"✗ Unable to initialize provider: {exc}")
+        return False
 
     print(status_message)
     return available
@@ -75,31 +84,50 @@ def onboarding_wizard(env_path: Path) -> Dict[str, str]:
     allowed_providers = {"ollama", "gemini"}
     default_provider = os.environ.get("LLM_PROVIDER", "ollama").lower()
 
-    provider_prompt = f"Choose provider (ollama/gemini) [{default_provider}]: "
-    provider = input(provider_prompt).strip().lower() or default_provider
-    if provider not in allowed_providers:
-        print("Unsupported provider. Please choose 'ollama' or 'gemini'. Defaulting to ollama.")
-        provider = "ollama"
+    while True:
+        provider_prompt = f"Choose provider (ollama/gemini) [{default_provider}]: "
+        provider = input(provider_prompt).strip().lower() or default_provider
+        if provider not in allowed_providers:
+            print("✗ Unsupported provider. Please choose 'ollama' or 'gemini'.")
+            continue
 
-    default_model = os.environ.get("GEMINI_MODEL" if provider == "gemini" else "OLLAMA_MODEL", "")
-    default_model = default_model or ("gemini-2.0-flash" if provider == "gemini" else "llama3.1")
-    model_prompt = "Gemini model" if provider == "gemini" else "Ollama model"
-    model = input(f"Preferred {model_prompt} [{default_model}]: ").strip() or default_model
-    voice = input("Enable voice features? (y/n) [n]: ").strip().lower() or "n"
-    enable_voice = voice.startswith("y")
+        default_model = os.environ.get("GEMINI_MODEL" if provider == "gemini" else "OLLAMA_MODEL", "")
+        default_model = default_model or ("gemini-2.0-flash" if provider == "gemini" else "llama3.1")
+        model_prompt = "Gemini model" if provider == "gemini" else "Ollama model"
+        model = input(f"Preferred {model_prompt} [{default_model}]: ").strip() or default_model
+        voice = input("Enable voice features? (y/n) [n]: ").strip().lower() or "n"
+        enable_voice = voice.startswith("y")
 
-    env_values = {"LLM_PROVIDER": provider, "VOICE_ENABLED": "true" if enable_voice else "false"}
+        from src.narrator import NarratorConfig, check_provider_availability, get_llm_provider_for_config
 
-    if provider == "gemini":
-        env_values["GEMINI_MODEL"] = model
-    else:
-        env_values["OLLAMA_MODEL"] = model
+        try:
+            config = NarratorConfig(backend=provider, model=model)
+        except ValueError as exc:
+            print(f"✗ {exc}")
+            continue
 
-    env_lines = [f"{key}={value}\n" for key, value in env_values.items()]
-    env_path.write_text("".join(env_lines), encoding="utf-8")
+        provider_instance = get_llm_provider_for_config(config)
+        available, status_message = check_provider_availability(config, provider_instance)
+        print(status_message)
 
-    print(f"Saved onboarding preferences to {env_path}\n")
-    return env_values
+        if not available:
+            retry = input("Provider check failed. Try again? (y/N): ").strip().lower()
+            if retry.startswith("y"):
+                continue
+            print("⚠ Preferences were not saved because the provider is unavailable.")
+            return {}
+
+        env_values = {"LLM_PROVIDER": config.backend, "VOICE_ENABLED": "true" if enable_voice else "false"}
+        if config.backend == "gemini":
+            env_values["GEMINI_MODEL"] = config.model
+        else:
+            env_values["OLLAMA_MODEL"] = config.model
+
+        env_lines = [f"{key}={value}\n" for key, value in env_values.items()]
+        env_path.write_text("".join(env_lines), encoding="utf-8")
+
+        print(f"Saved onboarding preferences to {env_path}\n")
+        return env_values
 
 
 def run_demo_session():
@@ -273,6 +301,11 @@ Examples:
 
     args = parser.parse_args()
 
+    env_file = Path(__file__).parent / ".env"
+    prefs = load_preferences(env_file)
+    if prefs:
+        print("Loaded preferences: " + json.dumps(prefs))
+
     print("\n🚀 Starforged AI Game Master")
     print("-" * 40)
 
@@ -287,7 +320,6 @@ Examples:
         return
 
     if args.onboard:
-        env_file = Path(__file__).parent / ".env"
         onboarding_wizard(env_file)
 
     if args.demo:
@@ -302,10 +334,16 @@ Examples:
         print("\n⚠ Continuing without Datasworn data...")
 
     if args.cli:
-        check_llm_provider()
+        provider_ok = check_llm_provider()
+        if not provider_ok:
+            print("\n✗ LLM provider unavailable. Run the onboarding wizard to reconfigure.")
+            return
         run_cli()
     else:
-        check_llm_provider()
+        provider_ok = check_llm_provider()
+        if not provider_ok:
+            print("\n✗ LLM provider unavailable. Run the onboarding wizard to reconfigure.")
+            return
         run_ui(share=args.share, port=args.port)
 
 
