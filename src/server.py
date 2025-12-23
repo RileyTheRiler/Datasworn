@@ -42,7 +42,8 @@ from src.mystery_generator import MysteryConfig
 from src.auto_save import AutoSaveSystem
 from src.photo_album import PhotoAlbumManager
 from src.psychology_api_models import *
-from src.additional_api import register_starmap_routes, register_rumor_routes, register_audio_routes  # Added import
+from src.additional_api import register_starmap_routes, register_rumor_routes, register_audio_routes
+from src.ux_api import register_ux_routes
 
 app = FastAPI(title="Starforged AI GM")
 
@@ -68,6 +69,7 @@ app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 register_starmap_routes(app, SESSIONS)
 register_rumor_routes(app, SESSIONS)
 register_audio_routes(app, SESSIONS)
+register_ux_routes(app, SESSIONS)
 
 
 # Global save system instance
