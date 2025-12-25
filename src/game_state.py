@@ -122,7 +122,6 @@ class Character(BaseModel):
     momentum: MomentumState = Field(default_factory=MomentumState)
     assets: list[AssetState] = Field(default_factory=list)
     vows: list[VowState] = Field(default_factory=list)
-    experience: int = 0
     legacy_tracks: dict[str, int] = Field(default_factory=lambda: {
         "quests": 0,
         "bonds": 0,

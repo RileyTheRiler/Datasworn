@@ -218,7 +218,7 @@ def main():
         requests.post(f"{BASE_URL}/api/session/start", 
                      json={"character_name": "Test Pilot"}, 
                      timeout=5)
-    except:
+    except Exception:
         pass
         
     tests = [

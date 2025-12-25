@@ -15,6 +15,8 @@ const API_URL = 'http://localhost:8000/api';
 
 export const MusicProvider = ({ children }) => {
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
     const [currentMood, setCurrentMood] = useState('theme');
     const [playlist, setPlaylist] = useState({
         theme: [],
@@ -49,13 +51,13 @@ export const MusicProvider = ({ children }) => {
             .catch(err => console.error("Failed to load music manifest:", err));
     }, []);
 
-    // Save volume
+    // Save volume and handle mute
     useEffect(() => {
         localStorage.setItem('musicVolume', volume.toString());
         if (soundRef.current) {
-            soundRef.current.volume(volume);
+            soundRef.current.volume(isMuted ? 0 : volume);
         }
-    }, [volume]);
+    }, [volume, isMuted]);
 
     // Auto-play theme music on load (fire once)
     useEffect(() => {
@@ -116,7 +118,7 @@ export const MusicProvider = ({ children }) => {
         const sound = new Howl({
             src: [fullSrc],
             html5: true,
-            volume: volume,
+            volume: isMuted ? 0 : volume,
             onend: () => {
                 playNextTrack(currentMood);
             },
@@ -135,6 +137,7 @@ export const MusicProvider = ({ children }) => {
         setCurrentTrack(src);
         sound.play();
         setIsPlaying(true);
+        setIsPaused(false);
     };
 
     const stopMusic = () => {
@@ -159,8 +162,8 @@ export const MusicProvider = ({ children }) => {
     const resumeMusic = () => {
         if (soundRef.current) {
             soundRef.current.play();
-            soundRef.current.fade(0, volume, 500);
             setIsPlaying(true);
+            setIsPaused(false);
         } else {
             playNextTrack(currentMood);
         }
@@ -194,14 +197,41 @@ export const MusicProvider = ({ children }) => {
         setCurrentTrack(null);
     };
 
+    const togglePause = () => {
+        if (soundRef.current) {
+            // Check Howler's actual playing state, not just our state
+            const isCurrentlyPlaying = soundRef.current.playing();
+
+            if (isCurrentlyPlaying) {
+                // Currently playing, so pause it
+                soundRef.current.pause();
+                setIsPaused(true);
+                setIsPlaying(false);
+            } else {
+                // Currently paused, so resume it
+                soundRef.current.play();
+                setIsPaused(false);
+                setIsPlaying(true);
+            }
+        }
+    };
+
+    const toggleMute = () => {
+        setIsMuted(!isMuted);
+    };
+
     const value = {
         isPlaying,
+        isPaused,
+        isMuted,
         currentMood,
         currentTrack,
         volume,
         playlist,
         playMood,
         togglePlay,
+        togglePause,
+        toggleMute,
         setVolume,
         skipTrack,
         stopAll

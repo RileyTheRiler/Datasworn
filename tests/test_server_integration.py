@@ -14,6 +14,10 @@ class TestServerIntegration(unittest.TestCase):
         self.client = TestClient(app)
         # Manually seed a session
         SESSIONS["default"] = create_initial_state("TestChar")
+    
+    def tearDown(self):
+        # Clean up to prevent test pollution
+        SESSIONS.clear()
         
     def test_get_psyche(self):
         response = self.client.get("/api/psyche/default")

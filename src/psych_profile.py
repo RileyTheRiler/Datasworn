@@ -279,7 +279,7 @@ class PsychologicalEngine:
         self.llm_client = llm_client  # Optional for LLM-based updates
         try:
             self.archetype_config = ArchetypeConfigLoader()
-        except:
+        except Exception:
             self.archetype_config = None
 
     def update_stress(self, profile: PsychologicalProfile, amount: float):

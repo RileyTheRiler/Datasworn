@@ -52,9 +52,13 @@ VOICE_PROFILES = {
         "voice_id": "xctasy8XvGp2cVO9HL9k",
         "description": "Clear, millennial female voice"
     },
+    "narrator_hope": {
+        "voice_id": "iCrDUkL56s3C8sCRl7wb",
+        "description": "Hope - Warm, engaging American female voice"
+    },
     "default": {
-        "voice_id": "pGAwIQNN9UjOkKxjAyGQ",
-        "description": "Default narrator voice (Amelia)"
+        "voice_id": "iCrDUkL56s3C8sCRl7wb",
+        "description": "Default narrator voice (Hope)"
     }
 }
 
@@ -94,28 +98,41 @@ class VoiceGenerator:
         self,
         text: str,
         voice_profile: str = "default",
-        use_cache: bool = True
+        use_cache: bool = True,
+        voice_id: Optional[str] = None,
+        voice_settings: Optional[dict] = None
     ) -> Optional[str]:
         """
-        Generate speech audio for text.
+        Generate speech from text using the specified voice profile or direct IDs.
         
         Args:
-            text: Text to synthesize
-            voice_profile: Voice profile key from VOICE_PROFILES
+            text: Text to speak
+            voice_profile: Key from VOICE_PROFILES
             use_cache: Whether to use cached audio if available
-        
+            voice_id: Optional direct ElevenLabs voice ID (overrides profile)
+            voice_settings: Optional settings dict (stability, similarity_boost)
+            
         Returns:
-            Path to audio file (relative to assets) or None if failed
+            URL/path to generated audio file or None if failed
         """
         if not self.api_available:
             return None
-        
-        # Get voice ID
-        profile = VOICE_PROFILES.get(voice_profile, VOICE_PROFILES["default"])
-        voice_id = profile["voice_id"]
+        if not text:
+            return None
+            
+        # Determine voice configuration
+        if voice_id:
+            # Direct override
+            target_voice_id = voice_id
+            target_settings = voice_settings or {"stability": 0.5, "similarity_boost": 0.75}
+        else:
+            # Use profile lookup
+            profile = VOICE_PROFILES.get(voice_profile, VOICE_PROFILES["default"])
+            target_voice_id = profile["voice_id"]
+            target_settings = profile.get("settings", {"stability": 0.5, "similarity_boost": 0.75})
         
         # Check cache
-        cache_key = self._get_cache_key(text, voice_id)
+        cache_key = self._get_cache_key(text, target_voice_id, target_settings)
         if use_cache:
             cached_path = self._get_cached_path(cache_key)
             if cached_path:
@@ -124,7 +141,7 @@ class VoiceGenerator:
         
         # Generate new audio
         try:
-            audio_path = self._generate_with_elevenlabs(text, voice_id, cache_key)
+            audio_path = self._generate_with_elevenlabs(text, target_voice_id, target_settings, cache_key)
             if audio_path:
                 return f"/assets/voice_cache/{audio_path.name}"
         except Exception as e:
@@ -134,10 +151,11 @@ class VoiceGenerator:
         return None
     
     def _generate_with_elevenlabs(
-        self,
-        text: str,
-        voice_id: str,
-        cache_key: str
+        self, 
+        text: str, 
+        voice_id: str, 
+        voice_settings: Optional[dict] = None,
+        cache_key: Optional[str] = None
     ) -> Optional[Path]:
         """
         Generate audio using ElevenLabs API.
@@ -145,11 +163,16 @@ class VoiceGenerator:
         Args:
             text: Text to synthesize
             voice_id: ElevenLabs voice ID
+            voice_settings: Optional settings dict for stability, similarity_boost, etc.
             cache_key: Cache key for filename
         
         Returns:
             Path to generated audio file or None
         """
+        if not self.api_key:
+            print("ElevenLabs API key not found")
+            return None
+
         try:
             import requests
         except ImportError:
@@ -166,8 +189,8 @@ class VoiceGenerator:
         
         data = {
             "text": text,
-            "model_id": "eleven_multilingual_v2",
-            "voice_settings": {
+            "model_id": "eleven_monolingual_v1", # Changed from eleven_multilingual_v2
+            "voice_settings": voice_settings or {
                 "stability": 0.5,
                 "similarity_boost": 0.75,
                 "style": 0.0,

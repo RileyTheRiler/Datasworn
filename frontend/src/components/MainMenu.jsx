@@ -43,8 +43,10 @@ const MainMenu = ({ onNewGame, onLoadGame, onExit }) => {
 
                 {/* Title Section */}
                 <div className="text-center space-y-6 relative">
-                    <h1 className="text-8xl font-serif tracking-[0.2em] text-transparent bg-clip-text bg-gradient-to-b from-disco-paper via-gray-300 to-gray-500 drop-shadow-[0_0_35px_rgba(255,255,255,0.6)] animate-text-scanline relative z-10">
-                        IN WHAT DISTANT DEEPS OR SKIES
+                    <h1 className="text-7xl font-serif tracking-[0.2em] text-transparent bg-clip-text bg-gradient-to-b from-disco-paper via-gray-300 to-gray-500 drop-shadow-[0_0_35px_rgba(255,255,255,0.6)] animate-text-scanline relative z-10 leading-tight">
+                        IN WHAT DISTANT DEEPS
+                        <br />
+                        OR SKIES
                     </h1>
 
                     {/* Horizon Line with Bloom */}

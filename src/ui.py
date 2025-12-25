@@ -202,7 +202,11 @@ def format_stats(character: Character) -> str:
 def format_momentum(value: int) -> str:
     """Format momentum with color coding."""
     color_class = "momentum-positive" if value >= 0 else "momentum-negative"
-    bar = "█" * max(0, value + 6) + "░" * max(0, 10 - value)
+    # Clamp value to reasonable range for display (-6 to +10)
+    clamped_value = max(-6, min(10, value))
+    bar_filled = max(0, clamped_value + 6)
+    bar_empty = max(0, 16 - bar_filled)
+    bar = "█" * bar_filled + "░" * bar_empty
     return f"**Momentum:** {value:+d}\n`[{bar}]`"
 
 
@@ -322,7 +326,9 @@ def format_quests(quest_lore_state) -> str:
                     lines.append(f"{status} {obj.description}")
         
         return "\n".join(lines) if lines else "*No active quests*"
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to format quests: {e}")
         return "*No active quests*"
 
 

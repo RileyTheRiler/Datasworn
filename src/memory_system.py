@@ -81,7 +81,7 @@ class MemoryPalace:
                         if region_map.get(region, 0.0) >= val:
                             frag.is_locked = False
                             unlocked.append(frag)
-                except:
+                except Exception:
                     continue
                     
         return unlocked

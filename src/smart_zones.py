@@ -18,6 +18,9 @@ import math
 # Smart Zone System (Living Scenes)
 # ============================================================================
 
+from src.narrative.reputation import MoralReputationSystem
+from src.game_state import RumorState
+
 class ZoneType(Enum):
     """Types of zones with different ambient behaviors."""
     BAR = "bar"
@@ -36,6 +39,25 @@ class NPCRole:
     behaviors: list[str]
     dialogue_topics: list[str]
     personality_hints: str
+    
+    def apply_reputation_reaction(self, reputation: MoralReputationSystem) -> None:
+        """Modify behaviors based on player reputation."""
+        if reputation.mercy_ruthless.value <= -50:
+            # Player is Ruthless/Feared
+            self.behaviors.append("avoid eye contact")
+            self.behaviors.append("whisper nervously")
+            self.personality_hints += " (fearful of you)"
+        elif reputation.mercy_ruthless.value >= 50:
+            # Player is Merciful/Heroic
+            self.behaviors.append("nod respectfully")
+            self.behaviors.append("raise a glass")
+            self.personality_hints += " (respectful)"
+            
+        if reputation.honest_deceptive.value <= -50:
+            # Player is Untrustworthy
+            self.dialogue_topics = [t for t in self.dialogue_topics if "deal" not in t]
+            self.behaviors.append("check pockets")
+            self.personality_hints += " (suspicious)"
 
 
 # Pre-defined roles for different zone types
@@ -110,8 +132,14 @@ class SmartZone:
             return
         
         for name in npc_names:
-            role = random.choice(available_roles)
-            self.assigned_roles[name] = role
+            role_template = random.choice(available_roles)
+            # Create a copy so we can modify it per instance without affecting the template
+            self.assigned_roles[name] = NPCRole(
+                role_name=role_template.role_name,
+                behaviors=role_template.behaviors.copy(),
+                dialogue_topics=role_template.dialogue_topics.copy(),
+                personality_hints=role_template.personality_hints
+            )
     
     def generate_atmosphere(self) -> str:
         """Generate ambient description of the zone."""
@@ -147,13 +175,33 @@ class SmartZone:
         self.atmosphere = random.choice(options)
         return self.atmosphere
     
-    def get_scene_description(self) -> str:
-        """Generate a living scene description."""
+    def get_scene_description(self, reputation: MoralReputationSystem = None, rumors: RumorState = None) -> str:
+        """
+        Generate a living scene description.
+        
+        Args:
+            reputation: Optional player reputation to react to.
+            rumors: Optional rumor state to inject gossip.
+        """
+        # Apply reputation effects to NPCs if provided
+        if reputation:
+            for role in self.assigned_roles.values():
+                role.apply_reputation_reaction(reputation)
+
         lines = [f"[SMART ZONE: {self.name}]"]
         lines.append(f"Type: {self.zone_type.value}")
         
         if self.atmosphere:
             lines.append(f"Atmosphere: {self.atmosphere}")
+            
+        # Inject Rumor
+        if rumors and rumors.rumors:
+            # Get a random active rumor
+            active_rumors = list(rumors.rumors.values())
+            if active_rumors:
+                rumor = random.choice(active_rumors)
+                rumor_text = rumor.get("text", "something interesting")
+                lines.append(f"Overheard: \"...{rumor_text}...\"")
         
         if self.assigned_roles:
             lines.append("\nNPCs in scene:")
@@ -161,6 +209,12 @@ class SmartZone:
                 behavior = random.choice(role.behaviors)
                 lines.append(f"  • {npc_name} ({role.role_name}): {behavior}")
         
+        if reputation:
+             if reputation.mercy_ruthless.value <= -50:
+                 lines.append("\n[REPUTATION: FEAR] The crowd seems to give you a wide berth.")
+             elif reputation.mercy_ruthless.value >= 50:
+                 lines.append("\n[REPUTATION: RESPECT] Several people nod in recognition.")
+
         return "\n".join(lines)
     
     def get_narrator_context(self) -> str:
@@ -376,7 +430,7 @@ class SmartZoneManager:
         self.zones[zone_id] = zone
         return zone
     
-    def enter_zone(self, zone_id: str) -> str:
+    def enter_zone(self, zone_id: str, reputation: MoralReputationSystem = None, rumors: RumorState = None) -> str:
         """Enter a zone and get its living scene description."""
         if zone_id not in self.zones:
             return "[Unknown zone]"
@@ -384,7 +438,7 @@ class SmartZoneManager:
         self.current_zone = zone_id
         zone = self.zones[zone_id]
         
-        return zone.get_scene_description()
+        return zone.get_scene_description(reputation, rumors)
     
     def get_current_zone_context(self) -> str:
         """Get narrator context for current zone."""

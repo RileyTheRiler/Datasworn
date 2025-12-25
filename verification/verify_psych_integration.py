@@ -62,8 +62,8 @@ def verify_psych_integration():
         defn = engine.archetype_config.get_archetype("controller")
         mod = defn.stress_modifiers.get("chaos", 1.0)
         print(f"Controller 'chaos' modifier: {mod}")
-    except:
-        print("[WARN] Could not load config directly to verify modifier.")
+    except Exception as e:
+        print(f"[WARN] Could not load config directly to verify modifier: {e}")
         mod = 1.4 # Assumption
         
     initial_stress = profile_arch.stress_level

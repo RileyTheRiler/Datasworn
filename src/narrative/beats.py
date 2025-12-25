@@ -75,7 +75,7 @@ class StoryBeatGenerator:
         r = random.uniform(0, total)
         upto = 0
         for beat, w in weights.items():
-            if upto + w >= r:
+            if upto + w > r:
                 return beat
             upto += w
         return BeatType.ACTION

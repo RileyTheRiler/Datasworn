@@ -1602,7 +1602,7 @@ def approval_node(state: GameState) -> dict[str, Any]:
         # Record edit as partial accept
         try:
             feedback_engine.record_feedback(edited, accepted=True, context=feedback_context)
-        except:
+        except Exception:
             pass
         
         return {

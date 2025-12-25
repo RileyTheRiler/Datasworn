@@ -164,11 +164,12 @@ export const VoiceProvider = ({ children }) => {
         }
     }, [isListening]);
 
-    const speak = useCallback(async (text) => {
+    const speak = useCallback(async (text, options = {}) => {
         if (!voiceEnabled || !selectedVoice) return;
         if (!text) return;
 
-        console.log(`[TTS] Initiating narration with voice: ${selectedVoice.name}`);
+        const { voiceId, voiceSettings } = options;
+        console.log(`[TTS] Initiating narration. Override: ${voiceId ? 'Yes' : 'No'}. Profile: ${selectedVoice.name}`);
 
         // Stop any currently playing audio
         if (currentAudioRef.current) {
@@ -209,7 +210,9 @@ export const VoiceProvider = ({ children }) => {
                 body: JSON.stringify({
                     session_id: 'default',
                     text: text,
-                    character_archetype: selectedVoice.archetype
+                    character_archetype: selectedVoice.archetype,
+                    voice_id: voiceId,
+                    voice_settings: voiceSettings
                 })
             });
 

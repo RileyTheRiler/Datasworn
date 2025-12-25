@@ -114,6 +114,30 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
     // Neuro-Status Logic (Derived from Spirit/Health)
     const isStabilityCritical = character.condition.spirit <= 2 || character.condition.health <= 1;
 
+    // Visual Cortex: Determine Dominant Psyche Mode
+    const psycheMode = useMemo(() => {
+        const dominance = gameState.psyche?.voice_dominance || {};
+        // Find aspect with highest dominance
+        let maxKey = null;
+        let maxVal = 0;
+
+        for (const [key, val] of Object.entries(dominance)) {
+            if (val > maxVal) {
+                maxVal = val;
+                maxKey = key;
+            }
+        }
+
+        // Threshold for visual takeover (e.g. 0.6)
+        if (maxVal > 0.6 && maxKey) {
+            // Convert snake_case (brain_stem) to kebab-case (mode-brain-stem)
+            const mode = maxKey.replace('_', '-');
+            return `mode-${mode}`;
+        }
+
+        return '';
+    }, [gameState.psyche?.voice_dominance]);
+
     // Accessibility and sound contexts
     const { highContrast, setHighContrast } = useAccessibility();
     const { toggleMute, playRandomGlitch } = useSoundEffects();
@@ -125,13 +149,63 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
         if (transcript) setInput(transcript);
     }, [transcript]);
 
-    // Auto-narrate new text
+    // Psyche Voice Mapping (Matches src/inner_voice.py)
+    const PSYCHE_VOICE_MAP = useMemo(() => ({
+        amygdala: {
+            id: "21m00Tcm4TlvDq8ikWAM", // Rachel (Fear/Aggression)
+            settings: { stability: 0.3, similarity_boost: 0.9 }
+        },
+        cortex: {
+            id: "AZnzlk1XvdvUeBnXmlld", // Domi (Logic/Order)
+            settings: { stability: 0.9, similarity_boost: 0.7 }
+        },
+        hippocampus: {
+            id: "EXAVITQu4vr4xnSDxMaL", // Bella (Memory)
+            settings: { stability: 0.5, similarity_boost: 0.5 }
+        },
+        brain_stem: {
+            id: "ErXwobaYiN019PkySvjV", // Antoni (Survival/Pain)
+            settings: { stability: 0.4, similarity_boost: 0.95 }
+        },
+        temporal: {
+            id: "MF3mGyEYCl7XYWbV9V6O", // Distinct (Empathy/Social)
+            settings: { stability: 0.8, similarity_boost: 0.8 }
+        }
+    }), []);
+
+    // Auto-narrate new text with Psyche Voice
     useEffect(() => {
         if (voiceEnabled && selectedVoice && narrative.pending_narrative && !isLoading && narrative.pending_narrative !== lastSpoken) {
-            speak(narrative.pending_narrative);
+
+            // Determine voice override based on psyche dominance
+            let voiceOverride = null;
+            let settingsOverride = null;
+
+            const dominance = gameState.psyche?.voice_dominance || {};
+            let maxKey = null;
+            let maxVal = 0;
+
+            for (const [key, val] of Object.entries(dominance)) {
+                if (val > maxVal) {
+                    maxVal = val;
+                    maxKey = key;
+                }
+            }
+
+            // If dominance is strong enough, override the voice
+            if (maxVal > 0.6 && maxKey && PSYCHE_VOICE_MAP[maxKey]) {
+                voiceOverride = PSYCHE_VOICE_MAP[maxKey].id;
+                settingsOverride = PSYCHE_VOICE_MAP[maxKey].settings;
+                console.log(`[Layout] Psyche Dominance: ${maxKey} (${maxVal}). Switching voice.`);
+            }
+
+            speak(narrative.pending_narrative, {
+                voiceId: voiceOverride,
+                voiceSettings: settingsOverride
+            });
             setLastSpoken(narrative.pending_narrative);
         }
-    }, [narrative.pending_narrative, voiceEnabled, selectedVoice, isLoading, speak, lastSpoken]);
+    }, [narrative.pending_narrative, voiceEnabled, selectedVoice, isLoading, speak, lastSpoken, gameState.psyche?.voice_dominance, PSYCHE_VOICE_MAP]);
 
     // Check for pending revelations
     useEffect(() => {
@@ -512,7 +586,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, isLoading }) => {
 
     return (
         <>
-            <div className={`flex h-screen w-full bg-disco-bg bg-grunge bg-blend-multiply overflow-hidden relative transition-all duration-1000 ${isStabilityCritical ? 'neuro-critical' : 'animate-[crtFlicker_0.15s_infinite]'}`}>
+            <div className={`flex h-screen w-full bg-disco-bg bg-grunge bg-blend-multiply overflow-hidden relative psyche-transition ${psycheMode} transition-all duration-1000 ${isStabilityCritical ? 'neuro-critical' : 'animate-[crtFlicker_0.15s_infinite]'}`}>
                 <Starfield count={150} speed={0.5} />
                 <ReactiveStatic
                     health={character.condition.health}

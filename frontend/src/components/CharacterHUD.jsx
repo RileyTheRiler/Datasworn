@@ -101,7 +101,6 @@ const CharacterHUD = ({ character, assets, onAssetsUpdate, className = "" }) => 
                     </h3>
                     <div className="flex gap-2 mt-3 flex-wrap">
                         <span className="px-2 py-0.5 bg-disco-red/10 border border-disco-red text-disco-red text-[10px] font-mono uppercase tracking-wider font-bold">Iron Sworn</span>
-                        <span className="px-2 py-0.5 bg-disco-cyan/10 border border-disco-cyan text-disco-cyan text-[10px] font-mono uppercase tracking-wider font-bold">Lvl 1</span>
                     </div>
                 </div>
             </div>

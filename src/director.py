@@ -9,11 +9,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 import json
-import json
+import random
 import ollama
 from .psych_profile import PsychologicalProfile, PsychologicalEngine
 from .inner_voice import InnerVoiceSystem
-from .relationship_system import RelationshipWeb
 from .relationship_system import RelationshipWeb
 from .dream_system import DreamEngine
 from src.shaping.thematic_director import ThematicDirector
@@ -251,7 +250,6 @@ class DirectorAgent:
     psycho_engine: PsychologicalEngine = field(default_factory=PsychologicalEngine)
     inner_voice: InnerVoiceSystem = field(default_factory=InnerVoiceSystem)
     relationships: RelationshipWeb = field(default_factory=RelationshipWeb)
-    relationships: RelationshipWeb = field(default_factory=RelationshipWeb)
     dream_engine: DreamEngine = field(default_factory=DreamEngine)
     thematic_director: ThematicDirector = field(default_factory=ThematicDirector)
     seed_planter: SeedPlanter = field(default_factory=SeedPlanter)
@@ -381,7 +379,6 @@ class DirectorAgent:
             
             # Deep Mechanics: Memory Corruption (on high stress)
             if profile.stress_level > 0.8 and profile.memories:
-                import random
                 if random.random() < 0.3:
                     self.psycho_engine.corrupt_memory(profile)
             
@@ -451,9 +448,6 @@ class DirectorAgent:
                 plan = self._merge_plans(plan, llm_plan)
         except Exception as e:
             # Fall back to heuristics only
-            import logging
-            logging.getLogger("director").warning(f"LLM analysis failed: {e}")
-        
             import logging
             logging.getLogger("director").warning(f"LLM analysis failed: {e}")
         

@@ -197,7 +197,7 @@ async def shutdown():
         # Finally, kill this process (redundant but ensures cleanup)
         try:
             os.kill(os.getpid(), signal.SIGTERM)
-        except:
+        except Exception:
             pass
     
     # Schedule cleanup and shutdown after response is sent
@@ -2485,6 +2485,8 @@ class TTSRequest(BaseModel):
     text: str
     character_archetype: str = "default"
     use_cache: bool = True
+    voice_id: Optional[str] = None
+    voice_settings: Optional[dict] = None
 
 @app.get("/api/audio/state/{session_id}")
 def get_audio_state(session_id: str):
@@ -2521,7 +2523,9 @@ def generate_tts(req: TTSRequest):
         audio_url = VOICE_GENERATOR.generate_speech(
             text=req.text,
             voice_profile=req.character_archetype,
-            use_cache=req.use_cache
+            use_cache=req.use_cache,
+            voice_id=req.voice_id,
+            voice_settings=req.voice_settings
         )
         
         if audio_url:

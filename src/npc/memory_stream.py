@@ -147,7 +147,7 @@ class NPCMemoryStream:
             # Parse embedding
             try:
                 mem_vec = json.loads(row['embedding'])
-            except:
+            except Exception:
                 mem_vec = [0.0] * 768
                 
             # 1. Relevance
