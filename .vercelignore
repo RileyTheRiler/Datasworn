@@ -1,0 +1,13 @@
+# Vercel Ignore
+venv
+.env
+__pycache__
+*.pyc
+.git
+.gitignore
+tests
+saves
+docs
+examples
+scripts
+*.bat
