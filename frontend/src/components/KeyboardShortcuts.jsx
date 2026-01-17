@@ -28,6 +28,9 @@ export const useKeyboardShortcuts = ({
     onToggleTimer,
     onToggleHighContrast,
     onSelectStat,
+    onRest,
+    onInspectMemory,
+    onReviewVows,
 }) => {
     const handleKeyDown = useCallback((e) => {
         // Don't trigger shortcuts when typing in input fields
@@ -39,14 +42,22 @@ export const useKeyboardShortcuts = ({
             case 'r':
                 if (!e.ctrlKey && !e.metaKey) {
                     e.preventDefault();
-                    onToggleRoll?.();
+                    if (e.shiftKey) {
+                        onRest?.();
+                    } else {
+                        onToggleRoll?.();
+                    }
                 }
                 break;
 
             case 'm':
                 if (!e.ctrlKey && !e.metaKey) {
                     e.preventDefault();
-                    onToggleMute?.();
+                    if (e.shiftKey) {
+                        onInspectMemory?.();
+                    } else {
+                        onToggleMute?.();
+                    }
                 }
                 break;
 
@@ -61,6 +72,15 @@ export const useKeyboardShortcuts = ({
                 if (!e.ctrlKey && !e.metaKey) {
                     e.preventDefault();
                     onToggleCharacter?.();
+                }
+                break;
+
+            case 'v':
+                if (!e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        onReviewVows?.();
+                    }
                 }
                 break;
 
@@ -110,7 +130,7 @@ export const useKeyboardShortcuts = ({
             default:
                 break;
         }
-    }, [onToggleRoll, onToggleMute, onCloseModal, onShowHelp, onToggleSaves, onToggleCharacter, onTogglePsyche, onToggleTimer, onToggleHighContrast, onSelectStat]);
+    }, [onToggleRoll, onToggleMute, onCloseModal, onShowHelp, onToggleSaves, onToggleCharacter, onTogglePsyche, onToggleTimer, onToggleHighContrast, onSelectStat, onRest, onInspectMemory, onReviewVows]);
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);
@@ -127,11 +147,14 @@ export const KeyboardHelpOverlay = ({ isOpen, onClose }) => {
     const shortcuts = [
         { key: 'R', description: 'Open dice roll' },
         { key: 'M', description: 'Toggle soundscape' },
+        { key: 'Shift+M', description: 'Inspect memory log' },
         { key: 'S', description: 'Open save manager' },
         { key: 'C', description: 'Toggle character sheet' },
         { key: 'P', description: 'Toggle psyche dashboard' },
         { key: 'T', description: 'Toggle session timer' },
         { key: 'H', description: 'Toggle high contrast' },
+        { key: 'Shift+R', description: 'Rest & recover' },
+        { key: 'Shift+V', description: 'Review vows' },
         { key: '1-5', description: 'Select stat (Edge/Heart/Iron/Shadow/Wits)' },
         { key: 'F5', description: 'Quick save' },
         { key: 'F9', description: 'Quick load' },

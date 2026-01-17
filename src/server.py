@@ -38,6 +38,7 @@ from src.image_gen import (
 from src.director import DirectorAgent
 from src.memory_system import MemoryPalace
 from src.relationship_system import RelationshipWeb
+from src.config import config
 from src.mystery_generator import MysteryConfig
 from src.auto_save import AutoSaveSystem
 from src.photo_album import PhotoAlbumManager
@@ -1496,6 +1497,12 @@ from src.npc_templates import NPCRole, get_template, generate_quick_npc, get_all
 # Global recap engine instance
 RECAP_ENGINE = SessionRecapEngine()
 
+
+@app.get("/api/tooltips")
+def get_mechanic_tooltips():
+    """Expose contextual mechanic tooltips configured on the backend."""
+    return {"tooltips": config.ui.mechanic_tooltips}
+
 @app.get("/api/session/recap/{session_id}")
 def get_session_recap(session_id: str, style: str = "dramatic"):
     """Generate a 'Previously on...' recap for the session."""
@@ -1524,6 +1531,33 @@ def get_session_recap(session_id: str, style: str = "dramatic"):
         "recap": recap,
         "session_count": len(RECAP_ENGINE._session_history)
     }
+
+
+@app.get("/api/session/what-happened/{session_id}")
+def get_session_digest(session_id: str):
+    """Return a structured recap with highlights and vows."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    state = SESSIONS[session_id]
+    character_name = state['character'].name if hasattr(state['character'], 'name') else "you"
+
+    album_state = state.get("album")
+    memory_state = state.get("memory")
+    vow_state = []
+    character = state.get("character")
+    if hasattr(character, "vows"):
+        vow_state = character.vows
+
+    digest = RECAP_ENGINE.build_digest(
+        protagonist_name=character_name,
+        album_state=album_state,
+        memory_state=memory_state,
+        vow_state=vow_state,
+        current_location=getattr(state.get("world"), "current_location", "") if hasattr(state, "get") else "",
+    )
+
+    return digest
 
 @app.get("/api/session/story-so-far/{session_id}")
 def get_story_so_far(session_id: str, length: str = "medium"):

@@ -15,6 +15,7 @@ from enum import Enum
 from datetime import datetime
 import json
 import random
+from src.rules_engine import ProgressTrack
 
 
 class RecapStyle(Enum):
@@ -596,6 +597,72 @@ OUTPUT ONLY THE CLIFFHANGER LINE:'''
         ]
 
         return "\n".join(parts)
+
+    def build_digest(
+        self,
+        protagonist_name: str = "you",
+        album_state: Any = None,
+        memory_state: Any = None,
+        vow_state: Any = None,
+        current_location: str = "",
+    ) -> Dict[str, Any]:
+        """Compose a structured recap with album highlights and memory anchors."""
+
+        recap_text = self.get_recap_for_session_start(protagonist_name)
+
+        highlights: List[dict] = []
+        if album_state is not None:
+            try:
+                photos = album_state.photos if hasattr(album_state, "photos") else album_state.get("photos", [])
+                photos_sorted = sorted(photos, key=lambda p: p.timestamp)
+                for entry in photos_sorted[-3:][::-1]:
+                    highlights.append(
+                        {
+                            "id": getattr(entry, "id", ""),
+                            "caption": getattr(entry, "caption", ""),
+                            "image_url": getattr(entry, "image_url", ""),
+                            "timestamp": getattr(entry, "timestamp", ""),
+                            "tags": getattr(entry, "tags", []),
+                            "scene_id": getattr(entry, "scene_id", ""),
+                        }
+                    )
+            except Exception:
+                pass
+
+        memory_snapshot = {}
+        if memory_state is not None:
+            memory_snapshot = {
+                "scene": getattr(memory_state, "current_scene", ""),
+                "recent_summaries": list(getattr(memory_state, "scene_summaries", [])[-3:]),
+                "recent_decisions": list(getattr(memory_state, "decisions_made", [])[-3:]),
+                "recent_npcs": list((getattr(memory_state, "npcs_encountered", {}) or {}).keys()),
+            }
+
+        vows: List[dict] = []
+        if vow_state is not None:
+            try:
+                for vow in vow_state:
+                    ticks = getattr(vow, "ticks", 0)
+                    track = ProgressTrack(name=getattr(vow, "name", ""), rank=getattr(vow, "rank", "troublesome"), ticks=ticks, completed=getattr(vow, "completed", False))
+                    vows.append(
+                        {
+                            "name": getattr(vow, "name", ""),
+                            "rank": getattr(vow, "rank", ""),
+                            "progress": track.display,
+                            "completed": getattr(vow, "completed", False),
+                        }
+                    )
+            except Exception:
+                pass
+
+        return {
+            "title": "What happened?",
+            "recap": recap_text,
+            "location": current_location,
+            "highlights": highlights,
+            "memory": memory_snapshot,
+            "vows": vows,
+        }
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize engine state."""
