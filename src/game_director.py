@@ -7,9 +7,12 @@ engagement bands.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable, Protocol
+from dataclasses import dataclass, field
+from enum import Enum, auto
+from typing import Any, Callable, Protocol
 
+from src.config import get_config
+from src.logging_config import PhaseTimingTracer, get_logger
 from src.spawner import EncounterDirector
 
 
@@ -21,6 +24,84 @@ from src.spawner import EncounterDirector
 def clamp(value: float, min_value: float, max_value: float) -> float:
     """Clamp a numeric value into a range."""
     return max(min_value, min(max_value, value))
+
+
+class GamePhase(Enum):
+    """Enumeration of the ordered phases in a single game tick."""
+
+    PLAYER_INPUT = auto()
+    AI_RESPONSE = auto()
+    WORLD_UPDATE = auto()
+    NARRATIVE_UPDATE = auto()
+    RENDER_HOOK = auto()
+
+
+@dataclass
+class PhaseController:
+    """Coordinates predictable execution of the game loop phases."""
+
+    tracing_enabled: bool | None = None
+    phase_order: tuple[GamePhase, ...] = (
+        GamePhase.PLAYER_INPUT,
+        GamePhase.AI_RESPONSE,
+        GamePhase.WORLD_UPDATE,
+        GamePhase.NARRATIVE_UPDATE,
+        GamePhase.RENDER_HOOK,
+    )
+    _handlers: dict[GamePhase, list[Callable[..., Any]]] = field(
+        default_factory=lambda: {phase: [] for phase in (
+            GamePhase.PLAYER_INPUT,
+            GamePhase.AI_RESPONSE,
+            GamePhase.WORLD_UPDATE,
+            GamePhase.NARRATIVE_UPDATE,
+            GamePhase.RENDER_HOOK,
+        )}
+    )
+    _history: list[GamePhase] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        cfg = get_config()
+        self.tracing_enabled = cfg.debug or cfg.phase_tracing if self.tracing_enabled is None else self.tracing_enabled
+        self._logger = get_logger("phases")
+
+    @property
+    def history(self) -> list[GamePhase]:
+        """Return the execution history (for debugging/tests)."""
+
+        return list(self._history)
+
+    def register(self, phase: GamePhase, handler: Callable[..., Any]) -> None:
+        """Register a handler to run during a specific phase."""
+
+        self._handlers.setdefault(phase, []).append(handler)
+
+    def execute_phase(self, phase: GamePhase, handler: Callable[..., Any], *args, **kwargs) -> Any:
+        """Run a single handler inside a phase (used by systems that own their work)."""
+
+        self._history.append(phase)
+        if self.tracing_enabled:
+            with PhaseTimingTracer(self._logger, phase.name):
+                return handler(*args, **kwargs)
+        return handler(*args, **kwargs)
+
+    def run_phase(self, phase: GamePhase, *args, **kwargs) -> list[Any]:
+        """Run all registered handlers for a phase in order."""
+
+        results: list[Any] = []
+        for handler in self._handlers.get(phase, []):
+            results.append(self.execute_phase(phase, handler, *args, **kwargs))
+        if not self._handlers.get(phase):
+            # Even without handlers, record the phase ordering for debugging
+            self._history.append(phase)
+        return results
+
+    def run_cycle(self, *args, **kwargs) -> dict[GamePhase, list[Any]]:
+        """Run a full game loop cycle in the configured phase order."""
+
+        results: dict[GamePhase, list[Any]] = {}
+        for phase in self.phase_order:
+            results[phase] = self.run_phase(phase, *args, **kwargs)
+        return results
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +156,7 @@ class EventSchedulerHook(Protocol):
     event_density_multiplier: float
     hint_frequency: float
     resource_bonus_multiplier: float
-
+    
 
 # ---------------------------------------------------------------------------
 # Game director controller

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from contextlib import nullcontext
 
+from src.game_director import GamePhase, PhaseController
 from ..profiling import FrameProfiler
 from .behavior import ActionPlan, BehaviorPlanner, FactChecker
 from .memory import SemanticMemory, WorkingMemory
@@ -56,6 +57,13 @@ class NPCController:
             return nullcontext()
         return self.profiler.span(label)
 
+    def tick(
+        self,
+        scene_graph: dict[str, Any],
+        environment: dict[str, Any],
+        phase_controller: PhaseController | None = None,
+    ) -> ActionPlan:
+        def _execute() -> ActionPlan:
     def tick(self, scene_graph: dict[str, Any], environment: dict[str, Any]) -> ActionPlan:
         with self._profile("controller.total"):
             world_state = self.perception.perceive(scene_graph)
@@ -73,6 +81,10 @@ class NPCController:
             plan = self._apply_dialogue_rules(plan)
             self._log_debug(world_state, intention, plan)
             return plan
+
+        if phase_controller:
+            return phase_controller.execute_phase(GamePhase.AI_RESPONSE, _execute)
+        return _execute()
 
     def _update_memory(self, world_state: WorldState) -> None:
         with self._profile("controller.memory"):

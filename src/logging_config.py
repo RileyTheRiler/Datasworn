@@ -6,6 +6,7 @@ Provides centralized logging setup with consistent formatting.
 from __future__ import annotations
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +15,7 @@ LOGGERS = {
     "starforged": "starforged",
     "narrator": "starforged.narrator",
     "director": "starforged.director",
+    "phases": "starforged.phases",
     "nodes": "starforged.nodes",
     "rules": "starforged.rules",
     "memory": "starforged.memory",
@@ -155,6 +157,30 @@ class LoggedOperation:
         else:
             self.logger.log(self.level, f"Completed: {self.operation} in {elapsed:.2f}s")
         return False  # Don't suppress exceptions
+
+
+class PhaseTimingTracer:
+    """Context manager for tracing phase timings in the game loop."""
+
+    def __init__(self, logger: logging.Logger, phase: str):
+        self.logger = logger
+        self.phase = phase
+        self._start = 0.0
+
+    def __enter__(self):
+        self._start = time.perf_counter()
+        self.logger.debug(f"Starting phase: {self.phase}")
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        elapsed = time.perf_counter() - self._start
+        if exc_type:
+            self.logger.warning(
+                f"Phase {self.phase} failed after {elapsed:.3f}s - {exc_type.__name__}: {exc_val}"
+            )
+        else:
+            self.logger.debug(f"Phase {self.phase} completed in {elapsed:.3f}s")
+        return False
 
 
 # Initialize default logging on import
