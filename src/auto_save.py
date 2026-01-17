@@ -19,6 +19,8 @@ from pathlib import Path
 import json
 import shutil
 
+from src.security_utils import sanitize_filename, sanitize_relative_path, validate_payload_size
+
 
 @dataclass
 class SaveMetadata:
@@ -77,13 +79,15 @@ class AutoSaveSystem:
         self,
         save_directory: str = "saves",
         max_versions: int = 5,
-        auto_save_interval: int = 1  # Save every N turns
+        auto_save_interval: int = 1,  # Save every N turns
+        max_payload_bytes: int = 5 * 1024 * 1024,
     ):
-        self.save_dir = Path(save_directory)
-        self.save_dir.mkdir(exist_ok=True)
+        self.save_dir = Path(save_directory).expanduser().resolve()
+        self.save_dir.mkdir(parents=True, exist_ok=True)
 
         self.max_versions = max_versions
         self.auto_save_interval = auto_save_interval
+        self.max_payload_bytes = max_payload_bytes
 
         self._turn_counter = 0
         self._current_slot = "autosave"
@@ -92,13 +96,14 @@ class AutoSaveSystem:
 
     def _get_save_path(self, slot_name: str, version: int = 0) -> Path:
         """Get path for a save file."""
-        if version > 0:
-            return self.save_dir / f"{slot_name}_v{version}.json"
-        return self.save_dir / f"{slot_name}.json"
+        safe_slot = sanitize_filename(slot_name)
+        file_name = f"{safe_slot}_v{version}.json" if version > 0 else f"{safe_slot}.json"
+        return sanitize_relative_path(self.save_dir, file_name)
 
     def _get_metadata_path(self, slot_name: str) -> Path:
         """Get path for metadata file."""
-        return self.save_dir / f"{slot_name}_meta.json"
+        safe_slot = sanitize_filename(slot_name)
+        return sanitize_relative_path(self.save_dir, f"{safe_slot}_meta.json")
 
     def save_game(
         self,
@@ -160,16 +165,19 @@ class AutoSaveSystem:
 
         # Save game state
         save_path = self._get_save_path(slot_name)
-        with open(save_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "metadata": metadata.to_dict(),
-                "state": serializable_state,
-            }, f, indent=2, default=str)
+        payload = {
+            "metadata": metadata.to_dict(),
+            "state": serializable_state,
+        }
+        serialized = json.dumps(payload, indent=2, default=str)
+        validate_payload_size(serialized, self.max_payload_bytes)
+        save_path.write_text(serialized, encoding="utf-8")
 
         # Save metadata separately for quick listing
         meta_path = self._get_metadata_path(slot_name)
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(metadata.to_dict(), f, indent=2)
+        meta_payload = json.dumps(metadata.to_dict(), indent=2)
+        validate_payload_size(meta_payload, self.max_payload_bytes)
+        meta_path.write_text(meta_payload, encoding="utf-8")
 
         self._metadata_cache[slot_name] = metadata
 

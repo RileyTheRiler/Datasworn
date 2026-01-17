@@ -19,6 +19,17 @@ from typing import Generator, Optional, Dict, Any, List
 import json
 
 
+@dataclass(frozen=True)
+class LLMCapabilities:
+    """Descriptor for a provider's abilities and operational cost."""
+
+    max_output_tokens: int
+    safety_features: List[str]
+    cost_per_1k_tokens: float
+    supports_streaming: bool = True
+    vendor: str | None = None
+
+
 # =============================================================================
 # ABSTRACT PROVIDER
 # =============================================================================
@@ -41,6 +52,11 @@ class LLMProvider(ABC):
     def is_available(self) -> bool:
         """Check if the provider is available."""
         pass
+
+    @abstractmethod
+    def capabilities(self) -> LLMCapabilities:
+        """Return the provider's declared capabilities."""
+        raise NotImplementedError
     
     @property
     @abstractmethod
@@ -125,10 +141,19 @@ class OllamaProvider(LLMProvider):
             return self.model.split(":")[0] in model_names
         except Exception:
             return False
-    
+
     @property
     def name(self) -> str:
         return f"Ollama ({self.model})"
+
+    def capabilities(self) -> LLMCapabilities:
+        return LLMCapabilities(
+            max_output_tokens=4096,
+            safety_features=["local_execution"],
+            cost_per_1k_tokens=0.0,
+            supports_streaming=True,
+            vendor="ollama",
+        )
 
 
 # =============================================================================
@@ -239,10 +264,19 @@ class GeminiProvider(LLMProvider):
             return bool(response.text)
         except Exception:
             return False
-    
+
     @property
     def name(self) -> str:
         return f"Gemini ({self.model})"
+
+    def capabilities(self) -> LLMCapabilities:
+        return LLMCapabilities(
+            max_output_tokens=8192,
+            safety_features=["provider_safety_filters", "content_moderation"],
+            cost_per_1k_tokens=0.05,
+            supports_streaming=True,
+            vendor="gemini",
+        )
 
 
 # =============================================================================

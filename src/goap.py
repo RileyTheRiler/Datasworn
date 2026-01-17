@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 from heapq import heappush, heappop
+from collections import deque
 
 
 # ============================================================================
@@ -48,12 +49,38 @@ class WorldState:
                 unsatisfied[key] = value
         return unsatisfied
     
-    def apply_effects(self, effects: dict[str, Any]) -> "WorldState":
-        """Apply effects and return new state."""
-        new_state = self.copy()
-        for key, value in effects.items():
-            new_state.facts[key] = value
+    def apply_effects(self, effects: dict[str, Any], pool: "WorldStatePool | None" = None) -> "WorldState":
+        """Apply effects and return new state, optionally using a pool."""
+
+        if pool:
+            new_state = pool.clone(self, effects)
+        else:
+            new_state = self.copy()
+            for key, value in effects.items():
+                new_state.facts[key] = value
         return new_state
+
+
+class WorldStatePool:
+    """Reusable pool for ``WorldState`` instances to limit allocations."""
+
+    def __init__(self) -> None:
+        self._pool: deque[WorldState] = deque()
+        self._leased: list[WorldState] = []
+
+    def clone(self, base: WorldState, effects: dict[str, Any] | None = None) -> WorldState:
+        state = self._pool.pop() if self._pool else WorldState()
+        state.facts.clear()
+        state.facts.update(base.facts)
+        if effects:
+            state.facts.update(effects)
+        self._leased.append(state)
+        return state
+
+    def recycle(self) -> None:
+        if self._leased:
+            self._pool.extend(self._leased)
+            self._leased.clear()
 
 
 # ============================================================================
@@ -95,9 +122,10 @@ class GOAPAction:
             base_cost *= self.cost_modifier(state)
         return max(0.1, base_cost)
     
-    def apply(self, state: WorldState) -> WorldState:
+    def apply(self, state: WorldState, pool: WorldStatePool | None = None) -> WorldState:
         """Apply this action's effects to the state."""
-        return state.apply_effects(self.effects)
+
+        return state.apply_effects(self.effects, pool=pool)
 
 
 # ============================================================================
@@ -149,11 +177,20 @@ class GOAPPlanner:
     Plans action sequences to achieve goals using backward chaining.
     Uses A* search to find lowest-cost valid plan.
     """
-    
-    def __init__(self, available_actions: list[GOAPAction]):
+
+    def __init__(
+        self,
+        available_actions: list[GOAPAction],
+        *,
+        action_heuristic=None,
+        decision_log: list[str] | None = None,
+    ):
         self.actions = available_actions
         self.max_depth = 10
         self.max_iterations = 1000
+        self.action_heuristic = action_heuristic
+        self.decision_log = decision_log
+        self._state_pool = WorldStatePool()
     
     def plan(
         self,
@@ -170,13 +207,17 @@ class GOAPPlanner:
         Returns:
             List of actions to perform, or None if no plan found
         """
+        # Return states from previous runs so they can be reused.
+        self._state_pool.recycle()
+
         if goal.is_satisfied(start_state):
             return []  # Already achieved
-        
+
         # A* search
         open_set: list[PlanNode] = []
+        initial_state = self._state_pool.clone(start_state)
         heappush(open_set, PlanNode(
-            state=start_state,
+            state=initial_state,
             actions=[],
             cost=0,
         ))
@@ -190,6 +231,7 @@ class GOAPPlanner:
             
             # Check if we've reached the goal
             if goal.is_satisfied(current.state):
+                self._state_pool.recycle()
                 return current.actions
             
             # Check depth limit
@@ -206,17 +248,34 @@ class GOAPPlanner:
             for action in self.actions:
                 if action.is_valid(current.state):
                     new_state = action.apply(current.state)
-                    new_cost = current.cost + action.get_cost(current.state)
+                    action_cost = action.get_cost(current.state)
+
+                    heuristic_bonus = 0.0
+                    heuristic_reason = ""
+                    if self.action_heuristic:
+                        heuristic_bonus, heuristic_reason = self.action_heuristic(action, current.state)
+                        if heuristic_bonus:
+                            action_cost *= max(0.2, 1.0 - heuristic_bonus)
+                    if self.decision_log is not None and heuristic_reason:
+                        self.decision_log.append(
+                            f"{action.name}: {heuristic_reason} (bonus={heuristic_bonus:.2f})"
+                        )
+
+                    new_cost = current.cost + action_cost
                     
+                    new_state = action.apply(current.state, pool=self._state_pool)
+                    new_cost = current.cost + action.get_cost(current.state)
+
                     # Heuristic: unsatisfied goal conditions
                     h_cost = len(new_state.difference(goal.conditions)) * 0.5
-                    
+
                     heappush(open_set, PlanNode(
                         state=new_state,
                         actions=current.actions + [action],
                         cost=new_cost + h_cost,
                     ))
-        
+
+        self._state_pool.recycle()
         return None  # No plan found
     
     def plan_for_best_goal(
@@ -285,10 +344,17 @@ COMBAT_ACTIONS = [
     ),
     GOAPAction(
         name="take_cover",
-        cost=2.5,
-        preconditions={"cover_available": True},
+        cost=2.0,
+        preconditions={"has_cover": True, "in_cover": False},
         effects={"in_cover": True},
         description="takes cover",
+    ),
+    GOAPAction(
+        name="regroup",
+        cost=2.2,
+        preconditions={"has_allies": True},
+        effects={"grouped_up": True, "in_cover": True},
+        description="falls back toward allies and stabilizes",
     ),
     GOAPAction(
         name="flee",
@@ -382,9 +448,16 @@ SOCIAL_ACTIONS = [
 # Convenience Functions
 # ============================================================================
 
-def create_combat_planner() -> GOAPPlanner:
-    """Create a planner with combat actions."""
-    return GOAPPlanner(COMBAT_ACTIONS)
+def create_combat_planner(
+    *, action_heuristic=None, decision_log: list[str] | None = None
+) -> GOAPPlanner:
+    """Create a planner with combat actions and optional heuristics."""
+
+    return GOAPPlanner(
+        COMBAT_ACTIONS,
+        action_heuristic=action_heuristic,
+        decision_log=decision_log,
+    )
 
 
 def create_resource_planner() -> GOAPPlanner:
@@ -402,6 +475,9 @@ def plan_npc_action(
     goal_conditions: dict[str, Any],
     current_state: dict[str, Any],
     action_type: str = "combat",
+    *,
+    action_heuristic=None,
+    decision_log: list[str] | None = None,
 ) -> list[dict]:
     """
     Quick function to plan NPC actions.
@@ -417,7 +493,9 @@ def plan_npc_action(
     """
     # Select planner
     if action_type == "combat":
-        planner = create_combat_planner()
+        planner = create_combat_planner(
+            action_heuristic=action_heuristic, decision_log=decision_log
+        )
     elif action_type == "resource":
         planner = create_resource_planner()
     else:

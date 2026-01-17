@@ -7,8 +7,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 from datetime import datetime
+import uuid
 
 from src.logging_config import get_logger
+from src.telemetry import telemetry
 
 logger = get_logger("session")
 
@@ -64,6 +66,7 @@ class SessionSummary:
 @dataclass
 class SessionTracker:
     """Tracks events during a session for recap generation."""
+    session_id: str = ""
     events: list[SessionEvent] = field(default_factory=list)
     npcs_encountered: list[str] = field(default_factory=list)
     locations_visited: list[str] = field(default_factory=list)
@@ -75,8 +78,15 @@ class SessionTracker:
     current_location: str = ""
 
     def __post_init__(self):
+        created_session = False
+        if not self.session_id:
+            self.session_id = str(uuid.uuid4())[:8]
+            created_session = True
         if not self.session_start:
             self.session_start = datetime.now().isoformat()
+            created_session = True
+        if created_session:
+            telemetry.emit_session_start(self.session_id, {"started_at": self.session_start})
 
     def record_event(
         self,
@@ -173,6 +183,7 @@ class SessionTracker:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "session_id": self.session_id,
             "events": [e.to_dict() for e in self.events],
             "npcs_encountered": self.npcs_encountered,
             "locations_visited": self.locations_visited,
@@ -187,6 +198,7 @@ class SessionTracker:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SessionTracker":
         tracker = cls(
+            session_id=data.get("session_id", ""),
             npcs_encountered=data.get("npcs_encountered", []),
             locations_visited=data.get("locations_visited", []),
             vow_changes=data.get("vow_changes", []),
@@ -337,8 +349,6 @@ def generate_session_summary(tracker: SessionTracker) -> SessionSummary:
     Returns:
         SessionSummary object
     """
-    import uuid
-
     # Determine mood from events and tension
     if tracker.tension_high_point >= 0.8:
         mood = "intense"
@@ -356,8 +366,10 @@ def generate_session_summary(tracker: SessionTracker) -> SessionSummary:
         reverse=True,
     )[:10]
 
-    return SessionSummary(
-        session_id=str(uuid.uuid4())[:8],
+    session_id = tracker.session_id or str(uuid.uuid4())[:8]
+
+    summary = SessionSummary(
+        session_id=session_id,
         start_time=tracker.session_start,
         end_time=datetime.now().isoformat(),
         turn_count=tracker.current_turn,
@@ -368,6 +380,17 @@ def generate_session_summary(tracker: SessionTracker) -> SessionSummary:
         cliffhanger=generate_cliffhanger(tracker, tracker.last_narrative, tracker.tension_high_point),
         mood=mood,
     )
+
+    telemetry.emit_session_end(
+        session_id,
+        {
+            "end_time": summary.end_time,
+            "turns": summary.turn_count,
+            "mood": summary.mood,
+            "events_recorded": len(tracker.events),
+        },
+    )
+    return summary
 
 
 def format_session_end_screen(summary: SessionSummary) -> str:

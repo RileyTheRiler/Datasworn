@@ -334,6 +334,13 @@ class StarMap:
         # Calculate target number of systems for each faction
         total_systems = len(sector.systems)
         unclaimed_systems = list(sector.systems.values())
+        distance_cache: dict[tuple[str, str], float] = {}
+
+        def cached_distance(a: StarSystem, b: StarSystem) -> float:
+            key = tuple(sorted((a.id, b.id)))
+            if key not in distance_cache:
+                distance_cache[key] = ((a.position[0] - b.position[0]) ** 2 + (a.position[1] - b.position[1]) ** 2) ** 0.5
+            return distance_cache[key]
         
         for faction in sorted_factions:
             faction_id = faction['id']
@@ -366,8 +373,7 @@ class StarMap:
                     for candidate in unclaimed_systems:
                         # Simple distance calculation (assuming positions exist, if not we pick random)
                         if hasattr(claimed, 'position') and hasattr(candidate, 'position'):
-                            dist = ((claimed.position[0] - candidate.position[0])**2 + 
-                                   (claimed.position[1] - candidate.position[1])**2)**0.5
+                            dist = cached_distance(claimed, candidate)
                             if dist < min_dist:
                                 min_dist = dist
                                 best_candidate = candidate

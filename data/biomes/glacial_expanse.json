@@ -1,0 +1,14 @@
+{
+  "name": "glacial_expanse",
+  "encounters": [
+    {"id": "whiteout", "weight": 3, "rarity": "common"},
+    {"id": "icebound_wreck", "weight": 2, "rarity": "uncommon"},
+    {"id": "ancient_stasis_vault", "weight": 1, "rarity": "rare"}
+  ],
+  "loot_modifiers": {
+    "common": 0.85,
+    "uncommon": 0.95,
+    "rare": 1.2,
+    "legendary": 1.4
+  }
+}
