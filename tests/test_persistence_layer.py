@@ -17,7 +17,8 @@ def test_persistence_round_trip(tmp_path):
     layer.save_character(character)
 
     snapshot = json.loads(snapshot_path.read_text())
-    assert snapshot["schema_version"] == CURRENT_SCHEMA_VERSION
+    assert snapshot["header"]["version"] == CURRENT_SCHEMA_VERSION
+    assert snapshot["body"]["schema_version"] == CURRENT_SCHEMA_VERSION
 
     reloaded = PersistenceLayer(db_path, snapshot_path).load_character("Rin")
     assert reloaded is not None

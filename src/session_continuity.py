@@ -183,6 +183,7 @@ class SessionTracker:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "schema_version": 1,
             "session_id": self.session_id,
             "events": [e.to_dict() for e in self.events],
             "npcs_encountered": self.npcs_encountered,
@@ -197,7 +198,17 @@ class SessionTracker:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SessionTracker":
+        migrated = cls._migrate_payload(dict(data))
+
         tracker = cls(
+            npcs_encountered=migrated.get("npcs_encountered", []),
+            locations_visited=migrated.get("locations_visited", []),
+            vow_changes=migrated.get("vow_changes", []),
+            current_turn=migrated.get("current_turn", 0),
+            session_start=migrated.get("session_start", ""),
+            last_narrative=migrated.get("last_narrative", ""),
+            tension_high_point=migrated.get("tension_high_point", 0.0),
+            current_location=migrated.get("current_location", ""),
             session_id=data.get("session_id", ""),
             npcs_encountered=data.get("npcs_encountered", []),
             locations_visited=data.get("locations_visited", []),
@@ -208,15 +219,31 @@ class SessionTracker:
             tension_high_point=data.get("tension_high_point", 0.0),
             current_location=data.get("current_location", ""),
         )
-        for e_data in data.get("events", []):
+        for e_data in migrated.get("events", []):
             tracker.events.append(SessionEvent(
                 description=e_data.get("description", ""),
-                event_type=e_data.get("event_type", ""),
+                event_type=e_data.get("event_type", "event"),
                 importance=e_data.get("importance", 0.5),
                 turn_number=e_data.get("turn_number", 0),
                 related_entities=e_data.get("related_entities", []),
             ))
         return tracker
+
+    @staticmethod
+    def _migrate_payload(data: dict[str, Any]) -> dict[str, Any]:
+        version = data.get("schema_version", 0)
+        if version < 1:
+            data.setdefault("events", [])
+            data.setdefault("npcs_encountered", [])
+            data.setdefault("locations_visited", [])
+            data.setdefault("vow_changes", [])
+            data.setdefault("current_turn", 0)
+            data.setdefault("session_start", datetime.now().isoformat())
+            data.setdefault("last_narrative", "")
+            data.setdefault("tension_high_point", 0.0)
+            data.setdefault("current_location", "")
+        data["schema_version"] = 1
+        return data
 
 
 def generate_session_recap(tracker: SessionTracker) -> str:
