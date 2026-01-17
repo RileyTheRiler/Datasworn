@@ -18,6 +18,8 @@ from enum import Enum
 from datetime import datetime
 import re
 
+from src.lore import LoreRegistry
+
 
 class EntityStatus(Enum):
     """Status of world entities."""
@@ -180,6 +182,12 @@ class PersistentWorldEngine:
         self._current_scene: int = 0
         self._current_session: str = ""
         self._schema_version: int = 1
+        self._lore_registry: LoreRegistry | None = None
+
+    def attach_lore_registry(self, lore_registry: LoreRegistry) -> None:
+        """Attach a lore registry so world changes can unlock codex entries."""
+
+        self._lore_registry = lore_registry
 
     def set_context(self, scene_number: int, session_id: str = ""):
         """Set current context for change tracking."""
@@ -211,6 +219,9 @@ class PersistentWorldEngine:
         elif change.change_type == ChangeType.FACTION_CONTROL:
             if change.location:
                 self._faction_control[change.location] = change.entity_id
+
+        if self._lore_registry:
+            self._lore_registry.link_world_change(change)
 
     def _get_or_create_entity(self, entity_id: str, entity_type: str) -> EntityState:
         """Get existing entity or create new one."""

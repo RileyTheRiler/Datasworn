@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import random
 
 from src.character_progression import CharacterProgressionEngine
+from src.telemetry import telemetry
 
 
 class EncounterRarity(Enum):
@@ -433,4 +434,11 @@ class RewardEngine:
             boss_defeated=True,
             streak_count=streak,
         )
-        return self.evaluate(context)
+        outcome = self.evaluate(context)
+        telemetry.emit_boss_kill(
+            boss_name,
+            difficulty_rating,
+            session_id=None,
+            rewards={"xp": outcome.xp_awarded, "band": outcome.band.name},
+        )
+        return outcome

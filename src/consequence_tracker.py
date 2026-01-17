@@ -11,6 +11,7 @@ from datetime import datetime
 import uuid
 
 from src.logging_config import get_logger
+from src.narrative_memory import NarrativeSnapshot
 
 logger = get_logger("consequences")
 
@@ -101,6 +102,7 @@ class ConsequenceTracker:
         related_npc: Optional[str] = None,
         related_location: Optional[str] = None,
         tags: Optional[list[str]] = None,
+        snapshot: Optional[NarrativeSnapshot] = None,
     ) -> Consequence:
         """Add a new consequence to track."""
         consequence = Consequence(
@@ -116,19 +118,39 @@ class ConsequenceTracker:
         )
         self.consequences.append(consequence)
         logger.debug(f"Added consequence: {description} ({type.value}/{severity.value})")
+        if snapshot:
+            snapshot.add_recent_event(
+                event_type="consequence_added",
+                description=description,
+                severity=severity.value,
+                related_characters=[related_npc] if related_npc else [],
+                tags=consequence.tags,
+            )
         return consequence
 
-    def resolve_consequence(self, consequence_id: str, resolution: str) -> bool:
+    def resolve_consequence(
+        self, consequence_id: str, resolution: str, snapshot: Optional[NarrativeSnapshot] = None
+    ) -> bool:
         """Mark a consequence as resolved."""
         for c in self.consequences:
             if c.id == consequence_id:
                 c.resolved = True
                 c.resolution = resolution
                 logger.debug(f"Resolved consequence {consequence_id}: {resolution}")
+                if snapshot:
+                    snapshot.add_recent_event(
+                        event_type="consequence_resolved",
+                        description=resolution,
+                        severity=c.severity.value,
+                        related_characters=[c.related_npc] if c.related_npc else [],
+                        tags=c.tags,
+                    )
                 return True
         return False
 
-    def escalate_consequence(self, consequence_id: str) -> Optional[Consequence]:
+    def escalate_consequence(
+        self, consequence_id: str, snapshot: Optional[NarrativeSnapshot] = None
+    ) -> Optional[Consequence]:
         """Escalate an unresolved consequence (increase severity)."""
         for c in self.consequences:
             if c.id == consequence_id and not c.resolved:
@@ -145,6 +167,14 @@ class ConsequenceTracker:
                 if current_idx < len(severity_order) - 1:
                     c.severity = severity_order[current_idx + 1]
                     logger.debug(f"Escalated consequence {consequence_id} to {c.severity.value}")
+                if snapshot:
+                    snapshot.add_recent_event(
+                        event_type="consequence_escalated",
+                        description=c.description,
+                        severity=c.severity.value,
+                        related_characters=[c.related_npc] if c.related_npc else [],
+                        tags=c.tags,
+                    )
 
                 return c
         return None
@@ -152,6 +182,11 @@ class ConsequenceTracker:
     def get_active_consequences(self) -> list[Consequence]:
         """Get all unresolved consequences."""
         return [c for c in self.consequences if not c.resolved]
+
+    def get_recent_log(self, limit: int = 5) -> list[Consequence]:
+        """Return the most recent consequences, resolved or not."""
+        sorted_entries = sorted(self.consequences, key=lambda c: c.created_turn, reverse=True)
+        return sorted_entries[:limit]
 
     def get_consequences_by_severity(self, min_severity: ConsequenceSeverity) -> list[Consequence]:
         """Get active consequences at or above a severity level."""
@@ -189,7 +224,7 @@ class ConsequenceTracker:
             if self.current_turn - c.created_turn >= turns_threshold
         ]
 
-    def advance_turn(self) -> list[Consequence]:
+    def advance_turn(self, snapshot: Optional[NarrativeSnapshot] = None) -> list[Consequence]:
         """
         Advance the turn counter and check for auto-escalations.
 
@@ -205,12 +240,22 @@ class ConsequenceTracker:
 
             # Critical consequences escalate every 3 turns
             if c.severity == ConsequenceSeverity.CRITICAL and turns_old > 0 and turns_old % 3 == 0:
-                self.escalate_consequence(c.id)
+                self.escalate_consequence(c.id, snapshot=snapshot)
                 escalated.append(c)
             # Major consequences escalate every 5 turns
             elif c.severity == ConsequenceSeverity.MAJOR and turns_old > 0 and turns_old % 5 == 0:
-                self.escalate_consequence(c.id)
+                self.escalate_consequence(c.id, snapshot=snapshot)
                 escalated.append(c)
+
+        if snapshot and escalated:
+            for c in escalated:
+                snapshot.add_recent_event(
+                    event_type="consequence_progressed",
+                    description=c.description,
+                    severity=c.severity.value,
+                    related_characters=[c.related_npc] if c.related_npc else [],
+                    tags=c.tags,
+                )
 
         return escalated
 

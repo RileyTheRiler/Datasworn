@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 import random
 
+from src.narrative_memory import NarrativeSnapshot
+
 class BeatType(Enum):
     ACTION = "ACTION"
     REVELATION = "REVELATION"
@@ -29,10 +31,18 @@ class StoryBeatGenerator:
     # Simple adjacency rules: What shouldn't follow what?
     # e.g. Don't do 3 ACTIONS in a row.
     
-    def suggest_next_beat(self, tension: float) -> BeatType:
+    def suggest_next_beat(self, tension: float, snapshot: Optional[NarrativeSnapshot] = None) -> BeatType:
         """
         Suggest a beat based on current tension and history.
         """
+        if snapshot:
+            if snapshot.unresolved_threads:
+                return BeatType.REVELATION
+            if snapshot.active_vows:
+                return BeatType.SUSPENSE
+            if any(evt.severity in {"major", "critical"} for evt in snapshot.recent_events):
+                return BeatType.RESPITE
+
         options = list(BeatType)
         
         # Rule 1: No more than 2 of the same type in a row

@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, List
 
 from src.story_graph import StoryDAG, TensionCurve
-from src.narrative_memory import NarrativeMemory
+from src.narrative_memory import NarrativeMemory, NarrativeSnapshot
 from src.theme_engine import ThemeEngine, create_starforged_themes
 from src.narrative_variety import NarrativeVariety
 from src.prose_enhancement import ProseEnhancementEngine
@@ -97,6 +97,7 @@ class NarrativeOrchestrator:
     
     # State
     current_scene: int = 0
+    latest_snapshot: Optional[NarrativeSnapshot] = None
     
     def advance_scene(self):
         """Advance all systems to next scene."""
@@ -143,6 +144,8 @@ class NarrativeOrchestrator:
             if pacing_guidance:
                 sections.append(f"\\n<pacing>\\n{pacing_guidance}\\n</pacing>")
         
+        snapshot = self._ensure_latest_snapshot(location=location, active_npcs=active_npcs)
+
         # 2. Callbacks & Foreshadowing
         memory_guidance = self.narrative_memory.get_narrator_guidance()
         if memory_guidance:
@@ -277,7 +280,7 @@ class NarrativeOrchestrator:
 
         # 12. Advanced Narrative (Phase 3)
         # Suggest Beat
-        beat = self.story_beats.suggest_next_beat(tension=0.5) # Todo: hook up real tension
+        beat = self.story_beats.suggest_next_beat(tension=0.5, snapshot=snapshot) # Todo: hook up real tension
         sections.append(f"\\n[SUGGESTED BEAT: {beat.value}]")
         
         # Suggest Plot Thread
@@ -304,7 +307,8 @@ class NarrativeOrchestrator:
         narrative_output: str,
         location: str,
         active_npcs: list[str] = None,
-        roll_outcome: str = None
+        roll_outcome: str = None,
+        active_vows: Optional[list[str]] = None,
     ):
         """
         Process a complete interaction to update all tracking systems.
@@ -419,6 +423,54 @@ class NarrativeOrchestrator:
         if "threat" in player_input.lower():
             for npc in active_npcs:
                 self.npc_emotions.process_event(npc, "THREATENED")
+
+        # 9. Capture snapshot for continuity
+        self.latest_snapshot = self._build_snapshot(
+            location=location,
+            active_npcs=active_npcs,
+            active_vows=active_vows,
+        )
+        self.story_graph.record_snapshot(self.latest_snapshot)
+
+    def _build_snapshot(
+        self,
+        location: str,
+        active_npcs: list[str],
+        active_vows: Optional[list[str]] = None,
+    ) -> NarrativeSnapshot:
+        """Construct a narrative snapshot from current trackers."""
+        snapshot = NarrativeSnapshot(scene_index=self.current_scene)
+        snapshot.active_vows = active_vows or []
+
+        unresolved_seeds = [seed.description for seed in self.payoff_tracker.get_active_seeds()]
+        pending_payoffs = [plant.description for plant in self.narrative_memory.get_pending_payoffs()]
+        snapshot.unresolved_threads = unresolved_seeds or pending_payoffs
+
+        if getattr(self, "_pending_consequences", None):
+            for event in self._pending_consequences:
+                snapshot.add_recent_event(
+                    event_type="consequence_trigger",
+                    description=event.get("event", ""),
+                    severity=str(event.get("severity", "info")),
+                    related_characters=active_npcs,
+                    tags=[location] if location else [],
+                )
+
+        return snapshot
+
+    def _ensure_latest_snapshot(self, location: str, active_npcs: list[str]) -> NarrativeSnapshot:
+        """Ensure a snapshot exists for beat selection and continuity."""
+        if self.latest_snapshot and self.latest_snapshot.scene_index == self.current_scene:
+            return self.latest_snapshot
+
+        restored_snapshot = self.story_graph.get_latest_snapshot()
+        if restored_snapshot and restored_snapshot.scene_index == self.current_scene:
+            self.latest_snapshot = restored_snapshot
+            return self.latest_snapshot
+
+        self.latest_snapshot = self._build_snapshot(location=location, active_npcs=active_npcs)
+        self.story_graph.record_snapshot(self.latest_snapshot)
+        return self.latest_snapshot
                 
     def to_dict(self) -> dict:
         """Serialize all systems."""

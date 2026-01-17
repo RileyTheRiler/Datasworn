@@ -14,6 +14,8 @@ from typing import Optional, List, Dict, Any
 from enum import Enum
 import random
 
+from src.telemetry import telemetry
+
 
 class CombatPhase(Enum):
     """Phases of combat."""
@@ -409,6 +411,13 @@ class CombatFlowEngine:
             )).is_active,
         }
 
+        if not summary["player_survived"]:
+            telemetry.emit_wipe(
+                cause="combat_defeat",
+                session_id=None,
+                difficulty_rating=self._estimate_difficulty_rating(),
+            )
+
         self._phase = CombatPhase.INACTIVE
         return summary
 
@@ -453,6 +462,24 @@ class CombatFlowEngine:
             ThreatLevel.EXTREME: 15,
             ThreatLevel.EPIC: 20,
         }.get(threat_level, 5)
+
+    def _estimate_difficulty_rating(self) -> float:
+        """Estimate combat difficulty based on enemy threat levels."""
+
+        weights = {
+            ThreatLevel.TROUBLESOME: 1.0,
+            ThreatLevel.DANGEROUS: 2.5,
+            ThreatLevel.FORMIDABLE: 5.0,
+            ThreatLevel.EXTREME: 8.0,
+            ThreatLevel.EPIC: 10.0,
+        }
+        enemies = [
+            c for c in self._combatants.values()
+            if c.combatant_type == CombatantType.ENEMY
+        ]
+        if not enemies:
+            return 0.0
+        return sum(weights.get(e.threat_level, 2.0) for e in enemies) / len(enemies)
 
     def get_narrator_context(self) -> str:
         """Generate combat context for narrator."""

@@ -125,6 +125,13 @@ class EnhancementEngine:
         try:
             from src.persistent_world import PersistentWorldEngine
             self._world_engine = PersistentWorldEngine()
+            try:
+                from src.lore import LoreRegistry
+
+                self._lore_registry = LoreRegistry()
+                self._world_engine.attach_lore_registry(self._lore_registry)
+            except Exception:
+                self._lore_registry = None
         except Exception:
             pass
 

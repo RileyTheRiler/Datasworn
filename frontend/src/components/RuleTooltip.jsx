@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import api from '../utils/api';
 
 /**
  * RuleTooltip - Contextual tooltips for game rules
@@ -128,13 +129,13 @@ const RULES = {
     }
 };
 
-const RuleTooltip = ({ ruleId, children, position = 'top' }) => {
+const RuleTooltip = ({ ruleId, children, position = 'top', rulesMap = RULES }) => {
     const [isVisible, setIsVisible] = useState(false);
     const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
     const triggerRef = useRef(null);
     const tooltipRef = useRef(null);
 
-    const rule = RULES[ruleId];
+    const rule = rulesMap[ruleId];
 
     useEffect(() => {
         if (isVisible && triggerRef.current && tooltipRef.current) {
@@ -275,6 +276,31 @@ const RuleTooltip = ({ ruleId, children, position = 'top' }) => {
     );
 };
 
+let mechanicTooltipCache = null;
+
+export const MechanicTooltip = ({ tipId, children, position = 'top' }) => {
+    const [tips, setTips] = useState(mechanicTooltipCache);
+
+    useEffect(() => {
+        if (!tips) {
+            api.get('/tooltips')
+                .then((data) => {
+                    const tooltips = data.tooltips || {};
+                    mechanicTooltipCache = tooltips;
+                    setTips(tooltips);
+                })
+                .catch(() => setTips({}));
+        }
+    }, [tips]);
+
+    if (!tips) return children;
+    return (
+        <RuleTooltip ruleId={tipId} position={position} rulesMap={tips}>
+            {children}
+        </RuleTooltip>
+    );
+};
+
 /**
  * QuickReferencePanel - Full reference panel overlay
  */
@@ -411,3 +437,4 @@ export const QuickReferencePanel = ({ isOpen, onClose }) => {
 };
 
 export default RuleTooltip;
+export { MechanicTooltip };
