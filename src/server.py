@@ -38,11 +38,13 @@ from src.image_gen import (
 from src.director import DirectorAgent
 from src.memory_system import MemoryPalace
 from src.relationship_system import RelationshipWeb
+from src.config import config
 from src.mystery_generator import MysteryConfig
 from src.auto_save import AutoSaveSystem
 from src.photo_album import PhotoAlbumManager
 from src.psychology_api_models import *
 from src.additional_api import register_starmap_routes, register_rumor_routes, register_audio_routes  # Added import
+from src.lore import LoreRegistry
 
 app = FastAPI(title="Starforged AI GM")
 
@@ -79,6 +81,8 @@ try:
     DATASWORN = load_starforged_data()
 except Exception:
     DATASWORN = None
+
+LORE_REGISTRY = LoreRegistry(Path("data/lore"))
 
 class CharacterStatsInput(BaseModel):
     edge: int = 1
@@ -121,6 +125,24 @@ def get_available_assets():
         })
     
     return {"assets": assets_by_type}
+
+
+@app.get("/api/lore")
+def get_lore(q: str = "", factions: str = "", locations: str = "", items: str = ""):
+    """Search lore entries with optional filters."""
+
+    def _split(value: str) -> list[str] | None:
+        if not value:
+            return None
+        return [v.strip() for v in value.split(",") if v.strip()]
+
+    entries = LORE_REGISTRY.search(
+        query=q,
+        factions=_split(factions),
+        locations=_split(locations),
+        items=_split(items),
+    )
+    return {"entries": [entry.to_dict() for entry in entries]}
 
 @app.post("/api/session/start")
 async def start_session(req: InitRequest):
@@ -1469,11 +1491,17 @@ def quick_load():
 # Session Recap API Endpoints
 # ============================================================================
 
-from src.session_recap import SessionRecapEngine, RecapStyle
+from src.session_recap import MilestoneCategory, SessionRecapEngine, RecapStyle
 from src.npc_templates import NPCRole, get_template, generate_quick_npc, get_all_roles, get_template_preview
 
 # Global recap engine instance
 RECAP_ENGINE = SessionRecapEngine()
+
+
+@app.get("/api/tooltips")
+def get_mechanic_tooltips():
+    """Expose contextual mechanic tooltips configured on the backend."""
+    return {"tooltips": config.ui.mechanic_tooltips}
 
 @app.get("/api/session/recap/{session_id}")
 def get_session_recap(session_id: str, style: str = "dramatic"):
@@ -1503,6 +1531,33 @@ def get_session_recap(session_id: str, style: str = "dramatic"):
         "recap": recap,
         "session_count": len(RECAP_ENGINE._session_history)
     }
+
+
+@app.get("/api/session/what-happened/{session_id}")
+def get_session_digest(session_id: str):
+    """Return a structured recap with highlights and vows."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    state = SESSIONS[session_id]
+    character_name = state['character'].name if hasattr(state['character'], 'name') else "you"
+
+    album_state = state.get("album")
+    memory_state = state.get("memory")
+    vow_state = []
+    character = state.get("character")
+    if hasattr(character, "vows"):
+        vow_state = character.vows
+
+    digest = RECAP_ENGINE.build_digest(
+        protagonist_name=character_name,
+        album_state=album_state,
+        memory_state=memory_state,
+        vow_state=vow_state,
+        current_location=getattr(state.get("world"), "current_location", "") if hasattr(state, "get") else "",
+    )
+
+    return digest
 
 @app.get("/api/session/story-so-far/{session_id}")
 def get_story_so_far(session_id: str, length: str = "medium"):
@@ -1567,22 +1622,55 @@ def record_session_event(
     description: str,
     importance: int = 5,
     characters: Optional[str] = None,
-    location: Optional[str] = None
+    location: Optional[str] = None,
+    category: Optional[str] = "narrative",
+    timestamp: Optional[str] = None,
 ):
     """Record a significant event for recap purposes."""
     if session_id not in SESSIONS:
         raise HTTPException(status_code=404, detail="Session not found")
-    
+
     char_list = characters.split(",") if characters else []
-    
+
+    parsed_timestamp = None
+    if timestamp:
+        try:
+            parsed_timestamp = datetime.fromisoformat(timestamp)
+        except ValueError:
+            parsed_timestamp = None
+
     RECAP_ENGINE.record_event(
         description=description,
         importance=importance,
         characters=char_list,
-        location=location or ""
+        location=location or "",
+        category=category,
+        timestamp=parsed_timestamp,
     )
-    
+
     return {"recorded": True}
+
+
+@app.get("/api/session/timeline/{session_id}")
+def get_timeline(session_id: str, categories: Optional[str] = None):
+    """Return the recorded timeline with optional category filters."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    category_filter = [c.strip() for c in categories.split(",") if c.strip()] if categories else None
+    entries = [entry.to_dict() for entry in RECAP_ENGINE.get_timeline(category_filter)]
+    return {"timeline": entries, "total": len(entries)}
+
+
+@app.get("/api/session/timeline/{session_id}/export")
+def export_timeline(session_id: str, categories: Optional[str] = None):
+    """Export a filtered timeline as JSON for sharing."""
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    category_filter = [c.strip() for c in categories.split(",") if c.strip()] if categories else None
+    payload = RECAP_ENGINE.export_timeline_json(category_filter)
+    return Response(content=payload, media_type="application/json")
 
 
 # ============================================================================

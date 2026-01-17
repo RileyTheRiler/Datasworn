@@ -12,6 +12,7 @@ from typing import Any, Callable
 import json
 
 from src.psych_profile import PsychologicalProfile, ValueSystem
+from src.narrative_memory import NarrativeSnapshot
 
 
 # ============================================================================
@@ -194,6 +195,7 @@ class StoryDAG:
         self.visited_nodes: list[str] = []
         self.tension_curve: TensionCurve = TensionCurve()
         self._node_counter = 0
+        self.snapshots: list[NarrativeSnapshot] = []
     
     def _generate_id(self, node_type: NodeType) -> str:
         """Generate unique node ID."""
@@ -487,6 +489,7 @@ class StoryDAG:
             "current_node": self.current_node,
             "visited_nodes": self.visited_nodes,
             "_node_counter": self._node_counter,
+            "snapshots": [s.to_dict() for s in self.snapshots],
         }
     
     @classmethod
@@ -495,14 +498,30 @@ class StoryDAG:
         dag._node_counter = data.get("_node_counter", 0)
         dag.current_node = data.get("current_node", "")
         dag.visited_nodes = data.get("visited_nodes", [])
+
+        dag.snapshots = [
+            NarrativeSnapshot.from_dict(s) for s in data.get("snapshots", [])
+        ]
         
         for nid, ndata in data.get("nodes", {}).items():
             dag.nodes[nid] = StoryNode.from_dict(ndata)
         
         for edata in data.get("edges", []):
             dag.edges.append(StoryEdge.from_dict(edata))
-        
+
         return dag
+
+    def record_snapshot(self, snapshot: NarrativeSnapshot, max_entries: int = 20) -> None:
+        """Persist a narrative snapshot for cross-session continuity."""
+        self.snapshots.append(snapshot)
+        if len(self.snapshots) > max_entries:
+            self.snapshots = self.snapshots[-max_entries:]
+
+    def get_latest_snapshot(self) -> NarrativeSnapshot | None:
+        """Return the most recent snapshot if available."""
+        if not self.snapshots:
+            return None
+        return self.snapshots[-1]
 
 
 # ============================================================================

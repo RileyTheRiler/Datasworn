@@ -14,9 +14,11 @@ import gradio as gr
 
 from src.game_state import Character
 from src.narrator import generate_narrative_stream, NarratorConfig
+from src.config import get_config
 from src.game_state import Character, create_initial_state
 from src.narrator import generate_narrative_stream, NarratorConfig, check_provider_availability
 from src.persistence import CURRENT_SCHEMA_VERSION, PersistenceLayer
+from src.tutorial import TutorialEngine, TutorialState, get_new_player_scenario
 
 
 # ============================================================================
@@ -150,10 +152,15 @@ class GameSession:
         self.awaiting_approval: bool = False
         self.chat_history: list[tuple[str, str]] = []
 
+        # Table-side helpers
+        self.consequence_log: list[str] = []
+        self.scene_highlights: list[str] = []
+        
         # New System States
         self.quest_lore: dict | None = None
         self.world: dict | None = None
         self.companions: dict | None = None
+        self.tutorial_state: TutorialState = TutorialState()
 
     def reset(self, session_id: Optional[str] = None):
         """Reset session state."""
@@ -171,6 +178,7 @@ class GameSession:
             "quest_lore": self.quest_lore,
             "world": self.world,
             "companions": self.companions,
+            "tutorial_state": self.tutorial_state.to_dict(),
         }
 
     @classmethod
@@ -185,6 +193,8 @@ class GameSession:
         session.quest_lore = data.get("quest_lore")
         session.world = data.get("world")
         session.companions = data.get("companions")
+        if data.get("tutorial_state"):
+            session.tutorial_state = TutorialState.from_dict(data.get("tutorial_state", {}))
         return session
 
 
@@ -223,6 +233,7 @@ class SessionStore:
 
 SESSION_STORE = SessionStore(Path("saves/ui_sessions.json"))
 PERSISTENCE = PersistenceLayer(Path("saves/game_state.db"))
+TUTORIAL_ENGINE = TutorialEngine(get_new_player_scenario())
 
 
 # ============================================================================
@@ -238,6 +249,26 @@ def _get_or_create_session(session_id: Optional[str], request: Optional[gr.Reque
     return session
 
 
+def _ensure_tutorial_state(session: GameSession) -> None:
+    if not getattr(session, "tutorial_state", None):
+        session.tutorial_state = TutorialState()
+    TUTORIAL_ENGINE.start(session.tutorial_state)
+
+
+def _update_tutorial_progress(session: GameSession, context: dict) -> None:
+    _ensure_tutorial_state(session)
+    TUTORIAL_ENGINE.evaluate_progress(session.tutorial_state, context)
+    SESSION_STORE.save_session(session)
+
+
+def _render_guidance_overlay(session: GameSession) -> str:
+    config = get_config()
+    if not config.ui.guidance_overlays_enabled:
+        return "*Guidance overlays are disabled in settings.*"
+    _ensure_tutorial_state(session)
+    return TUTORIAL_ENGINE.overlay_text(session.tutorial_state)
+
+
 def _render_session(session: GameSession):
     """Return UI-friendly values for the current session state."""
     if not session.character:
@@ -250,6 +281,7 @@ def _render_session(session: GameSession):
             "*No active quests*",
             "*Safe*",
             "*Solo*",
+            _render_guidance_overlay(session),
         )
 
     return (
@@ -261,6 +293,7 @@ def _render_session(session: GameSession):
         format_quests(session.quest_lore),
         format_combat(session.world),
         format_companions(session.companions),
+        _render_guidance_overlay(session),
     )
 
 
@@ -290,8 +323,21 @@ def create_character(
 
     intro = f"Welcome, {name}. Your journey through the Forge begins..."
     session.chat_history.append(("System", intro))
+    _update_tutorial_progress(session, {"character_created": True})
     SESSION_STORE.save_session(session)
 
+    return (
+        _session.chat_history,
+        format_stats(_session.character),
+        format_momentum(_session.character.momentum.value),
+        format_condition(_session.character.condition),
+        format_vows(_session.character.vows),
+        format_quests(_session.quest_lore),
+        format_combat(_session.world),
+        format_companions(_session.companions),
+        format_consequences(_session.consequence_log),
+        format_scene_highlights(_session.scene_highlights),
+    )
     rendered = _render_session(session)
     return (*rendered, session.session_id)
 
@@ -343,6 +389,22 @@ def format_vows(vows: list | None) -> str:
         lines.append(f"**{vow.name}** ({vow.rank}) [{bar}] {status}")
 
     return "\n".join(lines)
+
+
+def format_consequences(entries: list[str]) -> str:
+    """Display recent consequences and debts."""
+    if not entries:
+        return "*No complications recorded*"
+
+    return "\n".join(f"• {entry}" for entry in entries[:5])
+
+
+def format_scene_highlights(highlights: list[str]) -> str:
+    """Show quick recap lines for recent scenes."""
+    if not highlights:
+        return "*No scenes logged yet*"
+
+    return "\n".join(f"• {text}" for text in highlights[:5])
 
 
 def format_director_state(director_state) -> str:
@@ -504,13 +566,53 @@ def format_companions(companion_state) -> str:
     name = comp.get("name", "Companion")
     role = comp.get("archetype", "Ally").title()
     loyalty = comp.get("loyalty", 0)
-    
+
     return f"""
 **{name}** ({role})
 Loyalty: {loyalty}/10
     """.strip()
 
 
+def record_consequence(note: str) -> str:
+    """Add a manual consequence entry to the log."""
+    cleaned = note.strip()
+    if not cleaned:
+        return format_consequences(_session.consequence_log)
+
+    _session.consequence_log = [cleaned] + _session.consequence_log
+    _session.consequence_log = _session.consequence_log[:6]
+    return format_consequences(_session.consequence_log)
+
+
+def record_scene_highlight(message: str, narrative: str):
+    """Capture a compact recap line for the latest exchange."""
+    if not narrative:
+        return
+
+    first_line = narrative.strip().split("\n", maxsplit=1)[0]
+    if len(first_line) > 160:
+        first_line = first_line[:157] + "..."
+
+    recap = f"{_session.character.name if _session.character else 'Hero'}: {first_line}"
+    _session.scene_highlights = [recap] + _session.scene_highlights
+    _session.scene_highlights = _session.scene_highlights[:6]
+
+
+def process_player_input(message: str, history: list) -> Generator:
+    """Process player input and generate narrative response."""
+    if not _session.character:
+        yield (
+            history + [("System", "Please create a character first.")],
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            format_consequences(_session.consequence_log),
+            format_scene_highlights(_session.scene_highlights),
+        )
 def process_player_input(message: str, history: list, session_id: Optional[str], request: gr.Request | None = None) -> Generator:
     """Process player input and generate narrative response."""
     session = _get_or_create_session(session_id, request)
@@ -525,8 +627,26 @@ def process_player_input(message: str, history: list, session_id: Optional[str],
 
     # Add player message to history
     history = history + [(message, None)]
+    yield (
+        history,
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        format_consequences(_session.consequence_log),
+        format_scene_highlights(_session.scene_highlights),
+    )
     session.chat_history = history
-    SESSION_STORE.save_session(session)
+    _update_tutorial_progress(
+        session,
+        {
+            "submitted_action": True,
+            "character_created": bool(session.character),
+        },
+    )
     yield (*_render_session(session), session.session_id)
 
     # Generate narrative response
@@ -551,12 +671,43 @@ def process_player_input(message: str, history: list, session_id: Optional[str],
     ):
         narrative += chunk
         history[-1] = (message, narrative)
+        yield (
+            history,
+            format_stats(_session.character),
+            format_momentum(_session.character.momentum.value),
+            format_condition(_session.character.condition),
+            format_vows(_session.character.vows),
+            format_quests(_session.quest_lore),
+            format_combat(_session.world),
+            format_companions(_session.companions),
+            format_consequences(_session.consequence_log),
+            format_scene_highlights(_session.scene_highlights),
+        )
+
+    _session.pending_narrative = narrative
+    _session.awaiting_approval = True
+    _session.chat_history = history
+    record_scene_highlight(message, narrative)
+
+    # Final update to reflect any scene recap generated from the completed narrative
+    yield (
+        history,
+        format_stats(_session.character),
+        format_momentum(_session.character.momentum.value),
+        format_condition(_session.character.condition),
+        format_vows(_session.character.vows),
+        format_quests(_session.quest_lore),
+        format_combat(_session.world),
+        format_companions(_session.companions),
+        format_consequences(_session.consequence_log),
+        format_scene_highlights(_session.scene_highlights),
+    )
         session.chat_history = history
         yield (*_render_session(session), session.session_id)
 
     session.pending_narrative = narrative
     session.awaiting_approval = True
-    SESSION_STORE.save_session(session)
+    _update_tutorial_progress(session, {"received_narrative": True})
     yield (*_render_session(session), session.session_id)
 
 
@@ -565,7 +716,7 @@ def accept_narrative(session_id: Optional[str], request: gr.Request | None = Non
     session = _get_or_create_session(session_id, request)
     session.awaiting_approval = False
     session.pending_narrative = ""
-    SESSION_STORE.save_session(session)
+    _update_tutorial_progress(session, {"acknowledged_guidance": True})
     return "✓ Narrative accepted"
 
 
@@ -575,7 +726,7 @@ def retry_narrative(session_id: Optional[str], request: gr.Request | None = None
     if session.chat_history:
         _ = session.chat_history[-1][0]
         session.chat_history = session.chat_history[:-1]
-    SESSION_STORE.save_session(session)
+    _update_tutorial_progress(session, {"acknowledged_guidance": True})
     return "Regenerating..."
 
 
@@ -586,8 +737,26 @@ def edit_narrative(edited_text: str, session_id: Optional[str], request: gr.Requ
         msg, _ = session.chat_history[-1]
         session.chat_history[-1] = (msg, edited_text)
     session.awaiting_approval = False
-    SESSION_STORE.save_session(session)
+    _update_tutorial_progress(session, {"acknowledged_guidance": True})
     return session.chat_history
+
+
+def repeat_tutorial_step(session_id: Optional[str], request: gr.Request | None = None):
+    """Re-surface the current tutorial step without advancing progress."""
+    session = _get_or_create_session(session_id, request)
+    _ensure_tutorial_state(session)
+    TUTORIAL_ENGINE.repeat_step(session.tutorial_state)
+    SESSION_STORE.save_session(session)
+    return (*_render_session(session), session.session_id)
+
+
+def skip_tutorial_step(session_id: Optional[str], request: gr.Request | None = None):
+    """Skip the current tutorial beat."""
+    session = _get_or_create_session(session_id, request)
+    _ensure_tutorial_state(session)
+    TUTORIAL_ENGINE.skip_step(session.tutorial_state)
+    SESSION_STORE.save_session(session)
+    return (*_render_session(session), session.session_id)
 
 
 def restore_session(session_id: Optional[str], request: gr.Request | None = None):
@@ -665,6 +834,18 @@ def create_ui() -> gr.Blocks:
 
             # Game Tab
             with gr.Tab("Adventure"):
+                gr.Markdown(
+                    "**Quick Commands & Shortcuts:** `R` roll • `F5` save • `F9` load • `!status` show stats • `!vows` list vows • `!consequences` show log",
+                    elem_classes=["section-header"],
+                )
+
+                with gr.Accordion("Guided First Scene", open=False):
+                    gr.Markdown(
+                        "1. Declare your first vow and a starting location.\n"
+                        "2. Pick an intent below to get moving.\n"
+                        "3. Use the shortcuts strip if you need reminders during play."
+                    )
+
                 with gr.Row():
                     # Main chat area
                     with gr.Column(scale=3):
@@ -681,6 +862,11 @@ def create_ui() -> gr.Blocks:
                                 scale=4,
                             )
                             submit_btn = gr.Button("▶", scale=1, variant="primary")
+
+                        with gr.Row():
+                            scout_btn = gr.Button("🌌 Scout ahead", size="sm")
+                            diplomat_btn = gr.Button("🤝 Parley with a faction", size="sm")
+                            investigate_btn = gr.Button("🛰️ Investigate an anomaly", size="sm")
 
                         with gr.Row():
                             accept_btn = gr.Button("✓ Accept", elem_id="accept-btn", elem_classes=["action-btn"])
@@ -723,6 +909,21 @@ def create_ui() -> gr.Blocks:
                         gr.Markdown("### Companions", elem_classes=["section-header"])
                         companion_display = gr.Markdown("*Solo*")
 
+                        gr.Markdown("### Consequences & Debts", elem_classes=["section-header"])
+                        consequence_input = gr.Textbox(
+                            label="Log a complication",
+                            placeholder="Weak hit cost, promise owed, injury...",
+                        )
+                        consequence_display = gr.Markdown("*No complications recorded*")
+
+                        gr.Markdown("### Session Highlights", elem_classes=["section-header"])
+                        highlight_display = gr.Markdown("*No scenes logged yet*")
+                        gr.Markdown("### Guidance Overlay", elem_classes=["section-header"])
+                        tutorial_display = gr.Markdown("*Guidance overlays are disabled in settings.*")
+                        with gr.Row():
+                            repeat_tutorial_btn = gr.Button("Repeat step", size="sm")
+                            skip_tutorial_btn = gr.Button("Skip", size="sm")
+
                         gr.Markdown("---")
                         with gr.Row():
                             save_btn = gr.Button("💾 Save", size="sm")
@@ -733,6 +934,7 @@ def create_ui() -> gr.Blocks:
         # Event handlers
         create_btn.click(
             create_character,
+            inputs=[char_name, edge_stat, heart_stat, iron_stat, shadow_stat, wits_stat],
             inputs=[char_name, edge_stat, heart_stat, iron_stat, shadow_stat, wits_stat, session_state],
             outputs=[
                 chatbot,
@@ -743,12 +945,16 @@ def create_ui() -> gr.Blocks:
                 quests_display,
                 combat_display,
                 companion_display,
+                consequence_display,
+                highlight_display,
+                tutorial_display,
                 session_state,
             ],
         )
 
         submit_btn.click(
             process_player_input,
+            inputs=[player_input, chatbot],
             inputs=[player_input, chatbot, session_state],
             outputs=[
                 chatbot,
@@ -759,12 +965,16 @@ def create_ui() -> gr.Blocks:
                 quests_display,
                 combat_display,
                 companion_display,
+                consequence_display,
+                highlight_display,
+                tutorial_display,
                 session_state,
             ],
         ).then(lambda: "", outputs=player_input)
 
         player_input.submit(
             process_player_input,
+            inputs=[player_input, chatbot],
             inputs=[player_input, chatbot, session_state],
             outputs=[
                 chatbot,
@@ -775,6 +985,9 @@ def create_ui() -> gr.Blocks:
                 quests_display,
                 combat_display,
                 companion_display,
+                consequence_display,
+                highlight_display,
+                tutorial_display,
                 session_state,
             ],
         ).then(lambda: "", outputs=player_input)
@@ -787,6 +1000,40 @@ def create_ui() -> gr.Blocks:
 
         edit_btn.click(show_edit, outputs=[edit_box, save_edit_btn])
         save_edit_btn.click(edit_narrative, inputs=[edit_box, session_state], outputs=[chatbot])
+
+        repeat_tutorial_btn.click(
+            repeat_tutorial_step,
+            inputs=[session_state],
+            outputs=[
+                chatbot,
+                stats_display,
+                momentum_display,
+                condition_display,
+                vows_display,
+                quests_display,
+                combat_display,
+                companion_display,
+                tutorial_display,
+                session_state,
+            ],
+        )
+
+        skip_tutorial_btn.click(
+            skip_tutorial_step,
+            inputs=[session_state],
+            outputs=[
+                chatbot,
+                stats_display,
+                momentum_display,
+                condition_display,
+                vows_display,
+                quests_display,
+                combat_display,
+                companion_display,
+                tutorial_display,
+                session_state,
+            ],
+        )
 
         save_btn.click(save_character_state, inputs=[session_state], outputs=[save_status])
         load_btn.upload(
@@ -801,6 +1048,7 @@ def create_ui() -> gr.Blocks:
                 quests_display,
                 combat_display,
                 companion_display,
+                tutorial_display,
                 session_state,
                 save_status,
             ],
@@ -818,8 +1066,19 @@ def create_ui() -> gr.Blocks:
                 quests_display,
                 combat_display,
                 companion_display,
+                tutorial_display,
                 session_state,
             ],
+        )
+
+        # Example prompts
+        scout_btn.click(lambda: "Scout the nearby derelict for threats and salvage.", outputs=player_input)
+        diplomat_btn.click(lambda: "Approach the blockade captain to negotiate safe passage.", outputs=player_input)
+        investigate_btn.click(lambda: "Inspect the anomalous energy reading in the cargo bay.", outputs=player_input)
+
+        # Consequence logger
+        consequence_input.submit(record_consequence, inputs=[consequence_input], outputs=[consequence_display]).then(
+            lambda: "", outputs=consequence_input
         )
 
     return demo

@@ -7,7 +7,7 @@ import SessionRecap from './components/SessionRecap';
 import SessionTimer from './components/SessionTimer';
 import SoundSettings from './components/SoundSettings';
 import AutoSaveIndicator from './components/AutoSaveIndicator';
-import RuleTooltip, { QuickReferencePanel } from './components/RuleTooltip';
+import RuleTooltip, { QuickReferencePanel, MechanicTooltip } from './components/RuleTooltip';
 import { useKeyboardShortcuts, KeyboardHelpOverlay } from './components/KeyboardShortcuts';
 import { useAccessibility } from './contexts/AccessibilityContext';
 import { useSoundEffects } from './contexts/SoundEffectsContext';
@@ -19,6 +19,7 @@ import PhotoAlbum from './components/PhotoAlbum';
 import StarMap from './components/StarMap';
 import RumorBoard from './components/RumorBoard';
 import ShipBlueprintViewer from './components/ShipBlueprintViewer';
+import CodexBrowser from './components/CodexBrowser';
 import api from './utils/api';
 
 // Atmospheric loading messages
@@ -100,6 +101,9 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
     const [showStarMap, setShowStarMap] = useState(false);
     const [showRumorBoard, setShowRumorBoard] = useState(false);
     const [showShipBlueprint, setShowShipBlueprint] = useState(false);
+    const [recapTab, setRecapTab] = useState('what');
+    const [recapFocus, setRecapFocus] = useState('');
+    const [showCodex, setShowCodex] = useState(false);
     const [activeStat, setActiveStat] = useState({ name: 'Iron', value: character.stats.iron });
 
     // Accessibility and sound contexts
@@ -144,6 +148,7 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
             setShowHelp(false);
             setShowSaveManager(false);
             setShowRecap(false);
+            setRecapFocus('');
             setShowSoundSettings(false);
             setShowQuickReference(false);
             setShowBlueprint(false);
@@ -158,6 +163,22 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
         onToggleTimer: useCallback(() => setShowTimer(prev => !prev), []),
         onToggleHighContrast: useCallback(() => setHighContrast(prev => !prev), [setHighContrast]),
         onSelectStat: handleStatSelect,
+        onRest: useCallback(() => {
+            onAction?.('Take time to rest and recover with a Sojourn.');
+            setRecapTab('what');
+            setRecapFocus('');
+            setShowRecap(true);
+        }, [onAction]),
+        onInspectMemory: useCallback(() => {
+            setRecapTab('what');
+            setRecapFocus('memory');
+            setShowRecap(true);
+        }, []),
+        onReviewVows: useCallback(() => {
+            setRecapTab('what');
+            setRecapFocus('vows');
+            setShowRecap(true);
+        }, []),
     });
 
     // Quick save/load keyboard shortcuts
@@ -410,6 +431,9 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
                     {/* Keyboard Shortcuts Hint */}
                     <div className="mt-2 text-center text-[10px] font-mono text-disco-muted/50 uppercase flex justify-center items-center gap-4 flex-wrap">
                         <span>Press <kbd className="px-1 bg-disco-dark/50 rounded">R</kbd> roll</span>
+                        <span><kbd className="px-1 bg-disco-dark/50 rounded">Shift+R</kbd> rest</span>
+                        <span><kbd className="px-1 bg-disco-dark/50 rounded">Shift+M</kbd> memory</span>
+                        <span><kbd className="px-1 bg-disco-dark/50 rounded">Shift+V</kbd> vows</span>
                         <span><kbd className="px-1 bg-disco-dark/50 rounded">1-5</kbd> stats</span>
                         <span><kbd className="px-1 bg-disco-dark/50 rounded">F5</kbd> save</span>
                         <span><kbd className="px-1 bg-disco-dark/50 rounded">?</kbd> help</span>
@@ -420,11 +444,28 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
                             💾 Saves
                         </button>
                         <button
-                            onClick={() => setShowRecap(true)}
+                            onClick={() => { setRecapTab('what'); setRecapFocus(''); setShowRecap(true); }}
                             className="text-disco-accent hover:text-disco-paper transition-colors"
-                        >
+                            >
                             📜 Recap
                         </button>
+                        <MechanicTooltip tipId="memory">
+                            <button
+                                onClick={() => { setRecapTab('what'); setRecapFocus('memory'); setShowRecap(true); }}
+                                className="text-disco-cyan hover:text-disco-paper transition-colors"
+                            >
+                                🧠 Memory
+                            </button>
+                        </MechanicTooltip>
+                        <MechanicTooltip tipId="vows">
+                            <button
+                                onClick={() => { setRecapTab('what'); setRecapFocus('vows'); setShowRecap(true); }}
+                                className="text-disco-purple hover:text-disco-paper transition-colors"
+                                title="Active vows"
+                            >
+                                ✒️ Vows
+                            </button>
+                        </MechanicTooltip>
                         <button
                             onClick={() => setShowQuickReference(true)}
                             className="text-disco-purple hover:text-disco-paper transition-colors"
@@ -460,6 +501,13 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
                             title="Photo Album - Captured Moments"
                         >
                             📸 Album
+                        </button>
+                        <button
+                            onClick={() => setShowCodex(true)}
+                            className="text-disco-cyan hover:text-disco-paper transition-colors"
+                            title="Lore Codex"
+                        >
+                            📘 Codex
                         </button>
                         <button
                             onClick={() => setShowStarMap(true)}
@@ -515,8 +563,10 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
                     {/* Session Recap Modal */}
                     <SessionRecap
                         isOpen={showRecap}
-                        onClose={() => setShowRecap(false)}
+                        onClose={() => { setRecapFocus(''); setShowRecap(false); }}
                         sessionId="default"
+                        defaultTab={recapTab}
+                        focusSection={recapFocus}
                     />
 
                     {/* Sound Settings Modal */}
@@ -574,6 +624,11 @@ const Layout = ({ gameState, assets, onAssetsUpdate, onAction, onGameStateUpdate
                         sessionId="default"
                         visible={showAlbum}
                         onClose={() => setShowAlbum(false)}
+                    />
+
+                    <CodexBrowser
+                        visible={showCodex}
+                        onClose={() => setShowCodex(false)}
                     />
                 </div>
             </div>

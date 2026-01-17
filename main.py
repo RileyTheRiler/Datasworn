@@ -146,6 +146,65 @@ def run_demo_session():
     print("\nUse --cli to keep playing, or launch the UI to explore the full experience.")
 
 
+def run_tactical_debug(dump_rationale: bool = False) -> list[str]:
+    """Run a lightweight combat AI simulation and optionally dump rationales."""
+
+    from src.combat.encounter_manager import (
+        CombatantState,
+        EncounterManager,
+        EncounterState,
+        summarize_decisions,
+    )
+
+    manager = EncounterManager()
+    enemies = [
+        CombatantState(id="e1", name="Raider", health=0.8, threat=0.7, position=(5, 5)),
+        CombatantState(id="e2", name="Sharpshooter", health=1.0, threat=0.9, position=(8, 2), in_cover=True, cover_quality=0.7),
+    ]
+    party = [
+        CombatantState(
+            id="p1",
+            name="Vanguard",
+            health=0.55,
+            ammo=0.6,
+            threat=0.6,
+            position=(0, 0),
+            cover_quality=0.1,
+            allies_nearby=1,
+        ),
+        CombatantState(
+            id="p2",
+            name="Sniper",
+            health=0.9,
+            ammo=0.9,
+            threat=0.4,
+            position=(1, 2),
+            in_cover=True,
+            cover_quality=0.8,
+            allies_nearby=1,
+        ),
+    ]
+
+    encounter = EncounterState(
+        enemies=enemies,
+        party=party,
+        map_control=0.4,
+        cover_density=0.6,
+        objective_pressure=0.7,
+    )
+
+    decisions = [manager.evaluate_turn(actor, encounter, dump_debug=dump_rationale) for actor in party]
+    print("\n[Tactical AI Demo]")
+    print(summarize_decisions(decisions))
+
+    if dump_rationale:
+        print("\n[Per-turn rationale]")
+        for line in manager.debug_log():
+            print(f" • {line}")
+
+    return manager.debug_log()
+
+
 def run_cli():
     """Run the game in CLI mode for testing."""
     print("\n" + "=" * 60)
@@ -316,6 +375,12 @@ Examples:
     parser.add_argument("--test", action="store_true", help="Run tests")
     parser.add_argument("--check", action="store_true", help="Check system requirements")
     parser.add_argument("--share", action="store_true", help="Create public Gradio share link")
+    parser.add_argument("--tactical-debug", action="store_true", help="Run a tactical AI simulation")
+    parser.add_argument(
+        "--dump-ai-rationale",
+        action="store_true",
+        help="Print per-turn tactical decision rationales",
+    )
     parser.add_argument("--port", type=int, default=7860, help="UI port (default: 7860)")
 
     args = parser.parse_args()
@@ -343,6 +408,10 @@ Examples:
 
     if args.demo:
         run_demo_session()
+        return
+
+    if args.tactical_debug:
+        run_tactical_debug(args.dump_ai_rationale)
         return
 
     if args.test:

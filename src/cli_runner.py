@@ -8,11 +8,19 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from src.config import get_config
 from src.datasworn import DataswornData, Move
 from src.game_state import Character, CharacterCondition, CharacterStats, MomentumState, VowState, create_initial_state
+from src.photo_album import PhotoAlbumManager
+from src.session_recap import SessionRecapEngine
+from src.config import config
+from src.consequence_tracker import ConsequenceTracker, get_consequence_display
 from src.intent_predictor import INTENT_KEYWORDS, IntentCategory
+from src.lore import LoreRegistry
 from src.persistence import PersistenceLayer
 from src.rules_engine import ProgressTrack, RollResult, action_roll
+from src.session_recap import MilestoneCategory, SessionRecapEngine
+from src.tutorial import TutorialEngine, TutorialState, get_new_player_scenario
 
 DEFAULT_DATA_PATH = Path("data/starforged/dataforged.json")
 
@@ -57,6 +65,60 @@ class CLIRunner:
         self.data = DataswornData(path) if path.exists() else None
         self.state = create_initial_state(character_name)
         self.persistence = persistence or PersistenceLayer(save_path or Path("saves/game_state.db"))
+        self.recap_engine = SessionRecapEngine()
+        self.album_manager = PhotoAlbumManager(self.state["album"])
+        self.recap_engine.start_session()
+        self.lore_registry = LoreRegistry(Path("data/lore")) if Path("data/lore").exists() else None
+        self.recap_engine = SessionRecapEngine()
+        self.recap_engine.start_session(1)
+        self.config = get_config()
+        self.tutorial_state = TutorialState()
+        self.tutorial_engine = TutorialEngine(get_new_player_scenario())
+        self.consequence_tracker = ConsequenceTracker()
+        self._starter_intents: list[dict[str, str]] = [
+            {
+                "id": "frontier_rescue",
+                "label": "Answer the distress call at Iron Gate",
+                "prompt": "Rush to Iron Gate station to rescue stranded settlers.",
+                "location": "Iron Gate Station",
+                "vow": "Protect the refugees of Iron Gate",
+            },
+            {
+                "id": "lost_probe",
+                "label": "Recover the lost probe in the Ghost Belt",
+                "prompt": "Scout the debris field where the research probe vanished.",
+                "location": "Ghost Belt",
+                "vow": "Retrieve the secrets of the Ghost Belt probe",
+            },
+            {
+                "id": "clandestine_meet",
+                "label": "Meet a clandestine contact on the Brimworld",
+                "prompt": "Slip through patrols to reach a Brimworld contact with intel.",
+                "location": "Brimworld Bazaar",
+                "vow": "Uncover the intel hidden in the Brimworld bazaar",
+            },
+        ]
+
+    # ------------------------------------------------------------------
+    # Tutorial helpers
+    # ------------------------------------------------------------------
+    def _update_tutorial_state(self, context: dict) -> None:
+        self.tutorial_engine.start(self.tutorial_state)
+        self.tutorial_engine.evaluate_progress(self.tutorial_state, context)
+
+    def _tutorial_overlay(self) -> str:
+        if not self.config.ui.cli_tooltips_enabled:
+            return "Guidance tooltips are disabled in settings."
+        return self.tutorial_engine.overlay_text(self.tutorial_state)
+
+    def _maybe_attach_tooltips(self, response: str, context: dict) -> str:
+        self._update_tutorial_state(context)
+        if not self.config.ui.cli_tooltips_enabled:
+            return response
+        overlay = self._tutorial_overlay()
+        if not overlay:
+            return response
+        return f"{response}\n\n[Tutorial]\n{overlay}"
 
     # ------------------------------------------------------------------
     # High-level flow
@@ -66,15 +128,28 @@ class CLIRunner:
         if not user_text:
             return ""
 
+        onboarding_response = self._handle_onboarding(user_text)
+        if onboarding_response is not None:
+            return onboarding_response
+
+        context = {
+            "character_created": True,
+            "submitted_action": bool(user_text),
+        }
+
         if user_text.startswith("!"):
-            return self._handle_command(user_text[1:])
+            response = self._handle_command(user_text[1:])
+            return self._maybe_attach_tooltips(response, context)
 
         intent = self._detect_intent(user_text)
         move = self._match_move(user_text, intent)
         if not move:
-            return "I couldn't match that action to a move. Try naming a move or use !help for commands."
+            response = "I couldn't match that action to a move. Try naming a move or use !help for commands."
+            return self._maybe_attach_tooltips(response, context)
 
-        return self._resolve_move(move, user_text, intent)
+        response = self._resolve_move(move, user_text, intent)
+        context["received_narrative"] = True
+        return self._maybe_attach_tooltips(response, context)
 
     # ------------------------------------------------------------------
     # Commands
@@ -96,13 +171,29 @@ class CLIRunner:
             return self._render_assets()
         if name == "vows":
             return self._render_vows()
+        if name in {"review", "reviewvows"}:
+            return self._render_vows(include_header=True)
+        if name in {"memory", "memories"}:
+            return self._render_memory()
+        if name == "consequences":
+            return self._render_consequences()
+        if name == "timeline":
+            return self._render_timeline(arg)
         if name == "oracle":
             return self._roll_oracle(arg)
+        if name in {"rest", "sojourn"}:
+            return self._command_rest()
+        if name in {"recap", "what", "digest"}:
+            return self._render_recap_digest()
         if name == "save":
             return self._command_save()
         if name == "load":
             load_name = rest[0].strip() if rest else None
             return self._command_load(load_name)
+        if name == "codex":
+            return self._command_codex(arg)
+        if name == "tutorial":
+            return self._tutorial_command(arg)
         if name in {"help", "?"}:
             if arg == "moves":
                 return self._render_move_help()
@@ -111,13 +202,88 @@ class CLIRunner:
                 "!status       - Show stats, momentum, and conditions\n"
                 "!assets       - List equipped assets and abilities\n"
                 "!vows         - List active vows and progress\n"
+                "!review vows  - Highlight sworn oaths and progress\n"
+                "!memory       - Summarize recent scenes, choices, and NPCs\n"
+                "!rest         - Take a breather and regain condition\n"
+                "!recap        - Show 'What happened?' digest with highlights\n"
+                "!codex QUERY  - Search the lore codex (use faction:, location:, item: filters)\n"
+                "!timeline     - Show a filtered milestone timeline\n"
                 "!oracle NAME  - Roll an oracle by path or keyword\n"
                 "!save         - Persist the current character\n"
                 "!load [NAME]  - Load a saved character by name\n"
+                "!tutorial     - Show or control onboarding tips\n"
+                "!consequences - Show outstanding consequences\n"
                 "!help moves   - List move prompts and examples\n"
                 "!help         - Show this list"
             )
         return "Unknown command. Try !help for the list."
+
+    def _tutorial_command(self, arg: str) -> str:
+        command = arg.strip().lower()
+        if command.startswith("skip"):
+            self.tutorial_engine.skip_step(self.tutorial_state)
+            self._update_tutorial_state({"acknowledged_guidance": True})
+            return f"Skipped.\n\n{self._tutorial_overlay()}"
+        if command.startswith("repeat"):
+            self.tutorial_engine.repeat_step(self.tutorial_state)
+            return self._tutorial_overlay()
+        if command.startswith("note"):
+            note = command.partition(" ")[2].strip() or "acknowledged"
+            self.tutorial_engine.complete_step(self.tutorial_state, comprehension=note)
+            return f"Recorded: {note}.\n\n{self._tutorial_overlay()}"
+        self._update_tutorial_state({"acknowledged_guidance": True})
+        return self._tutorial_overlay()
+
+    # ------------------------------------------------------------------
+    # Onboarding
+    # ------------------------------------------------------------------
+    def _handle_onboarding(self, user_text: str) -> str | None:
+        session_state = self.state["session"]
+        if session_state.onboarding_completed:
+            return None
+
+        if session_state.onboarding_step == 0:
+            session_state.onboarding_step = 1
+            options = "\n".join(
+                [f"[{idx+1}] {opt['label']}" for idx, opt in enumerate(self._starter_intents)]
+            )
+            return (
+                "Welcome! Choose a starter intent to set the opening scene:\n"
+                f"{options}\n\n"
+                "Reply with the number or intent id to continue."
+            )
+
+        selection = user_text.lower()
+        choice = None
+        if selection.isdigit():
+            idx = int(selection) - 1
+            if 0 <= idx < len(self._starter_intents):
+                choice = self._starter_intents[idx]
+        if not choice:
+            for opt in self._starter_intents:
+                if opt["id"] == selection:
+                    choice = opt
+                    break
+
+        if not choice:
+            return "Please choose a starter intent by number or id."
+
+        session_state.onboarding_completed = True
+        session_state.starter_intent = choice["prompt"]
+        session_state.starting_vow = choice["vow"]
+        session_state.starting_location = choice["location"]
+
+        self.state["world"].current_location = choice["location"]
+        self.state["narrative"].current_scene = choice["prompt"]
+        character = self.state["character"]
+        character.vows.append(
+            VowState(name=choice["vow"], rank="dangerous", ticks=0, completed=False)
+        )
+
+        return (
+            f"Starting at {choice['location']} with vow '{choice['vow']}'.\n"
+            f"Intent: {choice['prompt']}"
+        )
 
     def _render_status(self) -> str:
         char: Character = self.state["character"]
@@ -164,6 +330,178 @@ class CLIRunner:
             lines.append(f"- {vow.name} ({vow.rank}) {track.display}")
         return "\n".join(lines)
 
+    def _render_memory(self) -> str:
+        memory = self.state.get("memory")
+        if not memory:
+            return "No memories recorded yet."
+
+        lines = ["Recent memory log:"]
+        if memory.scene_summaries:
+            lines.append("Scenes:")
+            for summary in memory.scene_summaries[-3:]:
+                lines.append(f"  - {summary}")
+        if memory.decisions_made:
+            lines.append("Decisions:")
+            for decision in memory.decisions_made[-3:]:
+                lines.append(f"  - {decision}")
+        if memory.npcs_encountered:
+            lines.append("NPCs encountered:")
+            for name, note in list(memory.npcs_encountered.items())[-3:]:
+                lines.append(f"  - {name}: {note}")
+
+        return "\n".join(lines)
+
+    def _command_rest(self) -> str:
+        char: Character = self.state["character"]
+        condition: CharacterCondition = char.condition
+        before = (condition.health, condition.spirit, condition.supply)
+
+        condition.health = min(5, condition.health + 1)
+        condition.spirit = min(5, condition.spirit + 1)
+        condition.supply = min(5, condition.supply + 1)
+
+        self.album_manager.capture_moment(
+            image_url="cli://rest",
+            caption=f"{char.name} caught their breath at {self.state['world'].current_location}",
+            tags=["Rest", "Recovery"],
+            scene_id=self.state["world"].current_location or "camp",
+        )
+        self.recap_engine.record_event(
+            description="Took time to rest and regroup",
+            importance=4,
+            characters=[char.name],
+            location=self.state["world"].current_location,
+            emotional_tone="relief",
+        )
+
+        after = (condition.health, condition.spirit, condition.supply)
+        return (
+            "Rested and regrouped."
+            f"\nHealth: {before[0]} → {after[0]}"
+            f"\nSpirit: {before[1]} → {after[1]}"
+            f"\nSupply: {before[2]} → {after[2]}"
+            "\nUse the recap panel for highlights and vows."
+        )
+
+    def _render_recap_digest(self) -> str:
+        char: Character = self.state["character"]
+        digest = self.recap_engine.build_digest(
+            protagonist_name=char.name,
+            album_state=self.state.get("album"),
+            memory_state=self.state.get("memory"),
+            vow_state=char.vows,
+            current_location=self.state.get("world").current_location,
+        )
+
+        lines = [digest.get("title", "What happened?"), ""]
+        lines.append(digest.get("recap", ""))
+
+        if digest.get("highlights"):
+            lines.append("\nHighlights:")
+            for photo in digest["highlights"]:
+                lines.append(f"- {photo.get('caption')} ({', '.join(photo.get('tags', []))})")
+
+        memory = digest.get("memory") or {}
+        if memory:
+            lines.append("\nMemory anchors:")
+            for summary in memory.get("recent_summaries", []):
+                lines.append(f"- {summary}")
+            for decision in memory.get("recent_decisions", []):
+                lines.append(f"- Decision: {decision}")
+
+        if digest.get("vows"):
+            lines.append("\nVows:")
+            for vow in digest["vows"]:
+                lines.append(f"- {vow['name']} ({vow['rank']}) {vow['progress']}")
+
+        tooltip = config.ui.mechanic_tooltips.get("recap", {})
+        if tooltip:
+            lines.append(f"\nTip: {tooltip.get('summary', '')}")
+
+        return "\n".join(lines)
+    def _render_consequences(self) -> str:
+        display = get_consequence_display(self.consequence_tracker)
+        if not display:
+            return "No outstanding consequences. Keep exploring!"
+        lines = ["Active Consequences:"]
+        for item in display:
+            lines.append(
+                f"{item['icon']} {item['description']} (severity: {item['severity']}, source: {item['source']})"
+            )
+        return "\n".join(lines)
+
+    def _command_codex(self, arg: str) -> str:
+        if not self.lore_registry or not self.lore_registry.entries:
+            return "Codex unavailable. Add entries to data/lore to enable searches."
+
+        query_parts: list[str] = []
+        factions: list[str] = []
+        locations: list[str] = []
+        items: list[str] = []
+
+        tokens = arg.split()
+        idx = 0
+        while idx < len(tokens):
+            token = tokens[idx]
+            lowered = token.lower()
+
+            if ":" in lowered:
+                key, value = token.split(":", 1)
+                value_parts = [value]
+                idx += 1
+                while idx < len(tokens) and ":" not in tokens[idx]:
+                    value_parts.append(tokens[idx])
+                    idx += 1
+                value_text = " ".join(value_parts).strip()
+                if key.lower() == "faction":
+                    factions.append(value_text)
+                elif key.lower() == "location":
+                    locations.append(value_text)
+                elif key.lower() == "item":
+                    items.append(value_text)
+                else:
+                    query_parts.append(value_text)
+                continue
+
+            query_parts.append(token)
+            idx += 1
+
+        query = " ".join(query_parts).strip()
+        results = self.lore_registry.search(
+            query=query,
+            factions=factions or None,
+            locations=locations or None,
+            items=items or None,
+        )
+
+        if not results:
+            return "No codex entries matched your query."
+
+        lines = ["Codex results:"]
+        for entry in results:
+            badge = "★" if entry.discovered else "○"
+            filters = []
+            if entry.factions:
+                filters.append(f"Faction: {', '.join(entry.factions)}")
+            if entry.locations:
+                filters.append(f"Location: {', '.join(entry.locations)}")
+            if entry.items:
+                filters.append(f"Item: {', '.join(entry.items)}")
+            lines.append(f"{badge} {entry.title} [{entry.category}] - {entry.summary}")
+            if filters:
+                lines.append(f"    ({'; '.join(filters)})")
+
+        return "\n".join(lines)
+    def _render_timeline(self, arg: str) -> str:
+        """Render or export the recap timeline."""
+
+        if arg.lower().startswith("export"):
+            filters = [a.strip() for a in arg.split(" ", 1)[1].split(",") if a.strip()] if " " in arg else []
+            return self.recap_engine.export_timeline_json(filters or None)
+
+        filters = [a.strip() for a in arg.split(",") if a.strip()] if arg else None
+        return self.recap_engine.render_timeline_text(filters)
+
     def _command_save(self) -> str:
         char: Character = self.state["character"]
         self.persistence.save_character(char)
@@ -205,6 +543,18 @@ class CLIRunner:
         if progress_note:
             parts.append(progress_note)
 
+        self.recap_engine.record_event(
+            description=f"{move.name}: {roll.result.value}",
+            importance=6,
+            characters=[char.name],
+            location=self.state.get("world").current_location,
+            emotional_tone=roll.result.value,
+        self._log_timeline_event(
+            description=f"{move.name}: {outcome_text.splitlines()[0] if outcome_text else 'Resolved'}",
+            intent=intent,
+            importance=7 if intent == IntentCategory.COMBAT else 5,
+        )
+
         return "\n".join(parts)
 
     def _progress_move(self, move: Move, char: Character) -> str:
@@ -225,6 +575,12 @@ class CLIRunner:
         ]
         if vow.completed:
             parts.append(f"{vow.name} is now fulfilled!")
+
+        self._log_timeline_event(
+            description=f"{move.name}: {self._outcome_text(move, roll.result)}",
+            intent=IntentCategory.QUEST,
+            importance=8 if vow.completed else 5,
+        )
 
         return "\n".join(parts)
 
@@ -303,6 +659,20 @@ class CLIRunner:
         vow.ticks = track.ticks
 
         return f"Progress marked on {vow.name}: {before} -> {vow.ticks} ticks ({track.display})"
+
+    def _log_timeline_event(self, description: str, intent: str, importance: int = 5) -> None:
+        """Record the action as a milestone for recap timelines."""
+
+        category = self._map_intent_to_category(intent)
+        self.recap_engine.record_milestone(description=description, category=category, importance=importance)
+
+    @staticmethod
+    def _map_intent_to_category(intent: str) -> MilestoneCategory:
+        if intent == IntentCategory.COMBAT:
+            return MilestoneCategory.COMBAT
+        if intent in {IntentCategory.CRAFTING, IntentCategory.INVENTORY}:
+            return MilestoneCategory.ECONOMY
+        return MilestoneCategory.NARRATIVE
 
     # ------------------------------------------------------------------
     # Matching helpers
